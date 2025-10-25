@@ -1,4 +1,4 @@
-# Solakon ONE Nulleinspeisung & SOC-Management (V68) ⚡
+# Solakon ONE Nulleinspeisung & SOC-Management ⚡
 
 Dieser Home Assistant Automations-Blueprint ermöglicht eine präzise, dynamische Nulleinspeisungsregelung (P-Regler) für den **Solakon ONE Hybrid-Wechselrichter** unter Berücksichtigung definierter Batterie-Ladestandszonen (SOC).
 
