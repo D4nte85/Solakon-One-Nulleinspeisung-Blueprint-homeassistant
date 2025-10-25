@@ -18,6 +18,22 @@ Sollte der Button nicht funktionieren, verwenden Sie diese **RAW-URL** im Bluepr
 
 ---
 
+### 💡 Wichtiger Schritt: Erstellung des Entladezyklus-Helfers
+
+Dieser Blueprint erfordert einen **Dropdown-Menü-Helfer (`input_select`)**, um den Zustand des aggressiven Entladezyklus zu speichern.
+
+#### Vorgehensweise zur Erstellung:
+
+1.  Gehen Sie in Home Assistant zu: **Einstellungen** → **Geräte & Dienste** → Reiter **Helfer**.
+2.  Klicken Sie auf **Helfer erstellen** und wählen Sie den Typ **Dropdown-Menü (`Input Select`)**.
+3.  Geben Sie ihm einen Namen, z. B. `Entladezyklus Zustand`.
+4.  Fügen Sie exakt die folgenden beiden Optionen hinzu:
+    * `on`
+    * `off`
+5.  Speichern Sie den Helfer. Die resultierende Entität (z. B. `input_select.entladezyklus_zustand`) muss im Blueprint unter **Entladezyklus-Zustandsspeicher** ausgewählt werden.
+
+---
+
 ### 🧠 Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonen-Logik
 
 Der Blueprint steuert den **AC-Ausgangsleistungsregler** (`AC-Output-Limit`) des Solakon ONE, um eine präzise Nulleinspeisung zu erreichen, deren Verhalten durch drei vordefinierte SOC-Zonen gesteuert wird:
@@ -42,7 +58,7 @@ Der Blueprint steuert den **AC-Ausgangsleistungsregler** (`AC-Output-Limit`) des
 | **Solakon - Ausgangsleistungsregler** | `number` | Die Entität zur Steuerung des **AC-Output-Limits**. |
 | **Solakon - Betriebsmodus-Auswahl** | `select` | Die Entität zur Steuerung des **Betriebsmodus**. |
 | **Modus-Reset-Timer-Entität** | `number` | Die Solakon ONE Entität, die die Modus-Haltezeit (in Sekunden, max. 3600) steuert. |
-| **Entladezyklus-Zustandsspeicher** | `input_select` | Ein **Input Select Helfer** mit Optionen `on` und `off` zur Speicherung des Zyklus-Status. |
+| **Entladezyklus-Zustandsspeicher** | `input_select` | Ein Helfer mit Optionen `on` und `off` zur Speicherung des Zyklus-Status. |
 
 #### II. Konfigurationsparameter (Number Inputs)
 
@@ -52,4 +68,4 @@ Der Blueprint steuert den **AC-Ausgangsleistungsregler** (`AC-Output-Limit`) des
 | **`soc_conservation_limit`** | 20% | Die **Untere SOC-Schwelle**. Unterschreiten = Start **Sicherheitsstopp** (`Disabled`). |
 | **`nulleinspeisung_toleranz`** | 50 W | Die **Toleranzgrenze (Halbbreite)**. Korrektur erfolgt nur außerhalb dieses Bereichs. |
 | **`anpassungs_faktor`** | 1.5 | Der **Regelungs-Faktor**. Definiert die **Aggressivität** der Limit-Anpassung in Zone 1. |
-| **`nulleinspeisung_offset`** | -30 W | Der **Negative Nullpunkt-Offset** für Zone 2. Erlaubt einen leichten Netzbezug, um die **akt
+| **`nulleinspeisung_offset`** | -30 W | Der **Negative Nullpunkt-Offset** für Zone 2. Erlaubt einen leichten Netzbezug, um die **aktive Entladung zu verhindern**. |
