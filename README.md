@@ -63,15 +63,16 @@ Der Blueprint steuert den **AC-Ausgangsleistungsregler** (`AC-Output-Limit`) des
 
 #### I. Erforderliche Entitäten (Sensoren und Steuerungen)
 
-| Parameter Name | Typ | Beschreibung |
-| :--- | :--- | :--- |
-| **Netz-Leistungssensor** | \`sensor\` (power) | Der Sensor, der die **Netzleistung** misst (z.B. Shelly 3EM). **Wichtig: Positiv = Einspeisung, Negativ = Bezug.** |
-| **Solakon - Solarleistung (PV)** | \`sensor\` (power) | Der Sensor, der die aktuelle **Solarerzeugung** in Watt anzeigt. |
-| **Solakon - Batterieladestand (SOC)** | \`sensor\` | Der **SOC-Sensor** des Solakon ONE (%). |
-| **Solakon - Ausgangsleistungsregler** | \`number\` | Die Entität zur Steuerung des **AC-Output-Limits**. |
-| **Solakon - Betriebsmodus-Auswahl** | \`select\` | Die Entität zur Steuerung des **Betriebsmodus**. |
-| **Modus-Reset-Timer-Entität** | \`number\` | Die Solakon ONE Entität, die die Modus-Haltezeit (in Sekunden, max. 3600) steuert. |
-| **Entladezyklus-Zustandsspeicher** | \`input\_select\` | Ein Helfer mit Optionen \`on\` und \`off\` zur Speicherung des Zyklus-Status. |
+| Parameter Name | Entitätstyp | Standard-Entität (Beispiel) | Beschreibung |
+| :--- | :--- | :--- | :--- |
+| **Shelly/Netz-Leistungssensor** | \`sensor\` (power) | z.B. \`sensor.shelly\_3em\_power\` | Der Sensor, der die **Netzleistung** misst. **Wichtig: Positiv = Einspeisung, Negativ = Bezug.** |
+| **Solakon ONE - Solarleistung (PV-Erzeugung)** | \`sensor\` (power) | \`sensor.solakon\_one\_pv\_power\` | Der Sensor, der die aktuelle **Solarerzeugung** in Watt anzeigt. |
+| **Solakon ONE - Batterieladestand (SOC)** | \`sensor\` | \`sensor.solakon\_one\_battery\_soc\` | Der **SOC-Sensor** des Solakon ONE (%). |
+| **Solakon ONE - Ausgangsleistungsregler (AC-Output)** | \`number\` | \`number.solakon\_one\_remote\_active\_power\` | Die Entität zur Steuerung des **AC-Output-Limits** (Soll-Wert). |
+| **Solakon ONE - Betriebsmodus-Auswahl** | \`select\` | \`select.solakon\_one\_remote\_mode\` | Die Entität zur Steuerung des **Betriebsmodus**. |
+| **Modus-Reset-Timer-Entität (Setter)** | \`number\` | \`number.solakon\_one\_remote\_timeout\_control\` | Die Solakon ONE **Number** Entität, die die Modus-Haltezeit (in Sekunden) steuert. |
+| **Remote Timeout Countdown Sensor (Ausleser)** | \`sensor\` | \`sensor.solakon\_one\_remote\_mode\_countdown\` | Der **Sensor**, der den aktuell verbleibenden Countdown-Wert des Remote Timeouts anzeigt. |
+| **Entladezyklus-Zustandsspeicher** | \`input\_select\` | z.B. \`input\_select.entladezyklus\_zustand\` | Ein Helfer mit Optionen \`on\` und \`off\` zur Speicherung des Zyklus-Status. |
 
 #### II. Konfigurationsparameter (Number Inputs)
 
@@ -82,3 +83,5 @@ Der Blueprint steuert den **AC-Ausgangsleistungsregler** (`AC-Output-Limit`) des
 | **\`nulleinspeisung\_toleranz\`** | **50 W** | Die **Toleranzgrenze (Halbbreite)**. Korrektur erfolgt nur außerhalb dieses Bereichs. |
 | **\`anpassungs\_faktor\`** | **1.5** | Der **Regelungs-Faktor**. Definiert die **Aggressivität** der Limit-Anpassung in Zone 1. |
 | **\`nulleinspeisung\_offset\`** | **-30 W** | Der **Negative Nullpunkt-Offset** für Zone 2. Erlaubt einen leichten Netzbezug, um die **aktive Entladung zu verhindern**. |
+
+---
