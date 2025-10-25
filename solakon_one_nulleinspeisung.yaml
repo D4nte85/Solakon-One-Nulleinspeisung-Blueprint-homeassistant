@@ -1,35 +1,34 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung⚡ (V76 - Vollständiger Logik-Fix)
+  name: Solakon ONE Nulleinspeisung⚡ (V94 - Finaler Input-Namen Fix)
   description: |
     **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonen-Logik**
 
-    Dieser Blueprint regelt die AC-Ausgangsleistungsbegrenzung (AC-Output-Limit) des Solakon ONE Wechselrichters.
+    Dieser Blueprint regelt die AC-Ausgangsleistungsbegrenzung (AC-Output-Limit) des Solakon ONE Wechselrichters. Ziel ist die dynamische Nulleinspeisung durch einen Proportional-Regler (P-Regler), während gleichzeitig die Batterie durch eine dreistufige Logik geschont wird.
 
     ---
     ### Trigger- & Mess-Logik
     * **Trigger:** Die Automatisierung wird durch reaktive Trigger ausgelöst (Netzleistung mit 3s Stabilität, SOC-Schwellen und Moduswechsel).
-    * **Messprinzip (P-Regelung):** Die Steuerung arbeitet als Proportional-Regler (P-Regler) auf Basis der Entität **Shelly/Netz-Leistungssensor**.
+    * **Messprinzip (P-Regelung):** Die Steuerung arbeitet als **Proportional-Regler (P-Regler)** auf Basis der Entität **Shelly/Netz-Leistungssensor**. Die Korrekturgröße wird dabei über den **Anpassungs-Faktor** gesteuert.
 
     ---
     ### Dreistufige SOC-Zonen-Logik
 
     #### 1. Schnelle Regelung & Entladezyklus (SOC > Obere Schwelle ODER Zyklus Aktiv)
+    * **Bedingung:** SOC liegt über der `soc_fast_limit` ODER der Entladezyklus ist bereits aktiv.
     * **Modus:** "INV Discharge (PV Priority)".
     * **Regelung:** Aggressive P-Regelung mit **Nullpunkt-Offset von 0 W**. Steuert Entladung und exakte Nulleinspeisung.
+    * **Funktion:** Der **Remote Timeout Timer** wird in dieser Zone zurückgesetzt, sobald der Countdown-Wert unter 120 Sekunden fällt.
 
-    #### 2. Batterieschonende Regelung (Untere Schwelle < SOC < Obere Schwelle UND Zyklus Inaktiv)
+    #### 2. Batterieschonende Regelung (Zwischen-SOC und Zyklus Inaktiv)
+    * **Bedingung:** SOC liegt zwischen der `soc_stop_limit` und der `soc_fast_limit`, und der Entladezyklus ist inaktiv.
     * **Modus:** "INV Discharge (PV Priority)".
-    * **Ziel:** **Aktive Entladung der Batterie verhindern**, Nulleinspeisung über Offset beibehalten und **PV-Überschuss in die Batterie leiten**.
-    * **Regelung:** Passive Regelung mit **Offset** (`nulleinspeisung_offset`, z.B. -30 W). Die Logik nutzt die Begrenzung auf **`min(PV-Leistung, Netzüberschuss)`**, um die Entladung der Batterie zu stoppen, solange die Nulleinspeisung nicht überschritten wird.
+    * **Regelung:** Konservative Regelung, die nur überschüssige PV-Leistung einspeist, um Eigenverbrauch zu decken, aber die Batterie vorrangig lädt. Der **negative `nulleinspeisung_offset`** wird hier angewendet, um einen leichten Netzbezug zu erzwingen.
+    * **Funktion:** Der **Remote Timeout Timer** wird auch in dieser Zone zurückgesetzt, sobald der Countdown-Wert unter 120 Sekunden fällt.
 
-    #### 3. Sicherheitsstopp (SOC < Untere Schwelle)
+    #### 3. Sicherheitsstopp (SOC <= Untere Schwelle)
+    * **Bedingung:** SOC fällt unter die `soc_conservation_limit`.
     * **Modus:** "Disabled".
-    * **Ziel:** Sofortiges Stoppen der Entladung und Setzen des AC-Limits auf 0 W.
-
-    ---
-    **Technische Hinweise:**
-    * Die Stabilität der Automatisierung wird durch die verzögerte Definition der Template-Variablen im `action`-Block gewährleistet.
-    * **V76-Fix:** Stellt die vollständige Logikkette (Zyklus-Setzung und Moduswechsel) unter Berücksichtigung der Stabilitätsverbesserungen wieder her.
+    * **Aktion:** Die AC-Ausgangsleistung wird auf **0 W** gesetzt und der Entladezyklus beendet.
 
   domain: automation
   author: AI-Assistent
@@ -41,28 +40,29 @@ blueprint:
       selector:
         entity:
           filter:
-          - domain:
-            - sensor
-            device_class:
-            - power
+            - domain:
+              - sensor
+              device_class:
+              - power
           multiple: false
           reorder: false
     solakon_solar_power_sensor:
       name: Solakon ONE - Solarleistung (PV-Erzeugung)
-      description: Der Sensor, der die aktuelle Solarerzeugung in Watt anzeigt. (Muss
-        'power' device_class haben)
+      description: |
+        Der Sensor, der die aktuelle Solarerzeugung in Watt anzeigt. **(Standard-Entität: `sensor.solakon_one_pv_power`)**
       selector:
         entity:
           filter:
-          - domain:
-            - sensor
-            device_class:
-            - power
+            - domain:
+              - sensor
+              device_class:
+              - power
           multiple: false
           reorder: false
     solakon_soc_sensor:
       name: Solakon ONE - Batterieladestand (SOC)
-      description: Der SOC-Sensor des Solakon ONE (%).
+      description: |
+        Der SOC-Sensor des Solakon ONE (%). **(Standard-Entität: `sensor.solakon_one_battery_soc`)**
       selector:
         entity:
           domain:
@@ -71,7 +71,8 @@ blueprint:
           reorder: false
     solakon_power_limit_number:
       name: Solakon ONE - Ausgangsleistungsregler (AC-Output)
-      description: Die Entität zur Steuerung der Lade-/Entladeleistung.
+      description: |
+        Die Entität zur Steuerung der Lade-/Entladeleistung (Soll-Wert). **(Korrekte Entität: `number.solakon_one_remote_active_power`)**
       selector:
         entity:
           domain:
@@ -80,7 +81,8 @@ blueprint:
           reorder: false
     solakon_mode_select:
       name: Solakon ONE - Betriebsmodus-Auswahl
-      description: Die Entität zur Steuerung des Betriebsmodus.
+      description: |
+        Die Entität zur Steuerung des Betriebsmodus. **(Standard-Entität: `select.solakon_one_remote_mode`)**
       selector:
         entity:
           domain:
@@ -88,13 +90,24 @@ blueprint:
           multiple: false
           reorder: false
     solakon_mode_reset_timer_entity:
-      name: Modus-Reset-Timer-Entität (Solakon ONE)
-      description: Die Solakon ONE Number Entität, die die Zeit (in Sekunden, max.
-        3600) steuert.
+      name: Modus-Reset-Timer-Entität (Solakon ONE - **Setter**)
+      description: |
+        Die Solakon ONE **Number** Entität, die die Zeit (in Sekunden, max. 3600) steuert. Wird zum **Setzen/Zurücksetzen** des Remote-Timeouts verwendet. **(Korrekte Entität: `number.solakon_one_remote_timeout_control`)**
       selector:
         entity:
           domain:
           - number
+          multiple: false
+          reorder: false
+    solakon_timeout_countdown_sensor:
+      name: Remote Timeout Countdown Sensor (Solakon ONE - **Ausleser**) 🟢
+      description: |
+        Der **Sensor** (z.B. in Sekunden), der den aktuell verbleibenden Countdown-Wert des Remote Timeouts anzeigt. **(Standard-Entität: `sensor.solakon_one_remote_mode_countdown`)**
+      selector:
+        entity:
+          filter:
+            - domain:
+              - sensor
           multiple: false
           reorder: false
     soc_entladezyklus_aktiv:
@@ -119,7 +132,7 @@ blueprint:
           unit_of_measurement: '%'
           mode: slider
     soc_conservation_limit:
-      name: SOC-Schwelle "Lade-Priorität" (z.B. 20%)
+      name: SOC-Schwelle "Lade-Priorität" (z.b. 20%)
       default: 20
       description: Der untere SOC-Wert (z.B. 20%). Wird dieser unterschritten, wird
         auf "Disabled" umgeschaltet.
@@ -172,6 +185,7 @@ variables:
   pv_power_sensor: !input solakon_solar_power_sensor
   grid_power_sensor: !input shelly_grid_power_sensor
   timer_entity: !input solakon_mode_reset_timer_entity
+  countdown_sensor: !input solakon_timeout_countdown_sensor
   soc_start_limit: !input soc_fast_limit
   soc_stop_limit: !input soc_conservation_limit
   tolerance: !input nulleinspeisung_toleranz
@@ -198,7 +212,8 @@ action:
     soc_value: '{{ states(solakon_soc_sensor) | float(-1) }}'
     grid_power: '{{ states(grid_power_sensor) | float(0) }}'
     pv_power: '{{ states(pv_power_sensor) | float(0) }}'
-    current_mode: '{{ states(solakon_mode) }}' # Korrigierte Variable
+    current_mode: '{{ states(solakon_mode) }}'
+    timeout_value: '{{ states(countdown_sensor) | int(0) }}'
 - choose:
   # --- 1. Schnelle Regelung & Entladezyklus Start (SOC > Obere Schwelle) ---
   - conditions:
@@ -206,12 +221,12 @@ action:
       value_template: '{{ soc_value > soc_start_limit | float(50) and not cycle_active
         }}'
     sequence:
-    - service: input_select.select_option # Wichtig: Zyklus-Start
+    - service: input_select.select_option
       target:
         entity_id: !input soc_entladezyklus_aktiv
       data:
         option: 'on'
-    - condition: template # Moduswechsel nur, wenn Modus nicht schon aktiv
+    - condition: template
       value_template: '{{ current_mode != ''INV Discharge (PV Priority)'' }}'
     - service: select.select_option
       target:
@@ -229,12 +244,12 @@ action:
       value_template: '{{ soc_value <= soc_stop_limit | float(20) and cycle_active
         }}'
     sequence:
-    - service: input_select.select_option # Wichtig: Zyklus-Stopp
+    - service: input_select.select_option
       target:
         entity_id: !input soc_entladezyklus_aktiv
       data:
         option: 'off'
-    - condition: template # Moduswechsel nur, wenn Modus nicht schon aktiv
+    - condition: template
       value_template: '{{ current_mode != ''Disabled'' }}'
     - service: select.select_option
       target:
@@ -249,8 +264,7 @@ action:
   # --- 3. Sicherheitsstopp (SOC < Untere Schwelle UND Zyklus Inaktiv) ---
   - conditions:
     - condition: template
-      value_template: "{{ soc_value < soc_stop_limit | float(20) and not cycle_active
-        and\n  current_mode != 'Disabled' }}"
+      value_template: '{{ soc_value < soc_stop_limit | float(20) and not cycle_active and current_mode != ''Disabled'' }}'
     sequence:
     - service: select.select_option
       target:
@@ -265,9 +279,7 @@ action:
   # --- 4. Batterieschonende Regelung (Zwischen-SOC UND Zyklus Inaktiv) ---
   - conditions:
     - condition: template
-      value_template: "{{ soc_value > soc_stop_limit | float(20) and\n  soc_value
-        <= soc_start_limit | float(50) and\n  not cycle_active and\n  current_mode
-        != 'INV Discharge (PV Priority)' }}"
+      value_template: '{{ soc_value > soc_stop_limit | float(20) and soc_value <= soc_start_limit | float(50) and not cycle_active and current_mode != ''INV Discharge (PV Priority)'' }}'
     sequence:
     - service: select.select_option
       target:
@@ -281,9 +293,8 @@ action:
         value: 0
   # --- 5. Aktive Regelung (Nur wenn Modus INV Discharge (PV Priority) aktiv ist) ---
   - conditions:
-    - condition: state
-      entity_id: !input solakon_mode_select
-      state: INV Discharge (PV Priority)
+    - condition: template
+      value_template: '{{ current_mode == "INV Discharge (PV Priority)" }}'
     sequence:
     - variables:
         tolerance_float: '{{ tolerance | float(50) }}'
@@ -298,6 +309,24 @@ action:
           value_template: '{{ cycle_active or soc_value > soc_start_limit | float(50)
             }}'
         sequence:
+        - choose: # Timeout Reset
+          - conditions:
+            - condition: template
+              value_template: '{{ timeout_value < 120 }}'
+            sequence:
+            - service: number.set_value
+              target:
+                entity_id: !input solakon_mode_reset_timer_entity
+              data:
+                value: 1
+            - delay:
+                milliseconds: 50
+            - service: number.set_value
+              target:
+                entity_id: !input solakon_mode_reset_timer_entity
+              data:
+                value: 3599
+          default: []
         - variables:
             current_limit: '{{ states(solakon_power_limit_number) | float(0) }}'
             new_limit: '{{ current_limit + grid_power * adj_factor }}'
@@ -315,6 +344,24 @@ action:
           value_template: "{{ not cycle_active and\n  soc_value >= soc_stop_limit
             | float(20) and\n  soc_value <= soc_start_limit | float(50) }}"
         sequence:
+        - choose: # Timeout Reset
+          - conditions:
+            - condition: template
+              value_template: '{{ timeout_value < 120 }}'
+            sequence:
+            - service: number.set_value
+              target:
+                entity_id: !input solakon_mode_reset_timer_entity
+              data:
+                value: 1
+            - delay:
+                milliseconds: 50
+            - service: number.set_value
+              target:
+                entity_id: !input solakon_mode_reset_timer_entity
+              data:
+                value: 3599
+          default: []
         - variables:
             limit_value: "{% if grid_power > offset + tolerance_float %}\n  {{ [ pv_power,
               grid_power ] | min }}\n{% else %}\n  0\n{% endif %}"
