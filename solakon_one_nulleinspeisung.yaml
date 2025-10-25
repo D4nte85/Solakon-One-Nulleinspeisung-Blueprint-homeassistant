@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung⚡ (V67 - Finaler Stabiler Code)
+  name: 'Solakon ONE Nulleinspeisung⚡ (V72 - Variablen-Fix)'
   description: |
     **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonen-Logik**
     
@@ -240,14 +240,33 @@ action:
           data:
             value: 0
 
-    # 4. NULLEINSPEISUNGSREGELUNG
+    # 4. AKTIVIERUNG: Übergang in Batterieschonende Regelung
+    - conditions:
+        - condition: template
+          value_template: >-
+            {{ soc_value > soc_stop_limit | float(20) and
+              soc_value <= soc_start_limit | float(50) and
+              not cycle_active and
+              states(solakon_mode) != 'INV Discharge (PV Priority)' }}
+      sequence:
+        - service: select.select_option
+          target:
+            entity_id: !input solakon_mode_select
+          data:
+            option: "INV Discharge (PV Priority)"
+        - service: number.set_value
+          target:
+            entity_id: !input solakon_power_limit_number
+          data:
+            value: 0 # Limit auf 0 setzen, damit Fall 5 (Regelung) übernehmen kann
+
+    # 5. NULLEINSPEISUNGSREGELUNG
     - conditions:
         - condition: state
           entity_id: !input solakon_mode_select
           state: "INV Discharge (PV Priority)"
       sequence:
-        # LOKALE BERECHNUNG DER TOLERANZEN
-        - variables:
+        - variables: # LOKALE BERECHNUNG DER TOLERANZEN
             tolerance_float: "{{ tolerance | float(50) }}"
             offset: "{{ offset_value | float(-30) if soc_value < soc_start_limit | float(50) else 0.0 }}"
             tolerance_low: "{{ offset - tolerance_float }}"
@@ -265,7 +284,7 @@ action:
                 - condition: template
                   value_template: >-
                     {{ grid_power > tolerance_high or
-                       grid_power < tolerance_low }}
+                      grid_power < tolerance_low }}
                 - service: number.set_value
                   target:
                     entity_id: !input solakon_power_limit_number
@@ -277,8 +296,8 @@ action:
                 - condition: template
                   value_template: >-
                     {{ not cycle_active and
-                        soc_value >= soc_stop_limit | float(20) and
-                        soc_value <= soc_start_limit | float(50) }}
+                      soc_value >= soc_stop_limit | float(20) and
+                      soc_value <= soc_start_limit | float(50) }}
               sequence:
                 - variables:
                     limit_value: >-
