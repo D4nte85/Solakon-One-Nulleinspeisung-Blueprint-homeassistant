@@ -12,32 +12,32 @@ Klicken Sie auf den Button, um den Blueprint direkt in Ihre Home Assistant Insta
 
 #### Manuelle Import-URL
 
-Sollte der Button nicht funktionieren, verwenden Sie diese RAW-URL im Blueprint-Import-Dialog (`Einstellungen` -> `Automatisierungen & Szenen` -> `Blueprints`):
+Sollte der Button nicht funktionieren, verwenden Sie diese RAW-URL im Blueprint-Import-Dialog:
 
 `https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleispeisung-Blueprint-homeassistant/main/solakon_one_nulleinspeisung.yaml`
 
 ---
 
-### ⚙️ Funktionsweise der SOC-Zonen-Logik
+### 🧠 Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonen-Logik
 
-Der Blueprint steuert den Solakon-Modus und das AC-Output-Limit, um die Nulleinspeisung in drei verschiedenen Batteriezuständen zu optimieren:
+Der Blueprint steuert den **AC-Ausgangsleistungsregler** (`AC-Output-Limit`) des Solakon ONE, um eine präzise Nulleinspeisung zu erreichen. Die Steuerung basiert auf einem **Proportional-Regler (P-Regler)**, dessen Verhalten durch drei vordefinierte SOC-Zonen gesteuert wird:
 
-| Zone | SOC-Bereich | Ziel | Regelung |
+| Zone | Modus | Ziel und Funktion | P-Regler Parameter |
 | :--- | :--- | :--- | :--- |
-| **1. Schnelle Regelung / Entladung** | SOC > Obere Schwelle (z.B. 50%) | Aggressive Entladung der Batterie und exakte Nulleinspeisung. | **Strikte Nulleinspeisung** (Offset 0 W) über P-Regler. |
-| **2. Batterieschonung** | Untere Schwelle < SOC < Obere Schwelle | **Aktive Entladung verhindern**, Nulleinspeisung beibehalten und PV-Überschuss speichern. | **Passive Regelung** (Negativer Offset). Die Logik nutzt `min(PV-Leistung, Netzüberschuss)` zur Begrenzung, um Entladung zu stoppen und Ladung zu ermöglichen. |
-| **3. Sicherheitsstopp** | SOC ≤ Untere Schwelle (z.B. 20%) | Sofortiges und sicheres Stoppen jeglicher Entladung. | Umschaltung auf den Modus **`Disabled`** und Limit 0 W. |
+| **1. Schnelle Regelung / Entladezyklus** | `INV Discharge (PV Priority)` | **Aggressive Entladung** und exakte Nulleinspeisung. | **Nullpunkt-Offset:** `0 W` (Strikte Nulleinspeisung). |
+| **2. Batterieschonende Regelung** | `INV Discharge (PV Priority)` | **Aktive Entladung verhindern** und **PV-Überschuss speichern**. | **Nullpunkt-Offset:** Negativ (`nulleinspeisung_offset`). **Logik:** Begrenzung auf `min(PV-Leistung, Netzüberschuss)`. |
+| **3. Sicherheitsstopp** | `Disabled` | **Sofortiges Stoppen** jeglicher Entladung (SOC < untere Schwelle). | Deaktiviert die Regelung und setzt den Modus auf `Disabled`. |
 
 ---
 
-### 🎛️ Erforderliche Entitäten (Inputs)
+### ⚙️ Konfigurierbare Parameter
 
-Stellen Sie sicher, dass alle notwendigen Entitäten korrekt in Home Assistant eingerichtet sind:
-
-| Name | Typ | Beschreibung |
+| Parameter Name | Standardwert | Erklärung der Funktion |
 | :--- | :--- | :--- |
-| **Shelly/Netz-Leistungssensor** | Sensor (`device_class: power`) | Der Sensor, der die **Netzleistung** misst (z.B. Shelly 3EM). |
-| **Solakon ONE - Batterieladestand (SOC)** | Sensor | Der SOC-Sensor des Solakon ONE (%). |
-| **Solakon ONE - Ausgangsleistungsregler** | Number | Die Entität zur Steuerung des AC-Output-Limits. |
-| **Entladezyklus-Zustandsspeicher** | Input Select | Ein **Input Select Helper** mit den Optionen `on` und `off`. |
-| *Weitere Parameter* | Number | Benutzerdefinierte Grenzwerte (SOC-Schwellen, Toleranzen, Offset und Faktor). |
+| **`soc_fast_limit`** | 50% | Die **Obere SOC-Schwelle**. Wird dieser Ladestand überschritten, startet der **aggressive Entladezyklus** (Zone 1). |
+| **`soc_conservation_limit`** | 20% | Die **Untere SOC-Schwelle**. Wird dieser Ladestand unterschritten, schaltet das System sofort in den **Sicherheitsstopp** (Zone 3). |
+| **`nulleinspeisung_toleranz`** | 50 W | Die **Toleranzgrenze (Halbbreite)** um den Nullpunkt-Offset. Der Regler korrigiert nur außerhalb dieses Bereichs. |
+| **`anpassungs_faktor`** | 1.5 | Der **Regelungs-Faktor (Korrektur-Geschwindigkeit)**. Definiert die Aggressivität der Limit-Anpassung. |
+| **`nulleinspeisung_offset`** | -30 W | Der **Negative Nullpunkt-Offset** für Zone 2. Erlaubt einen leichten Netzbezug, um die **aktive Entladung zu verhindern**. |
+
+---
