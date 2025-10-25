@@ -23,13 +23,13 @@ Dieser Code ist als **Home Assistant Blueprint** konzipiert. Verwenden Sie den f
 
 Klicken Sie auf den Button, um den Blueprint direkt in Ihre Home Assistant Instanz zu importieren. Stellen Sie sicher, dass Sie alle erforderlichen Entitäten vorher eingerichtet haben.
 
-[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleispeisung-Blueprint-homeassistant%2Fmain%2Fsolakon_one_nulleinspeisung.yaml)
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fmain%2Fsolakon_one_nulleinspeisung.yaml)
 
 #### Manuelle Import-URL
 
 Sollte der Button nicht funktionieren, verwenden Sie diese **RAW-URL** im Blueprint-Import-Dialog:
 
-\`https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleispeisung-Blueprint-homeassistant/main/solakon_one_nulleinspeisung.yaml\`
+\`https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/main/solakon_one_nulleinspeisung.yaml\`
 
 ---
 
