@@ -25,20 +25,31 @@ The Blueprint requires an **Input Select** helper to store the status of the dis
 
 ---
 
-## 🧠 Functionality: Three-Tiered SOC Zone Logic
+## 🧠 Core Functionality
 
-The Blueprint controls the AC output limit of the Solakon ONE to achieve the most accurate zero export possible. The logic dynamically adapts the behavior to the current battery State of Charge (SOC) to protect the battery while maximizing self-sufficiency.
+### 1. Proportional Controller (P-Controller)
+* **Measurement Principle:** The controller uses the **Grid Power Sensor** entity (e.g., Shelly 3EM) as the control deviation.
+* **Correction:** The controller adjusts the Solakon ONE's output power to bring the grid power into the tolerance range.
+    * Positive Grid Power (Export) $\rightarrow$ Increase output power.
+    * Negative Grid Power (Consumption) $\rightarrow$ Decrease output power.
+* **Control:** The aggressiveness of the reaction is controlled via the **Adjustment Factor** (`anpassungs_faktor`). Power is capped at a maximum of `max_active_power_limit` and a minimum of `0 W`.
 
-| Zone | SOC Range | Mode | Control Type | Objective |
-| :--- | :--- | :--- | :--- | :--- |
-| **1. Fast Control** | **> Upper Threshold (e.g., 50%)** | `INV Discharge (PV Priority)` | **Aggressive P-Regulator** with 0 W Offset | Maximum discharge and precise zero export. |
-| **2. Battery-Conserving**| **Between Thresholds (e.g., 20%-50%)**| `INV Discharge (PV Priority)` | **Passive Threshold Control** with Negative Offset | Shifts the target point to slight **grid consumption** (e.g., -30 W) to prioritize battery charging (Charge Priority). |
-| **3. Safety Stop** | **<= Lower Threshold (e.g., 20%)** | `Disabled` | **Fixed Limit of 0 W** | Immediate cessation of discharge to protect the battery. |
+---
 
-### P-Regulator Principle (Zone 1)
-In the **Fast Control** zone, the difference between the measured **Grid Power** and the target point (0 W) is used as the correction value.
-* **Positive Grid Power** (Consumption/Import): The inverter decreases its output power.
-* **Negative Grid Power** (Export/Feed-in): The inverter increases its output power.
+### 2. 🔋 Three-Stage SOC Zone Logic
+
+The control is divided into three operating modes based on the current SOC:
+
+| Zone | SOC Range | Mode | Goal & Control Logic |
+| :--- | :--- | :--- | :--- |
+| **1. Fast Discharge** | SOC > Upper Threshold (e.g., 50%) | `INV Discharge (PV Priority)` | **Aggressive P-Control** with a 0 W offset for exact zero export. An active discharge cycle helper maintains this state until the lower threshold is undershot. |
+| **2. Battery Conservation**| Lower Threshold (e.g., 20%) < SOC $\le$ Upper Threshold | `INV Discharge (PV Priority)` | **Charging Priority** forced by a **negative zero-point offset** (e.g., -30 W) to ensure slight grid consumption. Control is not P-based (threshold-based). Discharge power is additionally reduced by a **PV Charge Reserve** to secure charging. |
+| **3. Safety Stop** | SOC $\le$ Lower Threshold (e.g., 20%) | `Disabled` | Output power is immediately set to **0 W** to protect the battery. The discharge cycle is ended. |
+
+---
+
+### ⏱️ Remote Timeout Reset
+To prevent the Solakon ONE from switching to `Disabled` mode due to a lack of control signal, the internal **Remote Timeout Timer** is proactively reset to a high value (3599s) in the active zones (1 and 2) as soon as it falls below a critical value (120s).
 
 ## ⚙️ Input Variables and Default Entities
 
