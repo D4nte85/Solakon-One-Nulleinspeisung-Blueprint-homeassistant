@@ -30,8 +30,8 @@ The Blueprint requires an **Input Select** helper to store the status of the dis
 ### 1. Proportional Controller (P-Controller)
 * **Measurement Principle:** The controller uses the **Grid Power Sensor** entity (e.g., Shelly 3EM) as the control deviation.
 * **Correction:** The controller adjusts the Solakon ONE's output power to bring the grid power into the tolerance range.
-    * Positive Grid Power (Export) $\rightarrow$ Increase output power.
-    * Negative Grid Power (Consumption) $\rightarrow$ Decrease output power.
+    * Positive Grid Power (Consumption) $\rightarrow$ Increase output power.
+    * Negative Grid Power (Export) $\rightarrow$ Decrease output power.
 * **Control:** The aggressiveness of the reaction is controlled via the **Adjustment Factor** (`anpassungs_faktor`). Power is capped at a maximum of `max_active_power_limit` and a minimum of `0 W`.
 
 ---
