@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung⚡ (V99)
+  name: Solakon ONE Nulleinspeisung⚡ (V100)
   description: |
     **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonen-Logik**
 
@@ -43,9 +43,9 @@ blueprint:
         entity:
           filter:
             - domain:
-              - sensor
+                - sensor
               device_class:
-              - power
+                - power
           multiple: false
           reorder: false
     solakon_solar_power_sensor:
@@ -56,9 +56,7 @@ blueprint:
         entity:
           filter:
             - domain:
-              - sensor
-              device_class:
-              - power
+                - sensor # Korrigiert: Nur Domain-Filter
           multiple: false
           reorder: false
     solakon_soc_sensor:
@@ -68,7 +66,7 @@ blueprint:
       selector:
         entity:
           domain:
-          - sensor
+            - sensor
           multiple: false
           reorder: false
     solakon_power_limit_number:
@@ -78,7 +76,7 @@ blueprint:
       selector:
         entity:
           domain:
-          - number
+            - number
           multiple: false
           reorder: false
     solakon_mode_select:
@@ -88,7 +86,7 @@ blueprint:
       selector:
         entity:
           domain:
-          - select
+            - select
           multiple: false
           reorder: false
     solakon_mode_reset_timer_entity:
@@ -98,20 +96,19 @@ blueprint:
       selector:
         entity:
           domain:
-          - number
+            - number
           multiple: false
           reorder: false
     solakon_timeout_countdown_sensor:
-      name: Remote Timeout Countdown Sensor (Solakon ONE - **Ausleser**) 🟢
+      name: Remote Timeout Countdown Entity (Solakon ONE - **Ausleser**) 🟢
       description: |
-        Der **Sensor** (z.B. in Sekunden), der den aktuell verbleibenden Countdown-Wert des Remote Timeouts anzeigt. **(Standard-Entität: `sensor.solakon_one_remote_mode_countdown`)**
+        Der **Sensor** oder die **Number** Entität, die den aktuell verbleibenden Countdown-Wert des Remote Timeouts in Sekunden anzeigt.
       selector:
         entity:
           filter:
             - domain:
-              - sensor
-              device_class:
-              - power
+                - sensor
+                - number # Korrigiert: Nur Domain-Filter, keine Device Class
           multiple: false
           reorder: false
     soc_entladezyklus_aktiv:
@@ -120,7 +117,7 @@ blueprint:
       selector:
         entity:
           domain:
-          - input_select
+            - input_select
           multiple: false
           reorder: false
     soc_fast_limit:
