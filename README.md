@@ -25,20 +25,31 @@ Der Blueprint benötigt einen `Input Select` Helfer, um den Status des Entladezy
 
 ---
 
-## 🧠 Funktionsweise: Dreistufige SOC-Zonen-Logik
+## 🧠 Kernfunktionalität
 
-Der Blueprint steuert das AC-Output-Limit des Solakon ONE, um eine möglichst exakte Nulleinspeisung zu erreichen. Die Logik passt das Verhalten dynamisch an den aktuellen Batterieladestand (SOC) an, um die Batterie zu schonen und gleichzeitig maximale Autarkie zu erzielen.
+### 1. Proportional-Regler (P-Regler)
+* **Messprinzip:** Die Steuerung nutzt die Entität des **Netz-Leistungssensors** (z.B. Shelly 3EM) als Regelabweichung.
+* **Korrektur:** Der Regler passt die Ausgangsleistung des Solakon ONE an, um die Netzleistung in den Toleranzbereich zu bringen.
+    * Positive Netzleistung (Einspeisung) $\rightarrow$ Erhöhung der Ausgangsleistung.
+    * Negative Netzleistung (Bezug) $\rightarrow$ Verringerung der Ausgangsleistung.
+* **Steuerung:** Die Aggressivität der Reaktion wird über den **Anpassungs-Faktor** gesteuert. Die Leistung wird auf max. `max_active_power_limit` begrenzt, mindestens jedoch auf `0 W`.
 
-| Zone | SOC-Bereich | Modus | Regelungstyp | Ziel |
-| :--- | :--- | :--- | :--- | :--- |
-| **1. Schnelle Regelung** | **> Obere Schwelle (z.B. 50%)** | `INV Discharge (PV Priority)` | **Aggressiver P-Regler** mit 0 W Offset | Maximale Entladung und exakte Nulleinspeisung. |
-| **2. Batterieschonend** | **Zwischen Schwellen (z.B. 20%-50%)** | `INV Discharge (PV Priority)` | **Passive Schwellwert-Steuerung** mit negativem Offset | Verschiebung des Zielpunkts in den leichten **Netzbezug** (z.B. -30 W), um die Batterie vorrangig zu laden (Lade-Priorität). |
-| **3. Sicherheitsstopp** | **<= Untere Schwelle (z.B. 20%)** | `Disabled` | **Fixes Limit von 0 W** | Sofortiges Beenden der Entladung zum Schutz der Batterie. |
+---
 
-### P-Regler-Prinzip (Zone 1)
-In der Zone der **Schnellen Regelung** wird die Differenz zwischen der gemessenen **Netzleistung** und dem Zielpunkt (0 W) als Korrekturwert verwendet.
-* **Netzleistung Positiv** (Bezug/Import): Der Wechselrichter verringert seine Ausgangsleistung.
-* **Netzleistung Negativ** (Einspeisung/Export): Der Wechselrichter erhöht seine Ausgangsleistung.
+### 2. 🔋 Dreistufige SOC-Zonen-Logik
+
+Die Regelung wird anhand des aktuellen SOC in drei Betriebsmodi unterteilt:
+
+| Zone | SOC-Bereich | Modus | Ziel & Regelung |
+| :--- | :--- | :--- | :--- |
+| **1. Schnell-Entladung** | SOC > Obere Schwelle (z.B. 50%) | `INV Discharge (PV Priority)` | **Aggressive P-Regelung** mit 0 W-Offset für exakte Nulleinspeisung. Ein aktiver Entladezyklus-Helfer hält diesen Zustand bis zum Unterschreiten der unteren Schwelle. |
+| **2. Batterieschonend** | Untere Schwelle (z.B. 20%) < SOC $\le$ Obere Schwelle | `INV Discharge (PV Priority)` | **Lade-Priorität** durch einen **negativen Nullpunkt-Offset** (z.B. -30 W), der einen leichten Netzbezug erzwingt. Steuerung ohne P-Regler (Schwellwert-basiert). Die Entladeleistung wird zusätzlich um eine **PV-Ladereserve** reduziert, um die Ladung zu sichern. |
+| **3. Sicherheitsstopp** | SOC $\le$ Untere Schwelle (z.B. 20%) | `Disabled` | Ausgangsleistung wird sofort auf **0 W** gesetzt, um die Batterie zu schonen. Der Entladezyklus wird beendet. |
+
+---
+
+### ⏱️ Remote Timeout Reset
+Um zu verhindern, dass der Solakon ONE in den `Disabled`-Modus wechselt, da er keine Steuerung mehr erhält, wird der interne **Remote-Timeout-Timer** in den aktiven Zonen (1 und 2) proaktiv auf einen hohen Wert (3599s) zurückgesetzt, sobald er einen kritischen Wert (120s) unterschreitet.
 
 ## ⚙️ Input-Variablen und Standard-Entitäten
 
