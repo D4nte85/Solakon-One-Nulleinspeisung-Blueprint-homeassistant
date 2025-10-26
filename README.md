@@ -1,87 +1,75 @@
-# Solakon ONE Nulleinspeisung & SOC-Management ⚡
+# Solakon ONE Nulleinspeisung Steuerung ⚡
 
-Dieser Home Assistant Automations-Blueprint ermöglicht eine präzise, dynamische Nulleinspeisungsregelung (P-Regler) für den **Solakon ONE Hybrid-Wechselrichter** unter Berücksichtigung definierter Batterie-Ladestandszonen (SOC). Das Ziel ist es, die Batterielebensdauer durch intelligente Entladezyklen zu schonen, während gleichzeitig der Eigenverbrauch maximiert und die Netzeinspeisung präzise auf den Nullpunkt geregelt wird.
-
----
-
-## ✨ Features
-
-* **Dreistufige SOC-Zonen-Logik:** Intelligente Steuerung des Entladeverhaltens basierend auf dem aktuellen Batterieladestand (SOC).
-* **Dynamische P-Regelung:** Kontinuierliche Anpassung der AC-Ausgangsleistung (`AC-Output-Limit`) in Abhängigkeit von der gemessenen Netzleistung.
-* **Batterieschonende Regelung (Zone 2):** Anwendung eines **negativen Offsets** (`nulleinspeisung_offset`), um die Entladung zu unterdrücken und die Batterie vorrangig zu laden.
-* **Aggressive Entladung (Zone 1):** Start eines **Entladezyklus** bei hohem SOC mit strikter Nulleinspeisung (`Offset 0 W`).
-* **Sicherheitsstopp (Zone 3):** Automatisches Umschalten auf Modus `Disabled` bei Unterschreitung einer kritischen SOC-Schwelle.
-* **Remote Timeout Reset:** Automatisches Zurücksetzen des Solakon ONE Remote Timeout Timers, um den eingestellten Modus zu halten.
+Dieser Home Assistant Blueprint implementiert eine dynamische, dreistufige State of Charge (SOC)-Logik und einen Proportional-Regler (P-Regler), um die AC-Ausgangsleistungsbegrenzung (AC Output Limit) des Solakon ONE Wechselrichters zu steuern. Das Ziel ist die **präzise, dynamische Nulleinspeisung** bei gleichzeitiger batterieschonender Priorisierung des Ladevorgangs im mittleren SOC-Bereich.
 
 ---
 
-## 🛠️ Installation
+## 🚀 Kernfunktionen
 
-Dieser Code ist als **Home Assistant Blueprint** konzipiert. Verwenden Sie den folgenden Button oder die manuelle URL, um ihn in Ihre Home Assistant-Instanz zu importieren.
-
-### 📥 Blueprint Import
-
-Klicken Sie auf den Button, um den Blueprint direkt in Ihre Home Assistant Instanz zu importieren. Stellen Sie sicher, dass Sie alle erforderlichen Entitäten vorher eingerichtet haben.
-
-[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fmain%2Fsolakon_one_nulleinspeisung.yaml)
-
-#### Manuelle Import-URL
-
-Sollte der Button nicht funktionieren, verwenden Sie diese **RAW-URL** im Blueprint-Import-Dialog:
-
-\`https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/main/solakon_one_nulleinspeisung.yaml\`
+* **Dynamische Nulleinspeisung (P-Regler):** Erreicht eine präzise Nulleinspeisung, indem die AC-Ausgangsleistung kontinuierlich basierend auf der Echtzeit-Netzleistung angepasst wird.
+* **Dreistufige SOC-Logik:** Implementiert drei unterschiedliche Zonen für das Batteriemanagement:
+    1.  **Schnelle Entladung (SOC Hoch, z. B. >50%):** Aggressiver P-Regler mit einem 0-W-Ziel, um einen hohen SOC schnell zu reduzieren.
+    2.  **Lade-Priorität (SOC Mittel, z. B. 20-50%):** Verwendet einen einstellbaren **negativen Offset** (Standard: -30 W), um leichten Netzbezug zu erzwingen und so die Batterieladung zu priorisieren, wenn der SOC moderat ist.
+    3.  **Sicherheitsstopp (SOC Niedrig, z. B. <20%):** Deaktiviert die Entladung vollständig, um die Batterie zu schonen.
+* **Remote-Timeout-Reset:** Setzt den Timeout des Solakon ONE für die Fernsteuerung automatisch zurück, um eine unterbrechungsfreie Regelung zu gewährleisten.
 
 ---
 
-## ⚙️ Verwendung
+## 📥 Blueprint Importieren
 
-### 💡 Wichtiger Schritt: Erstellung des Entladezyklus-Helfers
+Du kannst diesen Blueprint direkt über den folgenden Button in deine Home Assistant Instanz importieren:
 
-Dieser Blueprint erfordert einen **Dropdown-Menü-Helfer (`input_select`)**, um den Zustand des aggressiven Entladezyklus zu speichern.
+[![Öffne deine Home Assistant Instanz und zeige den Blueprint-Import-Dialog mit einem bestimmten, vorausgefüllten Blueprint an.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2FSolakon-ONE-Zero-Export%2Fsolakon_one_zeroexport.yaml)
 
-#### Vorgehensweise zur Erstellung:
+**Manueller Link:**
+`https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/Solakon-ONE-Zero-Export/solakon_one_zeroexport.yaml`
 
-1.  Gehen Sie in Home Assistant zu: **Einstellungen** → **Geräte & Dienste** → Reiter **Helfer**.
-2.  Klicken Sie auf **Helfer erstellen** und wählen Sie den Typ **Dropdown-Menü (`Input Select`)**.
-3.  Geben Sie ihm einen Namen, z. B. `Entladezyklus Zustand`.
-4.  Fügen Sie **exakt** die folgenden beiden Optionen hinzu:
-    * `on`
-    * `off`
-5.  Speichern Sie den Helfer. Die resultierende Entität (z. B. `input_select.entladezyklus_zustand`) muss im Blueprint unter **Entladezyklus-Zustandsspeicher** ausgewählt werden.
+---
 
-### 🧠 Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonen-Logik
+## 🛠️ Voraussetzungen (Helfer erstellen)
 
-Der Blueprint steuert den **AC-Ausgangsleistungsregler** (`AC-Output-Limit`) des Solakon ONE, um eine präzise Nulleinspeisung zu erreichen, deren Verhalten durch drei vordefinierte SOC-Zonen gesteuert wird:
+Bevor du den Blueprint verwenden kannst, musst du **einen Helfer** erstellen, um den Status des Entladezyklus zu speichern.
 
-| Zone | Modus | Ziel und Funktion | P-Regler Parameter |
+| Helfer-Name | Typ | Optionen | Zweck |
 | :--- | :--- | :--- | :--- |
-| **1. Schnelle Regelung / Entladezyklus** | \`INV Discharge (PV Priority)\` | **Aggressive Entladung** und exakte Nulleinspeisung (SOC > Obere Schwelle oder Zyklus aktiv). | **Nullpunkt-Offset:** \`0 W\` (Strikte Nulleinspeisung). |
-| **2. Batterieschonende Regelung** | \`INV Discharge (PV Priority)\` | **Aktive Entladung verhindern** und **PV-Überschuss speichern** (Zwischen den SOC-Schwellen). | **Nullpunkt-Offset:** Negativ (\`nulleinspeisung_offset\`). **Logik:** Begrenzung auf \`min(PV-Leistung, Netzüberschuss)\`. |
-| **3. Sicherheitsstopp** | \`Disabled\` | **Sofortiges Stoppen** jeglicher Entladung (SOC < untere Schwelle). | Setzt Modus auf \`Disabled\` und Limit auf 0 W. |
+| `input_select.solakon_entladezyklus_aktiv` | **Dropdown (Input Select)** | `on`, `off` | Speichert, ob der aggressive Entladezyklus aktiv (`on`) oder inaktiv (`off`) ist. |
 
-### ⚙️ Erforderliche Entitäten und Konfigurationsparameter
+### **So erstellst du den Helfer:**
 
-#### I. Erforderliche Entitäten (Sensoren und Steuerungen)
+1.  Navigiere in Home Assistant zu **Einstellungen** -> **Geräte & Dienste** -> **Helfer**.
+2.  Klicke auf **"Helfer erstellen"**.
+3.  Wähle **"Dropdown"** (Input Select).
+4.  **Name:** `Solakon Entladezyklus Aktiv`
+5.  **Optionen:** Gib die beiden Optionen `on` und `off` ein (jeweils in einer neuen Zeile).
+6.  Verwende diese neue Entität (`input_select.solakon_entladezyklus_aktiv`) für den Blueprint-Input **"Entladezyklus-Zustandsspeicher"**.
 
-| Parameter Name | Entitätstyp | Standard-Entität (Beispiel) | Beschreibung |
+---
+
+## 🧠 Template-Variablen und Standardeinstellungen
+
+Mit den folgenden Variablen kannst du die Regelungslogik an deine Batterie und dein Nutzungsverhalten anpassen.
+
+| Variablenname | Beschreibung | Standardwert | Einheit |
 | :--- | :--- | :--- | :--- |
-| **Shelly/Netz-Leistungssensor** | \`sensor\` (power) | z.B. \`sensor.shelly\_3em\_power\` | Der Sensor, der die **Netzleistung** misst. **Wichtig: Positiv = Einspeisung, Negativ = Bezug.** |
-| **Solakon ONE - Solarleistung (PV-Erzeugung)** | \`sensor\` (power) | \`sensor.solakon\_one\_pv\_power\` | Der Sensor, der die aktuelle **Solarerzeugung** in Watt anzeigt. |
-| **Solakon ONE - Batterieladestand (SOC)** | \`sensor\` | \`sensor.solakon\_one\_battery\_soc\` | Der **SOC-Sensor** des Solakon ONE (%). |
-| **Solakon ONE - Ausgangsleistungsregler (AC-Output)** | \`number\` | \`number.solakon\_one\_remote\_active\_power\` | Die Entität zur Steuerung des **AC-Output-Limits** (Soll-Wert). |
-| **Solakon ONE - Betriebsmodus-Auswahl** | \`select\` | \`select.solakon\_one\_remote\_mode\` | Die Entität zur Steuerung des **Betriebsmodus**. |
-| **Modus-Reset-Timer-Entität (Setter)** | \`number\` | \`number.solakon\_one\_remote\_timeout\_control\` | Die Solakon ONE **Number** Entität, die die Modus-Haltezeit (in Sekunden) steuert. |
-| **Remote Timeout Countdown Sensor (Ausleser)** | \`sensor\` | \`sensor.solakon\_one\_remote\_mode\_countdown\` | Der **Sensor**, der den aktuell verbleibenden Countdown-Wert des Remote Timeouts anzeigt. |
-| **Entladezyklus-Zustandsspeicher** | \`input\_select\` | z.B. \`input\_select.entladezyklus\_zustand\` | Ein Helfer mit Optionen \`on\` und \`off\` zur Speicherung des Zyklus-Status. |
+| **SOC-Schwelle "Schnelle Regelung"** | Der obere SOC-Wert. Bei Überschreitung startet der aggressive Entladezyklus. | **50** | `%` |
+| **SOC-Schwelle "Lade-Priorität"** | Der untere SOC-Wert. Bei Unterschreitung wird auf "Disabled" (Sicherheitsstopp) umgeschaltet. | **20** | `%` |
+| **Toleranzbereich (Halbbreite)** | Der zulässige Leistungsbereich um den Nullpunkt, bevor der P-Regler eine Korrektur vornimmt. | **50** | `W` |
+| **Regelungs-Faktor (Korrektur-Geschw.)** | Definiert die Aggressivität/Geschwindigkeit der Reaktion des P-Reglers. | **1.5** | (Faktor) |
+| **Nullpunkt-Offset** | Negativer Watt-Wert, der **nur** in der konservativen SOC-Mittelzone (Zone 2) verwendet wird, um leichten Netzbezug zu erzwingen. | **-30** | `W` |
 
-#### II. Konfigurationsparameter (Number Inputs)
+---
 
-| Parameter Name | Standardwert | Erklärung der Funktion |
+## 📥 Blueprint-Inputs (Entitäten)
+
+Du musst die folgenden Entitäten aus deiner Solakon ONE Integration und deinem Energiemessgerät (z. B. Shelly 3EM) verknüpfen.
+
+| Input-Name | Erforderlicher Entitätstyp | Standard-Entitätsbeispiel |
 | :--- | :--- | :--- |
-| **\`soc\_fast\_limit\`** | **50%** | Die **Obere SOC-Schwelle**. Überschreiten = Start **aggressiver Entladezyklus**. |
-| **\`soc\_conservation\_limit\`** | **20%** | Die **Untere SOC-Schwelle**. Unterschreiten = Start **Sicherheitsstopp** (\`Disabled\`). |
-| **\`nulleinspeisung\_toleranz\`** | **50 W** | Die **Toleranzgrenze (Halbbreite)**. Korrektur erfolgt nur außerhalb dieses Bereichs. |
-| **\`anpassungs\_faktor\`** | **1.5** | Der **Regelungs-Faktor**. Definiert die **Aggressivität** der Limit-Anpassung in Zone 1. |
-| **\`nulleinspeisung\_offset\`** | **-30 W** | Der **Negative Nullpunkt-Offset** für Zone 2. Erlaubt einen leichten Netzbezug, um die **aktive Entladung zu verhindern**. |
-
----
+| **Shelly/Netz-Leistungssensor** | Sensor (`device_class: power`) | `sensor.shelly_3em_channel_a_power` |
+| **Solakon ONE - Solarleistung** | Sensor | `sensor.solakon_one_pv_power` |
+| **Solakon ONE - Batterieladestand (SOC)** | Sensor | `sensor.solakon_one_battery_soc` |
+| **Solakon ONE - Ausgangsleistungsregler**| Number | `number.solakon_one_remote_active_power` |
+| **Solakon ONE - Betriebsmodus-Auswahl**| Select | `select.solakon_one_remote_mode` |
+| **Modus-Reset-Timer-Entität (Setter)** | Number | `number.solakon_one_remote_timeout_control` |
+| **Remote Timeout Countdown Sensor (Ausleser)** | Sensor | `sensor.solakon_one_remote_mode_countdown` |
+| **Entladezyklus-Zustandsspeicher** | Input Select | (Siehe Helfer oben) | Der von dir erstellte Helfer zur Verfolgung des Entladezyklus. |
