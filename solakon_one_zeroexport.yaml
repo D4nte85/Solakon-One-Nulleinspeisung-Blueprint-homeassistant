@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Zero Export⚡ (V101)
+  name: Solakon ONE Zero Export⚡ (V103)
   description: |
     **Detailed Function Description: Dynamic Zero Export with SOC Zone Logic**
 
@@ -30,7 +30,7 @@ blueprint:
 
     #### 3. Safety Stop (SOC <= Lower Threshold)
     * **Condition:** SOC falls below the **Lower Threshold** (`soc_conservation_limit`, Default: 20%).
-    * **Mode:** "Disabled".
+    * **Modus:** "Disabled".
     * **Action:** The AC output power is immediately set to **0 W** and the discharge cycle is ended.
   domain: automation
   author: AI-Assistent
@@ -42,9 +42,9 @@ blueprint:
         entity:
           filter:
             - domain:
-              - sensor
+                - sensor
               device_class:
-              - power
+                - power
           multiple: false
           reorder: false
     solakon_solar_power_sensor:
@@ -55,9 +55,9 @@ blueprint:
         entity:
           filter:
             - domain:
-              - sensor
+                - sensor
               device_class:
-              - power
+                - power # Wiederhergestellt
           multiple: false
           reorder: false
     solakon_soc_sensor:
@@ -67,7 +67,7 @@ blueprint:
       selector:
         entity:
           domain:
-          - sensor
+            - sensor
           multiple: false
           reorder: false
     solakon_power_limit_number:
@@ -77,7 +77,7 @@ blueprint:
       selector:
         entity:
           domain:
-          - number
+            - number
           multiple: false
           reorder: false
     solakon_mode_select:
@@ -87,7 +87,7 @@ blueprint:
       selector:
         entity:
           domain:
-          - select
+            - select
           multiple: false
           reorder: false
     solakon_mode_reset_timer_entity:
@@ -97,7 +97,7 @@ blueprint:
       selector:
         entity:
           domain:
-          - number
+            - number
           multiple: false
           reorder: false
     solakon_timeout_countdown_sensor:
@@ -108,9 +108,8 @@ blueprint:
         entity:
           filter:
             - domain:
-              - sensor
-              device_class:
-              - power
+                - sensor
+                - number # Korrekt: Nur Domain-Filter
           multiple: false
           reorder: false
     soc_entladezyklus_aktiv:
@@ -119,7 +118,7 @@ blueprint:
       selector:
         entity:
           domain:
-          - input_select
+            - input_select
           multiple: false
           reorder: false
     soc_fast_limit:
