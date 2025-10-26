@@ -30,8 +30,8 @@ Der Blueprint benötigt einen `Input Select` Helfer, um den Status des Entladezy
 ### 1. Proportional-Regler (P-Regler)
 * **Messprinzip:** Die Steuerung nutzt die Entität des **Netz-Leistungssensors** (z.B. Shelly 3EM) als Regelabweichung.
 * **Korrektur:** Der Regler passt die Ausgangsleistung des Solakon ONE an, um die Netzleistung in den Toleranzbereich zu bringen.
-    * Positive Netzleistung (Einspeisung) $\rightarrow$ Erhöhung der Ausgangsleistung.
-    * Negative Netzleistung (Bezug) $\rightarrow$ Verringerung der Ausgangsleistung.
+    * Positive Netzleistung (Bezug) $\rightarrow$ Erhöhung der Ausgangsleistung.
+    * Negative Netzleistung (Einspeisung) $\rightarrow$ Verringerung der Ausgangsleistung.
 * **Steuerung:** Die Aggressivität der Reaktion wird über den **Anpassungs-Faktor** gesteuert. Die Leistung wird auf max. `max_active_power_limit` begrenzt, mindestens jedoch auf `0 W`.
 
 ---
