@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung⚡ (V100)
+  name: Solakon ONE Nulleinspeisung⚡ (V103)
   description: |
     **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonen-Logik**
 
@@ -56,7 +56,9 @@ blueprint:
         entity:
           filter:
             - domain:
-                - sensor # Korrigiert: Nur Domain-Filter
+                - sensor
+              device_class:
+                - power # Zurückgesetzt auf Wunsch des Nutzers
           multiple: false
           reorder: false
     solakon_soc_sensor:
@@ -100,7 +102,7 @@ blueprint:
           multiple: false
           reorder: false
     solakon_timeout_countdown_sensor:
-      name: Remote Timeout Countdown Entity (Solakon ONE - **Ausleser**) 🟢
+      name: Remote Timeout Countdown Sensor (Solakon ONE - **Ausleser**) 🟢
       description: |
         Der **Sensor** oder die **Number** Entität, die den aktuell verbleibenden Countdown-Wert des Remote Timeouts in Sekunden anzeigt.
       selector:
@@ -177,7 +179,7 @@ blueprint:
           step: 10.0
           unit_of_measurement: W
           mode: slider
-  source_url: https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleispeisung-Blueprint-homeassistant/main/solakon_one_nulleinspeisung.yaml
+  source_url: https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/Solakon-ONE-Zero-Export/solakon_one_zeroexport.yaml
 mode: queued
 max_exceeded: silent
 variables:
