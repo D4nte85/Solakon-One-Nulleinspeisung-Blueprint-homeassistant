@@ -9,7 +9,7 @@ Dieser Home Assistant Blueprint implementiert eine dynamische, dreistufige State
 * **Dynamische Nulleinspeisung (P-Regler):** Erreicht eine präzise Nulleinspeisung, indem die AC-Ausgangsleistung kontinuierlich basierend auf der Echtzeit-Netzleistung angepasst wird.
 * **Dreistufige SOC-Logik:** Implementiert drei unterschiedliche Zonen für das Batteriemanagement:
     1.  **Schnelle Entladung (SOC Hoch, z. B. >50%):** Aggressiver P-Regler mit einem 0-W-Ziel, um einen hohen SOC schnell zu reduzieren.
-    2.  **Lade-Priorität (SOC Mittel, z. B. 20-50%):** Verwendet einen einstellbaren **negativen Offset** (Standard: -30 W), um leichten Netzbezug zu erzwingen und so die Batterieladung zu priorisieren, wenn der SOC moderat ist.
+    2.  **Lade-Priorität (SOC Mittel, z. B. 20-50%):** Verwendet einen einstellbaren **negativen Offset** (Standard: -30 W) um leichten Netzbezug zu erzwingen und so die Batterieladung zu priorisieren, wenn der SOC moderat ist.
     3.  **Sicherheitsstopp (SOC Niedrig, z. B. <20%):** Deaktiviert die Entladung vollständig, um die Batterie zu schonen.
 * **Remote-Timeout-Reset:** Setzt den Timeout des Solakon ONE für die Fernsteuerung automatisch zurück, um eine unterbrechungsfreie Regelung zu gewährleisten.
 
@@ -19,10 +19,10 @@ Dieser Home Assistant Blueprint implementiert eine dynamische, dreistufige State
 
 Du kannst diesen Blueprint direkt über den folgenden Button in deine Home Assistant Instanz importieren:
 
-[![Öffne deine Home Assistant Instanz und zeige den Blueprint-Import-Dialog mit einem bestimmten, vorausgefüllten Blueprint an.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2FSolakon-ONE-Zero-Export%2Fsolakon_one_zeroexport.yaml)
+[![Öffne deine Home Assistant Instanz und zeige den Blueprint-Import-Dialog mit einem bestimmten, vorausgefüllten Blueprint an.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fmain%2Fsolakon_one_nulleinspeisung.yaml)
 
 **Manueller Link:**
-`https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/Solakon-ONE-Zero-Export/solakon_one_zeroexport.yaml`
+`https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/main/solakon_one_nulleinspeisung.yaml`
 
 ---
 
