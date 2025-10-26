@@ -1,79 +1,58 @@
-# Solakon ONE Zero Export Control ⚡
+# 🔋 Solakon ONE Zero Export Blueprint (V113)
 
-This Home Assistant Blueprint provides a dynamic, three-stage State of Charge (SOC) logic and a Proportional Controller (P-Controller) to manage the AC Output Power Limit of the Solakon ONE Inverter. The goal is to achieve **precise dynamic zero export** while implementing battery-conserving charge prioritization in the mid-range SOC zone.
+[![Home Assistant Blueprint](https://img.shields.io/badge/Home%20Assistant-Blueprint-41bdf5.svg?style=for-the-badge)](https://my.home-assistant.io/redirect/blueprint_import?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2Fmain%2Fsolakon_one_nulleinspeisung.yaml)
 
----
+This blueprint dynamically controls the Solakon ONE inverter using a **three-stage, SOC-dependent control mechanism** for dynamic zero export. It employs a Proportional Controller (P-Controller) to manage grid power and switches to a battery-conserving charge priority zone in the middle SOC range.
 
-## 🚀 Key Features
+### 📥 Direct Import into Home Assistant
 
-* **Dynamic Zero Export (P-Controller):** Achieves precise zero export by adjusting the AC output limit based on real-time grid power feedback (P-Controller).
-* **Three-Stage SOC Logic:** Implements three distinct zones for efficient battery management:
-    1.  **Fast Discharge (SOC High, e.g., >50%):** Aggressive P-Control to quickly reduce high SOC.
-    2.  **Charge Priority (SOC Mid-Range, e.g., 20-50%):** Uses an adjustable negative offset (default: -30W) to favor slight grid import, prioritizing battery charging over discharge when SOC is moderate.
-    3.  **Safety Stop (SOC Low, e.g., <20%):** Disables discharge completely to conserve the battery.
-* **Remote Timeout Reset:** Automatically resets the Solakon ONE's remote control timeout when necessary to maintain continuous control.
+Click the button below to directly import the blueprint into your Home Assistant instance:
 
----
+[![Open your Home Assistant instance and start setting up this blueprint.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2Fmain%2Fsolakon_one_nulleinspeisung.yaml)
 
-## 📥 Import the Blueprint
+***
 
-You can import this Blueprint directly into your Home Assistant instance using the button below:
+## ⚙️ How It Works
 
-[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2FSolakon-ONE-Zero-Export%2Fsolakon_one_zeroexport.yaml)
+The core of the control is a **P-Controller** which uses the difference between the measured grid power and a target offset (usually 0 W) to dynamically adjust the AC Output Limit.
 
-**Manual Link:**
-`https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/Solakon-ONE-Zero-Export/solakon_one_zeroexport.yaml`
+The logic is divided into three SOC zones:
 
----
+1.  **🚀 Fast Control ($\text{SOC} > 50\%$ or Cycle Active):** Aggressive P-Control with $\text{Offset} = 0\text{ W}$ for fast discharge and precise zero export.
+2.  **🐢 Battery-Conserving Control ($\text{20\%} < \text{SOC} \le 50\%$):** **Passive Mode** with Charge Priority. The **Zero Point Offset** is set negative to enforce slight grid import. The discharge power is reduced by the **PV Charge Reserve** to compensate for internal converter losses and guarantee battery charging.
+3.  **🛑 Safety Stop ($\text{SOC} \le 20\%$):** Switches to **`Disabled`** and sets $\text{AC-Limit} = 0\text{ W}$ to protect the battery.
 
-## 🛠️ Prerequisites (Helper Creation)
+***
 
-Before using the Blueprint, you must create one Helper entity to store the status of the discharge cycle.
+## 🛠️ Prerequisites
 
-| Helper Name | Type | Options | Purpose |
-| :--- | :--- | :--- | :--- |
-| `input_select.solakon_discharge_cycle_active` | **Input Select (Dropdown)** | `on`, `off` | Stores whether the aggressive discharge cycle is currently active (`on`) or inactive (`off`). |
+### 1. Helper: Discharge Cycle State Helper
 
-### **How to Create the Helper:**
+This blueprint requires an **Input Select Helper** to track whether the aggressive discharge cycle is active.
 
-1.  In Home Assistant, navigate to **Settings** -> **Devices & Services** -> **Helpers**.
-2.  Click **"Create Helper"**.
-3.  Select **"Dropdown"** (Input Select).
-4.  **Name:** `Solakon Discharge Cycle Active`
-5.  **Icon (Optional):** `mdi:battery-arrow-down`
-6.  Under **"Options"**, enter the following two options, one per line:
-    * `on`
-    * `off`
-7.  Click **"Create"** (or **"Finish"**).
-8.  Use this new entity (`input_select.solakon_discharge_cycle_active`) for the Blueprint input **"Discharge Cycle Status Storage"**.
+| Parameter | Value |
+| :--- | :--- |
+| **Name** | e.g., `Solakon Discharge Cycle Status` |
+| **Type** | **Input Select / Dropdown** |
+| **Options** | `on`, `off` |
 
----
+***
 
-## 🧠 Template Variables and Default Settings
+## 📝 Variables (User Input)
 
-The following variables allow you to fine-tune the control logic.
-
-| Variable Name | Description | Standard/Default Value | Unit |
-| :--- | :--- | :--- | :--- |
-| **SOC Threshold "Fast Control"** | The upper SOC value. If exceeded, the aggressive discharge cycle starts. | **50** | `%` |
-| **SOC Threshold "Charge Priority"** | The lower SOC value. If fallen below, the inverter switches to "Disabled" (Safety Stop). | **20** | `%` |
-| **Tolerance Range (Half-Width)** | The allowed power range around the zero point before the P-Controller makes an adjustment. | **50** | `W` |
-| **Control Factor (Correction Speed)** | Defines the aggressiveness/speed of the P-Controller's reaction. | **1.5** | (Factor) |
-| **Zero Point Offset** | Negative Watt value used **only** in the mid-range SOC zone (Zone 2) to enforce slight grid import, prioritizing charging. | **-30** | `W` |
-
----
-
-## 📥 Blueprint Inputs (Entities)
-
-You must link the following entities from your Solakon ONE integration and your energy meter (e.g., Shelly 3EM).
-
-| Input Name | Required Entity Type | Standard Entity | Description |
-| :--- | :--- | :--- | :--- |
-| **Shelly/Grid Power Sensor** | Sensor (`device_class: power`) | - | Sensor measuring the power flowing to/from the grid (positive = export). |
-| **Solakon ONE - Solar Power** | Sensor (`device_class: power`) | `sensor.solakon_one_pv_power` | Current solar generation in Watts. |
-| **Solakon ONE - Battery SOC** | Sensor | `sensor.solakon_one_battery_soc` | Battery State of Charge in %. |
-| **Solakon ONE - Output Power Regulator**| Number | `number.solakon_one_remote_active_power` | Target value for charge/discharge power. |
-| **Solakon ONE - Operating Mode Selector**| Select | `select.solakon_one_remote_mode` | Entity for controlling the operating mode. |
-| **Mode Reset Timer Entity (Setter)** | Number | `number.solakon_one_remote_timeout_control` | Used to set/reset the Remote Timeout value (in seconds). |
-| **Remote Timeout Countdown Sensor (Reader)** | Sensor | `sensor.solakon_one_remote_mode_countdown` | Displays the current remaining countdown value of the Remote Timeout. |
-| **Discharge Cycle Status Storage** | Input Select | (See Helper above) | The Helper entity you created to track the discharge cycle. |
+| Variable Name | Description | Default Value |
+| :--- | :--- | :--- |
+| **Grid Power Sensor** | Sensor measuring current grid power. (Must have `power` device_class) | (No Default) |
+| **Solakon ONE - Solar Power (PV Generation)** | Sensor for current PV power in Watts. | (No Default) |
+| **Solakon ONE - Battery State of Charge (SOC)** | SOC sensor of the Solakon ONE (%). | (No Default) |
+| **Solakon ONE - Output Power Controller (AC-Output)** | The **Number** entity for controlling the AC Output Limit. | (No Default) |
+| **Solakon ONE - Operating Mode Select** | The **Select** entity for controlling the operating mode. | (No Default) |
+| **Mode Reset Timer Entity** | The Solakon **Number** entity (`remote_timeout_control`) used to **set/reset** the Remote Timeout. | (No Default) |
+| **Remote Timeout Countdown Sensor** | Sensor/Number entity displaying the remaining Remote Timeout countdown in seconds. | (No Default) |
+| **Discharge Cycle State Helper** | The previously created **Input Select Helper** (`on`/`off`). | (No Default) |
+| **SOC Threshold "Fast Control"** | Upper SOC value, above which the aggressive discharge cycle starts. | `50 %` |
+| **SOC Threshold "Charge Priority"** | Lower SOC value, below which the system switches to Disabled mode. | `20 %` |
+| **Tolerance Range (Half-Width)** | Allowable range in Watts around the zero point. | `50 W` |
+| **Adjustment Factor (Correction Speed)** | Aggressiveness of the P-Controller. | `1.5` |
+| **Zero Point Offset** | Negative Watt value to shift the zero point into grid import in Zone 2 (Charge Priority). | `-30 W` |
+| **🔋 PV Charge Reserve (Intermediate-SOC)** | Reserved PV power (Watts) to compensate for internal converter losses in Zone 2. | `15 W` |
