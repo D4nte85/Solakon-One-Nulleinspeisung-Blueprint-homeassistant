@@ -1,6 +1,6 @@
 # 🔋 Solakon ONE Zero Export Blueprint (V113)
 
-[![Home Assistant Blueprint](https://img.shields.io/badge/Home%20Assistant-Blueprint-41bdf5.svg?style=for-the-badge)](https://my.home-assistant.io/redirect/blueprint_import?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2Fmain%2Fsolakon_one_nulleinspeisung.yaml)
+[![Home Assistant Blueprint](https://img.shields.io/badge/Home%20Assistant-Blueprint-41bdf5.svg?style=for-the-badge)](https://my.home-assistant.io/redirect/blueprint_import?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2FSolakon-ONE-Zero-Export%2Fsolakon_one_zeroexport.yaml)
 
 This blueprint dynamically controls the Solakon ONE inverter using a **three-stage, SOC-dependent control mechanism** for dynamic zero export. It employs a Proportional Controller (P-Controller) to manage grid power and switches to a battery-conserving charge priority zone in the middle SOC range.
 
@@ -8,7 +8,7 @@ This blueprint dynamically controls the Solakon ONE inverter using a **three-sta
 
 Click the button below to directly import the blueprint into your Home Assistant instance:
 
-[![Open your Home Assistant instance and start setting up this blueprint.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2Fmain%2Fsolakon_one_nulleinspeisung.yaml)
+[![Open your Home Assistant instance and start setting up this blueprint.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2FSolakon-ONE-Zero-Export%2Fsolakon_one_zeroexport.yaml)
 
 ***
 
