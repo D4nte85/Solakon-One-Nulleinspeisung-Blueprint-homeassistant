@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung⚡ (V103)
+  name: Solakon ONE Nulleinspeisung⚡ (V104)
   description: |
     **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonen-Logik**
 
@@ -58,7 +58,7 @@ blueprint:
             - domain:
                 - sensor
               device_class:
-                - power # Zurückgesetzt auf Wunsch des Nutzers
+                - power 
           multiple: false
           reorder: false
     solakon_soc_sensor:
@@ -110,7 +110,7 @@ blueprint:
           filter:
             - domain:
                 - sensor
-                - number # Korrigiert: Nur Domain-Filter, keine Device Class
+                - number # Korrektur
           multiple: false
           reorder: false
     soc_entladezyklus_aktiv:
