@@ -1,35 +1,37 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung⚡ (V94 - Finaler Input-Namen Fix)
+  name: Solakon ONE Nulleinspeisung⚡ (V99)
   description: |
     **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonen-Logik**
 
-    Dieser Blueprint regelt die AC-Ausgangsleistungsbegrenzung (AC-Output-Limit) des Solakon ONE Wechselrichters. Ziel ist die dynamische Nulleinspeisung durch einen Proportional-Regler (P-Regler), während gleichzeitig die Batterie durch eine dreistufige Logik geschont wird.
+    Dieser Blueprint regelt die AC-Ausgangsleistungsbegrenzung (AC-Output-Limit) des Solakon ONE Wechselrichters. Ziel ist die dynamische **Nulleinspeisung** durch einen Proportional-Regler (P-Regler), während gleichzeitig die Batterie durch eine **dreistufige Ladestands-Logik (SOC)** effizient verwaltet wird.
 
     ---
-    ### Trigger- & Mess-Logik
-    * **Trigger:** Die Automatisierung wird durch reaktive Trigger ausgelöst (Netzleistung mit 3s Stabilität, SOC-Schwellen und Moduswechsel).
-    * **Messprinzip (P-Regelung):** Die Steuerung arbeitet als **Proportional-Regler (P-Regler)** auf Basis der Entität **Shelly/Netz-Leistungssensor**. Die Korrekturgröße wird dabei über den **Anpassungs-Faktor** gesteuert.
+    ### 🧠 P-Regler & Steuerungslogik
+    * **Messprinzip (P-Regelung):** Die Steuerung arbeitet als **Proportional-Regler (P-Regler)** auf Basis der Entität **Shelly/Netz-Leistungssensor**. Die Netzleistung ist die Regelabweichung:
+      * **Positive Netzleistung** (Einspeisung): Erhöhung der AC-Output-Leistung.
+      * **Negative Netzleistung** (Bezug): Verringerung der AC-Output-Leistung.
+    * **Korrekturneigung:** Die Aggressivität der Reaktion wird über den **Anpassungs-Faktor** gesteuert.
+    * **Trigger:** Die Automatisierung wird ausgelöst durch Änderungen der Netzleistung (mit 3s Stabilität), SOC-Schwellen und Moduswechsel.
 
     ---
-    ### Dreistufige SOC-Zonen-Logik
+    ### 🔋 Dreistufige SOC-Zonen-Logik
 
     #### 1. Schnelle Regelung & Entladezyklus (SOC > Obere Schwelle ODER Zyklus Aktiv)
-    * **Bedingung:** SOC liegt über der `soc_fast_limit` ODER der Entladezyklus ist bereits aktiv.
+    * **Bedingung:** Der SOC liegt über der **Oberen Schwelle** (`soc_fast_limit`, Standard: 50%) ODER der Entladezyklus ist bereits aktiv.
     * **Modus:** "INV Discharge (PV Priority)".
-    * **Regelung:** Aggressive P-Regelung mit **Nullpunkt-Offset von 0 W**. Steuert Entladung und exakte Nulleinspeisung.
-    * **Funktion:** Der **Remote Timeout Timer** wird in dieser Zone zurückgesetzt, sobald der Countdown-Wert unter 120 Sekunden fällt.
+    * **Regelung:** **Aggressive P-Regelung** mit einem **Nullpunkt-Offset von 0 W**. Steuert die Entladung und die exakte Nulleinspeisung.
+    * **Remote Timeout:** Der Timer wird bei Unterschreitung von 120s zurückgesetzt (auf 3599s).
 
     #### 2. Batterieschonende Regelung (Zwischen-SOC und Zyklus Inaktiv)
-    * **Bedingung:** SOC liegt zwischen der `soc_stop_limit` und der `soc_fast_limit`, und der Entladezyklus ist inaktiv.
+    * **Bedingung:** Der SOC liegt zwischen der **Unteren Schwelle** (20%) und der **Oberen Schwelle** (50%), und der Entladezyklus ist inaktiv.
     * **Modus:** "INV Discharge (PV Priority)".
-    * **Regelung:** Konservative Regelung, die nur überschüssige PV-Leistung einspeist, um Eigenverbrauch zu decken, aber die Batterie vorrangig lädt. Der **negative `nulleinspeisung_offset`** wird hier angewendet, um einen leichten Netzbezug zu erzwingen.
-    * **Funktion:** Der **Remote Timeout Timer** wird auch in dieser Zone zurückgesetzt, sobald der Countdown-Wert unter 120 Sekunden fällt.
+    * **Regelung:** **Schwellwert-Steuerung** mit **Lade-Priorität**. Es wird **kein P-Regler** angewendet. Der **Nullpunkt-Offset** (`nulleinspeisung_offset`, Standard: -30 W) verschiebt den Zielpunkt in den leichten **Netzbezug**. Die Ausgangsleistungsbegrenzung wird nur **aktiviert**, wenn die Netzeinspeisung den **verschobenen Toleranzbereich** überschreitet, um die Batterie vorrangig zu laden.
+    * **Remote Timeout:** Der Timer wird auch in dieser Zone bei Unterschreitung von 120s zurückgesetzt.
 
     #### 3. Sicherheitsstopp (SOC <= Untere Schwelle)
-    * **Bedingung:** SOC fällt unter die `soc_conservation_limit`.
+    * **Bedingung:** SOC fällt unter die **Untere Schwelle** (`soc_conservation_limit`, Standard: 20%).
     * **Modus:** "Disabled".
-    * **Aktion:** Die AC-Ausgangsleistung wird auf **0 W** gesetzt und der Entladezyklus beendet.
-
+    * **Aktion:** Die AC-Ausgangsleistung wird sofort auf **0 W** gesetzt und der Entladezyklus beendet.
   domain: automation
   author: AI-Assistent
   input:
@@ -72,7 +74,7 @@ blueprint:
     solakon_power_limit_number:
       name: Solakon ONE - Ausgangsleistungsregler (AC-Output)
       description: |
-        Die Entität zur Steuerung der Lade-/Entladeleistung (Soll-Wert). **(Korrekte Entität: `number.solakon_one_remote_active_power`)**
+        Die Entität zur Steuerung der Lade-/Entladeleistung (Soll-Wert). **(Standard-Entität: `number.solakon_one_remote_active_power`)**
       selector:
         entity:
           domain:
@@ -92,7 +94,7 @@ blueprint:
     solakon_mode_reset_timer_entity:
       name: Modus-Reset-Timer-Entität (Solakon ONE - **Setter**)
       description: |
-        Die Solakon ONE **Number** Entität, die die Zeit (in Sekunden, max. 3600) steuert. Wird zum **Setzen/Zurücksetzen** des Remote-Timeouts verwendet. **(Korrekte Entität: `number.solakon_one_remote_timeout_control`)**
+        Die Solakon ONE **Number** Entität, die die Zeit (in Sekunden, max. 3600) steuert. Wird zum **Setzen/Zurücksetzen** des Remote-Timeouts verwendet. **(Standard-Entität: `number.solakon_one_remote_timeout_control`)**
       selector:
         entity:
           domain:
@@ -108,6 +110,8 @@ blueprint:
           filter:
             - domain:
               - sensor
+              device_class:
+              - power
           multiple: false
           reorder: false
     soc_entladezyklus_aktiv:
