@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Zero Export⚡ (V100)
+  name: Solakon ONE Zero Export⚡ (V101)
   description: |
     **Detailed Function Description: Dynamic Zero Export with SOC Zone Logic**
 
@@ -18,7 +18,7 @@ blueprint:
 
     #### 1. Fast Control & Discharge Cycle Active (SOC > Upper Threshold OR Cycle Active)
     * **Condition:** The SOC is above the **Upper Threshold** (`soc_fast_limit`, Default: 50%) OR the discharge cycle is already active.
-    * **Mode:** "INV Discharge (PV Priority)".
+    * **Modus:** "INV Discharge (PV Priority)".
     * **Control:** **Aggressive P-Control** with a **Zero Point Offset of 0 W**. Controls discharge and exact zero export.
     * **Remote Timeout:** The timer is reset if it falls below 120s (to 3599s).
 
@@ -179,7 +179,7 @@ blueprint:
           step: 10.0
           unit_of_measurement: W
           mode: slider
-  source_url: https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleispeisung-Blueprint-homeassistant/main/solakon_one_nulleinspeisung.yaml
+  source_url: https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/Solakon-ONE-Zero-Export/solakon_one_zeroexport.yaml
 mode: queued
 max_exceeded: silent
 variables:
