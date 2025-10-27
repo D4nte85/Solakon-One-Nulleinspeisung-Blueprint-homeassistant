@@ -51,6 +51,28 @@ The control is divided into three operating modes based on the current SOC:
 ### ⏱️ Remote Timeout Reset
 To prevent the Solakon ONE from switching to `Disabled` mode due to a lack of control signal, the internal **Remote Timeout Timer** is proactively reset to a high value (3599s) in the active zones (1 and 2) as soon as it falls below a critical value (120s).
 
+---
+
+### 🚦 Trigger Conditions (Automation Triggers)
+
+The automation reacts to the following five critical events to ensure immediate and stable control:
+
+1.  **Power Changes (with 3s Delay):**
+    * State change of the **Grid Power Sensor** (`shelly_grid_power_sensor`) for $\ge 3$ seconds.
+    * State change of the **Solar Power Sensor** (`solakon_solar_power_sensor`) for $\ge 3$ seconds.
+    * *(Purpose: Triggers the stable P-Controller regulation.)*
+
+2.  **SOC Threshold Reached:**
+    * Battery SOC (`solakon_soc_sensor`) **above** the **Upper Limit** (`soc_fast_limit`).
+    * Battery SOC **below** the **Lower Limit** (`soc_conservation_limit`).
+    * *(Purpose: Controls the switch between the discharge zones.)*
+
+3.  **Mode Change:**
+    * State change of the **Operating Mode Selector** (`solakon_mode_select`).
+    * *(Purpose: Reacts to manual or external mode changes.)*
+
+---
+
 ## ⚙️ Input Variables and Default Entities
 
 ### 🔌 Required Entities (Solakon ONE & Shelly/Smart Meter)
