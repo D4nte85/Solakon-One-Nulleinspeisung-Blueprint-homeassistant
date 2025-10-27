@@ -40,10 +40,10 @@ The Blueprint requires an **Input Select** helper to store the status of the dis
 
 The control is divided into three operating modes based on the current SOC:
 
-| Zone | SOC Range | Mode | Goal & Control Logic |
+| Zone | SOC Range | Mode | Goal & Control |
 | :--- | :--- | :--- | :--- |
 | **1. Fast Discharge** | SOC > Upper Threshold (e.g., 50%) | `INV Discharge (PV Priority)` | **Aggressive P-Control** with a 0 W offset for exact zero export. An active discharge cycle helper maintains this state until the lower threshold is undershot. |
-| **2. Battery Conservation**| Lower Threshold (e.g., 20%) < SOC $\le$ Upper Threshold | `INV Discharge (PV Priority)` | **Charging Priority** forced by a **negative zero-point offset** (e.g., -30 W) to ensure slight grid consumption. Control is not P-based (threshold-based). Discharge power is additionally reduced by a **PV Charge Reserve** to secure charging. |
+| **2. Battery Conservation** | Lower Threshold (e.g., 20%) < SOC $\le$ Upper Threshold | `INV Discharge (PV Priority)` | **Active P-Control** to maintain a **negative zero-point offset** (e.g., -30 W) to enforce slight grid import. Discharge power is additionally limited by a **dynamic upper limit** (PV generation minus PV charge reserve) to prioritize battery charging. |
 | **3. Safety Stop** | SOC $\le$ Lower Threshold (e.g., 20%) | `Disabled` | Output power is immediately set to **0 W** to protect the battery. The discharge cycle is ended. |
 
 ---
