@@ -213,7 +213,7 @@ blueprint:
           step: 10.0
           unit_of_measurement: W
           mode: slider
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/main/solakon_one_nulleinspeisung.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/Solakon-ONE-Zero-Export/solakon_one_zeroexport.yaml
 mode: queued
 max_exceeded: silent
 variables:
@@ -478,3 +478,4 @@ action:
                     min(new_limit_calc | float(0), [max_limit_zone2 | float(0), max_limit | float(800)] | min), 
                     0 
                   ] | max | round(0) }}
+
