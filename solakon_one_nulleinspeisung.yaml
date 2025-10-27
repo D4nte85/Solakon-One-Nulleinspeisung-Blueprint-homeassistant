@@ -124,7 +124,7 @@ blueprint:
     soc_entladezyklus_aktiv:
       name: Entladezyklus-Zustandsspeicher (Input Select/Dropdown)
       description: Input Select Helfer (MUSS Optionen 'on' und 'off' enthalten).
-      default: input_select.solakon_entladezyklus_aktiv
+      default: input_select.soc_entladezyklus_status
       selector:
         entity:
           domain:
@@ -502,4 +502,5 @@ action:
                     min(new_limit_calc | float(0), [max_limit_zone2 | float(0), max_limit | float(800)] | min),
                     0
                   ] | max | round(0) }}
+
 
