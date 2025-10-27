@@ -13,7 +13,6 @@ blueprint:
     * **Korrekturneigung:** Die Aggressivität der Reaktion wird über den **Anpassungs-Faktor** gesteuert.
     * **Trigger:** Die Automatisierung wird ausgelöst durch Änderungen der Netzleistung (mit 3s Stabilität), SOC-Schwellen und Moduswechsel. **(Hinzugefügt: Trigger auf Remote Timeout Countdown Sensor)**
     * **Leistungsbegrenzung:** Die geregelte Ausgangsleistung ist nun durch einen **oberen Grenzwert** (`max_active_power_limit`) und einen **hardkodierten unteren Grenzwert von 0 W** abgesichert.
-    * **V138/V140 (Neu):** Priorisierte Limit-Korrektur in Zone 2, um bei schnell fallender PV-Leistung sofort das Entladelimit zu senken und eine Netzeinspeisung zu verhindern.
 
     ---
     ### 🔋 Dreistufige SOC-Zonen-Logik
@@ -503,3 +502,4 @@ action:
                     min(new_limit_calc | float(0), [max_limit_zone2 | float(0), max_limit | float(800)] | min),
                     0
                   ] | max | round(0) }}
+
