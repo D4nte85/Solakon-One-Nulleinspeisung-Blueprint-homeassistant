@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung⚡ (V136)
+  name: Solakon ONE Nulleinspeisung⚡ (V137)
   description: |
     **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonen-Logik**
 
@@ -192,8 +192,8 @@ blueprint:
       name: 🔋 PV-Ladereserve (Zwischen-SOC)
       default: 50
       description: |
-        Die in Watt (W) zu reservierende PV-Leistung. Dieser Puffer kompensiert 
-        interne Wandlerverluste und stellt somit eine garantierte Batterieladung 
+        Die in Watt (W) zu reservierende PV-Leistung. Dieser Puffer kompensiert
+        interne Wandlerverluste und stellt somit eine garantierte Batterieladung
         sicher. (Wird nur in der konservativen Zone 2 genutzt)
       selector:
         number:
@@ -274,8 +274,8 @@ action:
         logger: automation.solakon_nulleinspeisung
         level: error
         message: >
-          {{ error_log_message }} Die obere SOC-Schwelle ({{ soc_start_limit }}%) muss 
-          größer sein als die untere SOC-Schwelle ({{ soc_stop_limit }}%). 
+          {{ error_log_message }} Die obere SOC-Schwelle ({{ soc_start_limit }}%) muss
+          größer sein als die untere SOC-Schwelle ({{ soc_stop_limit }}%).
           Bitte passen Sie die Werte an. Automatisierung gestoppt.
     - stop: Schwellenwerte ungültig
       
@@ -283,8 +283,8 @@ action:
   - conditions:
     - condition: template
       value_template: >
-        {{ soc_value == -1 or timeout_value == -1 or 
-          is_state(grid_power_sensor, 'unavailable') or 
+        {{ soc_value == -1 or timeout_value == -1 or
+          is_state(grid_power_sensor, 'unavailable') or
           is_state(solakon_power_limit_number, 'unavailable') }}
     sequence:
     - service: system_log.write
@@ -292,7 +292,7 @@ action:
         logger: automation.solakon_nulleinspeisung
         level: error
         message: >
-          {{ error_log_message }} Eine oder mehrere kritische Entitäten sind UNVERFÜGBAR 
+          {{ error_log_message }} Eine oder mehrere kritische Entitäten sind UNVERFÜGBAR
           oder haben ungültige Werte. Automatisierung gestoppt.
     - stop: Kritische Entität nicht verfügbar
       
@@ -392,9 +392,9 @@ action:
     - variables:
         # Deklarieren Sie die Variablen, die für den Reset benötigt werden
         soc_zone_1_or_2: >
-            {{ 
-              cycle_active or 
-              (soc_value >= soc_stop_limit | float(20) and soc_value <= soc_start_limit | float(50)) 
+            {{
+              cycle_active or
+              (soc_value >= soc_stop_limit | float(20) and soc_value <= soc_start_limit | float(50))
             }}
     - choose: # Timeout Reset (Priorisiert)
       - conditions:
@@ -421,7 +421,7 @@ action:
     # P-Regelung wird HIERNACH ausgeführt:
     - variables:
         tolerance_float: '{{ tolerance | float(25) }}'
-        # KORRIGIERT: Der Offset-Wert des Inputs (z.B. -30) wird mit -1 multipliziert, 
+        # KORRIGIERT: Der Offset-Wert des Inputs (z.B. -30) wird mit -1 multipliziert,
         # um in der Rechnung positiv (+30) zu sein, da POSITIVE grid_power-Werte Bezug bedeuten.
         offset: '{{ offset_value | float(-30) * -1 if soc_value < soc_start_limit | float(50) else 0.0 }}'
         # Toleranzgrenzen basieren auf dem (ggf. verschobenen) Offset-Wert
@@ -438,8 +438,8 @@ action:
         - variables:
             # Abweichung ist grid_power - Offset (hier 0)
             reg_abweichung: '{{ grid_power | float(0) - offset | float(0) }}'
-            # KORREKTUR DER REGELRICHTUNG: Subtrahieren, da pos. Abweichung (Bezug) eine ERHÖHUNG des Limits erfordert
-            new_limit_calc: '{{ current_limit - reg_abweichung * adj_factor }}'
+            # KORRIGIERT: Addition, da pos. Abweichung (Bezug) eine ERHÖHUNG des Limits erfordert
+            new_limit_calc: '{{ current_limit + reg_abweichung * adj_factor }}' # <-- KORRIGIERTE ZEILE
         - condition: template
           value_template: >
             {{ grid_power > tolerance_high or
@@ -462,8 +462,8 @@ action:
         - variables:
             # Abweichung ist grid_power - Offset (hier der NEU berechnete positive Offset-Wert, z.B. +30)
             reg_abweichung: '{{ grid_power | float(0) - offset | float(30) }}'
-            # KORREKTUR DER REGELRICHTUNG: Subtrahieren, da pos. Abweichung (starker Bezug) eine ERHÖHUNG des Limits erfordert
-            new_limit_calc: '{{ current_limit - reg_abweichung * adj_factor }}'
+            # KORRIGIERT: Addition, da pos. Abweichung (starker Bezug) eine ERHÖHUNG des Limits erfordert
+            new_limit_calc: '{{ current_limit + reg_abweichung * adj_factor }}' # <-- KORRIGIERTE ZEILE
             # Dynamisches Limit: Entladung darf PV-Erzeugung abzüglich Reserve nicht übersteigen
             max_limit_zone2: '{{ pv_power | float(0) - pv_reserve | float(pv_reserve) }}'
         - condition: template
@@ -477,7 +477,7 @@ action:
           data:
             # Die Begrenzung: [ new_limit_calc, 0 ] | max für untere Grenze, dann min(max_limit_zone2 und Globales Max-Limit) für Obergrenze
             value: >
-              {{ [ 
-                    min(new_limit_calc | float(0), [max_limit_zone2 | float(0), max_limit | float(800)] | min), 
-                    0 
-                  ] | max | round(0) }}
+              {{ [
+                  min(new_limit_calc | float(0), [max_limit_zone2 | float(0), max_limit | float(800)] | min),
+                  0
+                ] | max | round(0) }}
