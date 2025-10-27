@@ -7,9 +7,9 @@ blueprint:
 
     ---
     ### 🧠 P-Regler & Steuerungslogik
-    * **Messprinzip (P-Regelung):** Die Steuerung arbeitet als **Proportional-Regler (P-Regler)** auf Basis der Entität **Shelly/Netz-Leistungssensor**. Die Netzleistung ist die Regelabweichung:
-      * **Positive Netzleistung** (Einspeisung): Erhöhung der AC-Output-Leistung.
-      * **Negative Netzleistung** (Bezug): Verringerung der AC-Output-Leistung.
+    * **Messprinzip (P-Regelung):** Die Steuerung arbeitet als **Proportional-Regler (P-Regler)** auf Basis der Entität **Shelly/Netz-Leistungssensor**. **WICHTIG:** Es wird davon ausgegangen, dass **positive Werte Netzbezug** und **negative Werte Netzeinspeisung** bedeuten.
+      * **Positiver Netzleistung (Bezug):** Erhöhung der AC-Output-Leistung.
+      * **Negative Netzleistung (Einspeisung):** Verringerung der AC-Output-Leistung.
     * **Korrekturneigung:** Die Aggressivität der Reaktion wird über den **Anpassungs-Faktor** gesteuert.
     * **Trigger:** Die Automatisierung wird ausgelöst durch Änderungen der Netzleistung (mit 3s Stabilität), SOC-Schwellen und Moduswechsel. **(Hinzugefügt: Trigger auf Remote Timeout Countdown Sensor)**
     * **Leistungsbegrenzung:** Die geregelte Ausgangsleistung ist nun durch einen **oberen Grenzwert** (`max_active_power_limit`) und einen **hardkodierten unteren Grenzwert von 0 W** abgesichert.
@@ -26,7 +26,7 @@ blueprint:
     #### 2. Batterieschonende Regelung (Zwischen-SOC und Zyklus Inaktiv)
     * **Bedingung:** Der SOC liegt zwischen der **Unteren Schwelle** (20%) und der **Oberen Schwelle** (50%), und der Entladezyklus ist inaktiv.
     * **Modus:** "INV Discharge (PV Priority)".
-    * **Regelung:** **Aktive P-Regelung** mit verschobenem Nullpunkt und Lade-Priorität. Der **Nullpunkt-Offset** (`nulleinspeisung_offset`, Standard: -30 W) verschiebt das Regelziel in den leichten **Netzbezug**. Die Ausgangsleistung wird aktiv geregelt und nur bis zur Grenze der **PV-Ladereserve** freigegeben.
+    * **Regelung:** **Aktive P-Regelung** mit verschobenem Nullpunkt und Lade-Priorität. Der **Nullpunkt-Offset** (`nulleinspeisung_offset`, Standard: -30 W) verschiebt das Regelziel in den leichten **Netzbezug** (wird durch Vorzeichenkorrektur auf z.B. +30W Bezug gesetzt). Die Ausgangsleistung wird aktiv geregelt und nur bis zur Grenze der **PV-Ladereserve** freigegeben.
     * **PV-Ladereserve:** Die Entladeleistung wird zusätzlich um die **PV-Ladereserve** (`pv_charge_reserve`) reduziert, um einen Teil des Solarertrags für die Batterieladung zu reservieren.
     * **Remote Timeout:** Der Timer wird auch in dieser Zone bei Unterschreitung von 120s zurückgesetzt. **(Reset-Impuls Delay auf 300ms erhöht und Logik priorisiert.)**
 
@@ -158,7 +158,7 @@ blueprint:
     nulleinspeisung_toleranz:
       name: Toleranzbereich (Halbbreite)
       default: 25
-      description: Der zulässige Bereich in Watt um den Nullpunkt.
+      description: Der zulässige Bereich in Watt um den Null- bzw. Offset-Punkt.
       selector:
         number:
           min: 10.0
@@ -284,8 +284,8 @@ action:
     - condition: template
       value_template: >
         {{ soc_value == -1 or timeout_value == -1 or 
-           is_state(grid_power_sensor, 'unavailable') or 
-           is_state(solakon_power_limit_number, 'unavailable') }}
+          is_state(grid_power_sensor, 'unavailable') or 
+          is_state(solakon_power_limit_number, 'unavailable') }}
     sequence:
     - service: system_log.write
       data:
@@ -295,7 +295,7 @@ action:
           {{ error_log_message }} Eine oder mehrere kritische Entitäten sind UNVERFÜGBAR 
           oder haben ungültige Werte. Automatisierung gestoppt.
     - stop: Kritische Entität nicht verfügbar
-  
+      
   default: []
 
 # --- Ende des Validierungs-Choose-Blocks ---
@@ -420,12 +420,13 @@ action:
 
     # P-Regelung wird HIERNACH ausgeführt:
     - variables:
-        # **HARCODE ENTFERNT:** Nutzt nun die Variable `tolerance` als Fallback für `float(0)`
-        tolerance_float: '{{ tolerance | float(tolerance) }}' 
-        # Setzt Offset auf 0, wenn SOC hoch (Zone 1), sonst auf den negativen Offset-Wert (Zone 2)
-        offset: '{{ offset_value | float(-30) if soc_value < soc_start_limit | float(50) else 0.0 }}'
-        tolerance_low: '{{ offset - tolerance_float }}'
+        tolerance_float: '{{ tolerance | float(25) }}'
+        # KORRIGIERT: Der Offset-Wert des Inputs (z.B. -30) wird mit -1 multipliziert, 
+        # um in der Rechnung positiv (+30) zu sein, da POSITIVE grid_power-Werte Bezug bedeuten.
+        offset: '{{ offset_value | float(-30) * -1 if soc_value < soc_start_limit | float(50) else 0.0 }}'
+        # Toleranzgrenzen basieren auf dem (ggf. verschobenen) Offset-Wert
         tolerance_high: '{{ offset + tolerance_float }}'
+        tolerance_low: '{{ offset - tolerance_float }}'
         current_limit: '{{ states(solakon_power_limit_number) | float(0) }}'
 
     - choose:
@@ -437,7 +438,8 @@ action:
         - variables:
             # Abweichung ist grid_power - Offset (hier 0)
             reg_abweichung: '{{ grid_power | float(0) - offset | float(0) }}'
-            new_limit_calc: '{{ current_limit + reg_abweichung * adj_factor }}'
+            # KORREKTUR DER REGELRICHTUNG: Subtrahieren, da pos. Abweichung (Bezug) eine ERHÖHUNG des Limits erfordert
+            new_limit_calc: '{{ current_limit - reg_abweichung * adj_factor }}'
         - condition: template
           value_template: >
             {{ grid_power > tolerance_high or
@@ -448,7 +450,7 @@ action:
           data:
             # Begrenzung: [ new_limit_calc, 0 ] | max für untere Grenze, dann min(max_limit) für obere Grenze
             value: '{{ [ min(new_limit_calc | float(0), max_limit | float(800)), 0 ] | max | round(0) }}'
-      
+        
       # --- 5b. Batterieschonende P-Regelung (Zwischen-SOC und Zyklus Inaktiv) ---
       - conditions:
         - condition: template
@@ -458,12 +460,12 @@ action:
               soc_value <= soc_start_limit | float(50) }}
         sequence:
         - variables:
-            # Abweichung ist grid_power - Offset (hier der Offset-Wert, z.B. -30)
-            reg_abweichung: '{{ grid_power | float(0) - offset_value | float(-30) }}'
-            new_limit_calc: '{{ current_limit + reg_abweichung * adj_factor }}'
+            # Abweichung ist grid_power - Offset (hier der NEU berechnete positive Offset-Wert, z.B. +30)
+            reg_abweichung: '{{ grid_power | float(0) - offset | float(30) }}'
+            # KORREKTUR DER REGELRICHTUNG: Subtrahieren, da pos. Abweichung (starker Bezug) eine ERHÖHUNG des Limits erfordert
+            new_limit_calc: '{{ current_limit - reg_abweichung * adj_factor }}'
             # Dynamisches Limit: Entladung darf PV-Erzeugung abzüglich Reserve nicht übersteigen
-            # **HARCODE ENTFERNT:** Nutzt nun die Variable `pv_reserve` als Fallback für `float(0)`
-            max_limit_zone2: '{{ pv_power | float(0) - pv_reserve | float(pv_reserve) }}' 
+            max_limit_zone2: '{{ pv_power | float(0) - pv_reserve | float(pv_reserve) }}'
         - condition: template
           # Führen Sie die Regelung nur aus, wenn die Netzleistung außerhalb des tolerierten Bereichs liegt
           value_template: >
