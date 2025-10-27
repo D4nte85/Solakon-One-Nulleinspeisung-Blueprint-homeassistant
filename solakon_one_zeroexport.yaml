@@ -12,8 +12,7 @@ blueprint:
       * **Negative Grid Power (Export):** Decrease AC Output Power.
     * **Correction Aggressiveness:** The responsiveness is controlled via the **Adjustment Factor**.
     * **Triggers:** The automation is triggered by changes in grid power (with 3s stability), SOC thresholds, and mode changes. **(Added: Trigger on Remote Timeout Countdown Sensor)**
-    * **Power Limitation:** The regulated output power is now secured by an **upper limit** (`max_active_power_limit`) and a **hardcoded lower limit of 0 W**.
-    * **V138/V140 (New):** Prioritized limit correction in Zone 2 to immediately reduce the discharge limit when PV power drops rapidly, preventing grid export.
+    * **Power Limitation:** The regulated output power is now secured by an **upper limit** (`max_active_power_limit`) and a **hardcoded lower limit of 0 W**
 
     ---
     ### 🔋 Three-Stage SOC Zone Logic
@@ -500,3 +499,4 @@ action:
                     min(new_limit_calc | float(0), [max_limit_zone2 | float(0), max_limit | float(800)] | min),
                     0
                   ] | max | round(0) }}
+
