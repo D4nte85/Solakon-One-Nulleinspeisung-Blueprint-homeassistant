@@ -51,6 +51,28 @@ Die Regelung wird anhand des aktuellen SOC in drei Betriebsmodi unterteilt:
 ### ⏱️ Remote Timeout Reset
 Um zu verhindern, dass der Solakon ONE in den `Disabled`-Modus wechselt, da er keine Steuerung mehr erhält, wird der interne **Remote-Timeout-Timer** in den aktiven Zonen (1 und 2) proaktiv auf einen hohen Wert (3599s) zurückgesetzt, sobald er einen kritischen Wert (120s) unterschreitet.
 
+---
+
+### 🚦 Trigger-Bedingungen (Automatisierungs-Auslöser)
+
+Die Automatisierung reagiert auf folgende fünf kritische Ereignisse, um eine sofortige und stabile Regelung zu gewährleisten:
+
+1.  **Leistungsänderungen (mit 3s Verzögerung):**
+    * Zustandsänderung des **Netz-Leistungssensors** (`shelly_grid_power_sensor`) für $\ge 3$ Sekunden.
+    * Zustandsänderung des **Solarleistungssensors** (`solakon_solar_power_sensor`) für $\ge 3$ Sekunden.
+    * *(Zweck: Löst die stabile P-Regelung aus.)*
+
+2.  **SOC-Schwellwert-Erreichung:**
+    * Batterie-SOC (`solakon_soc_sensor`) **über** der **Oberen Schwelle** (`soc_fast_limit`).
+    * Batterie-SOC **unter** der **Unteren Schwelle** (`soc_conservation_limit`).
+    * *(Zweck: Steuert den Wechsel zwischen den Entladezonen.)*
+
+3.  **Moduswechsel:**
+    * Zustandsänderung der **Betriebsmodus-Auswahl** (`solakon_mode_select`).
+    * *(Zweck: Reagiert auf manuelle oder externe Modusänderungen.)*
+
+---
+
 ## ⚙️ Input-Variablen und Standard-Entitäten
 
 ### 🔌 Erforderliche Entitäten (Solakon ONE & Shelly/Smart Meter)
