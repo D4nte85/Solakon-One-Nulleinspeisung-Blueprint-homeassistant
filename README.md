@@ -88,7 +88,7 @@ The automation reacts to the following five critical events to ensure immediate 
 | **Solakon ONE - Operating Mode Selector** | `select.solakon_one_remote_control_mode` | Entity for switching the operating mode. |
 | **Mode Reset Timer Entity (Setter)** | `number.solakon_one_remote_timeout_set` | Used to set/reset the remote timeout (max. 3599 s). |
 | **Remote Timeout Countdown Sensor (Reader)** | `sensor.solakon_one_remote_timeout_countdown` | Sensor showing the remaining timeout countdown. |
-| **Discharge Cycle State Storage** | `input_select.solakon_entladezyklus_aktiv` | The created `Input Select` helper (`on`/`off`). **The default name is pre-filled but must exist!** |
+| **Discharge Cycle State Storage** | `input_select.soc_discharge_cycle_status` | The created `Input Select` helper (`on`/`off`). **The default name is pre-filled but must exist!** |
 
 ---
 
