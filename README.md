@@ -75,18 +75,22 @@ Die Automatisierung reagiert auf folgende fünf kritische Ereignisse, um eine so
 
 ## ⚙️ Input-Variablen und Standard-Entitäten
 
+> **Wichtig:** Die **Standard-Entitäten** (`default`) wurden an die gängigen Bezeichnungen der Solakon ONE Home Assistant Integration angepasst und in der Beschreibung hervorgehoben. Passen Sie die Werte bei der Installation an, falls Ihre Entitätsnamen abweichen.
+
 ### 🔌 Erforderliche Entitäten (Solakon ONE & Shelly/Smart Meter)
 
 | Variable | Standard-Entität | Beschreibung |
 | :--- | :--- | :--- |
-| **Shelly/Netz-Leistungssensor** | *(kein Standard)* | Sensor für die aktuelle Netzleistung. **Positive Werte = Bezug**, **Negative Werte = Einspeisung**. |
-| **Solakon ONE - Solarleistung** | `sensor.solakon_one_pv_power` | Aktuelle PV-Erzeugung in Watt. |
+| **Shelly/Netz-Leistungssensor** | *(kein Standard)* | Sensor für die aktuelle Netzleistung (z.B. Shelly 3EM). **Positive Werte = Bezug**, **Negative Werte = Einspeisung**. |
+| **Solakon ONE - Solarleistung** | `sensor.solakon_one_total_pv_power` | Aktuelle PV-Erzeugung in Watt. |
 | **Solakon ONE - Batterieladestand** | `sensor.solakon_one_battery_soc` | Batterieladestand (State of Charge) in %. |
 | **Solakon ONE - Ausgangsleistungsregler** | `number.solakon_one_remote_active_power` | Entität zum Setzen des Leistungs-Sollwerts. |
-| **Solakon ONE - Betriebsmodus-Auswahl** | `select.solakon_one_remote_mode` | Entität zum Umschalten des Betriebsmodus. |
-| **Modus-Reset-Timer-Entität (Setter)** | `number.solakon_one_remote_timeout_control` | Dient zum Setzen/Zurücksetzen des Remote-Timeouts (auf 3599 s). |
+| **Solakon ONE - Betriebsmodus-Auswahl** | `select.solakon_one_remote_control_mode` | Entität zum Umschalten des Betriebsmodus. |
+| **Modus-Reset-Timer-Entität (Setter)** | `number.solakon_one_remote_timeout_set` | Dient zum Setzen/Zurücksetzen des Remote-Timeouts (max. 3599 s). |
 | **Remote Timeout Countdown Sensor (Ausleser)** | `sensor.solakon_one_remote_timeout_countdown` | Sensor, der den verbleibenden Timeout-Countdown anzeigt. |
-| **Entladezyklus-Zustandsspeicher** | *(siehe oben)* | Der erstellte `Input Select` Helfer (`on`/`off`). |
+| **Entladezyklus-Zustandsspeicher** | `input_select.solakon_entladezyklus_aktiv` | Der erstellte `Input Select` Helfer (`on`/`off`). **Der Standardname wird automatisch eingetragen, muss aber existieren!** |
+
+---
 
 ### 🎚️ Konfigurationsparameter (Einstellwerte)
 
@@ -94,8 +98,19 @@ Die Automatisierung reagiert auf folgende fünf kritische Ereignisse, um eine so
 | :--- | :--- | :--- |
 | **SOC-Schwelle "Schnelle Regelung"** | `50 %` | Obere Schwelle. Überschreiten startet den aggressiven Entladezyklus (Zone 1). |
 | **SOC-Schwelle "Lade-Priorität"** | `20 %` | Untere Schwelle. Unterschreiten stoppt die Entladung (Zone 3). |
-| **Toleranzbereich (Halbbreite)** | `50 W` | Der zulässige Bereich in Watt um den Nullpunkt, bevor eine Korrektur vorgenommen wird. |
-| **Regelungs-Faktor** | `1.5` | Definiert die Aggressivität des P-Reglers in Zone 1. |
+| **Toleranzbereich (Halbbreite)** | `25 W` | Der zulässige Bereich in Watt um den Nullpunkt, bevor eine Korrektur vorgenommen wird. |
+| **Regelungs-Faktor** | `1.5` | Definiert die Aggressivität des P-Reglers. |
 | **Nullpunkt-Offset** | `-30 W` | Der Zielwert für die Netzleistung in Zone 2. Negativer Wert erzwingt leichten Netzbezug. |
-| **🔋 PV-Ladereserve** | `15 W` | PV-Leistung, die in Zone 2 reserviert wird, um die Batterie trotz Entladung zu laden. |
-| **Maximale Ausgangsleistung (Hard Limit)**| `800 W` | **Die maximale AC-Ausgangsleistung, die das Blueprint setzen darf.** Dient zur Einhaltung der Hardware-Parameter und ermöglicht eine zusätzliche Drosselung der Leistung (z.B. auf 600 W), selbst wenn das Gerät mehr könnte. |
+| **🔋 PV-Ladereserve** | `50 W` | PV-Leistung, die in Zone 2 reserviert wird, um die Batterie trotz Entladung zu laden. |
+| **Maximale Ausgangsleistung (Hard Limit)**| `800 W` | Die maximale AC-Ausgangsleistung, die das Blueprint setzen darf. Dient zur Einhaltung der Hardware-Parameter. |
+
+---
+
+## 🛑 Wichtige Fehlermeldungen (System-Log)
+
+Der Blueprint enthält eine integrierte Validierung, die bei kritischen Fehlern die Automatisierung stoppt und eine klare Meldung in das Home Assistant System-Log schreibt.
+
+| Meldung im Log | Ursache | Lösung |
+| :--- | :--- | :--- |
+| **Die obere SOC-Schwelle (X%) muss größer sein als die untere SOC-Schwelle (Y%).** | Die Werte für **SOC-Schwelle "Schnelle Regelung"** und **SOC-Schwelle "Lade-Priorität"** sind gleich oder vertauscht. | Stellen Sie sicher, dass die obere Schwelle (z.B. 50) immer höher ist als die untere Schwelle (z.B. 20). |
+| **Eine oder mehrere kritische Entitäten sind UNVERFÜGBAR oder haben ungültige Werte.** | Eine der kritischen Entitäten (SOC, Timeout-Sensor, Netzleistung, Ausgangsleistungsregler) ist `unavailable` oder liefert ungültige Daten (z.B. wenn die Solakon-Integration nicht verbunden ist). | Prüfen Sie den Status der Solakon ONE Entitäten und stellen Sie sicher, dass die Integration aktiv und verbunden ist. |
