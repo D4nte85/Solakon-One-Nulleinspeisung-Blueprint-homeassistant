@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung⚡ (V138)
+  name: Solakon ONE Nulleinspeisung⚡ (V139)
   description: |
     **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonen-Logik**
 
@@ -309,18 +309,32 @@ action:
         entity_id: !input soc_entladezyklus_aktiv
       data:
         option: 'on'
-    - condition: template
-      value_template: '{{ current_mode != ''INV Discharge (PV Priority)'' }}'
-    - service: select.select_option
-      target:
-        entity_id: !input solakon_mode_select
-      data:
-        option: INV Discharge (PV Priority)
-    - service: number.set_value
-      target:
-        entity_id: !input solakon_mode_reset_timer_entity
-      data:
-        value: 3599
+    # Timer-Reset und Moduswechsel nur ausführen, wenn der Modus noch nicht korrekt ist.
+    - choose:
+      - conditions:
+        - condition: template
+          value_template: '{{ current_mode != ''INV Discharge (PV Priority)'' }}'
+        sequence:
+        # ✅ NEU: Timer-Reset-Impuls VOR dem Moduswechsel
+        - service: number.set_value
+          target:
+            entity_id: !input solakon_mode_reset_timer_entity
+          data:
+            value: 1
+        - delay:
+            milliseconds: 300
+        - service: number.set_value
+          target:
+            entity_id: !input solakon_mode_reset_timer_entity
+          data:
+            value: 3599
+        - service: select.select_option
+          target:
+            entity_id: !input solakon_mode_select
+          data:
+            option: INV Discharge (PV Priority)
+      default: []
+  
   # --- 2. Sicherheitsstopp Ende & Entladezyklus Stopp (SOC <= Untere Schwelle) ---
   - conditions:
     - condition: template
@@ -331,23 +345,55 @@ action:
         entity_id: !input soc_entladezyklus_aktiv
       data:
         option: 'off'
-    - condition: template
-      value_template: '{{ current_mode != ''Disabled'' }}'
-    - service: select.select_option
-      target:
-        entity_id: !input solakon_mode_select
-      data:
-        option: Disabled
+    # Timer-Reset und Moduswechsel zu Disabled nur ausführen, wenn der Modus noch nicht Disabled ist.
+    - choose:
+      - conditions:
+        - condition: template
+          value_template: '{{ current_mode != ''Disabled'' }}'
+        sequence:
+        # ✅ NEU: Timer-Reset-Impuls VOR dem Moduswechsel
+        - service: number.set_value
+          target:
+            entity_id: !input solakon_mode_reset_timer_entity
+          data:
+            value: 1
+        - delay:
+            milliseconds: 300
+        - service: number.set_value
+          target:
+            entity_id: !input solakon_mode_reset_timer_entity
+          data:
+            value: 3599
+        - service: select.select_option
+          target:
+            entity_id: !input solakon_mode_select
+          data:
+            option: Disabled
+      default: []
     - service: number.set_value
       target:
         entity_id: !input solakon_power_limit_number
       data:
         value: 0
+
   # --- 3. Sicherheitsstopp (SOC < Untere Schwelle UND Zyklus Inaktiv) ---
   - conditions:
     - condition: template
       value_template: '{{ soc_value < soc_stop_limit | float(20) and not cycle_active and current_mode != ''Disabled'' }}'
     sequence:
+    # ✅ NEU: Timer-Reset-Impuls VOR dem Moduswechsel
+    - service: number.set_value
+      target:
+        entity_id: !input solakon_mode_reset_timer_entity
+      data:
+        value: 1
+    - delay:
+        milliseconds: 300
+    - service: number.set_value
+      target:
+        entity_id: !input solakon_mode_reset_timer_entity
+      data:
+        value: 3599
     - service: select.select_option
       target:
         entity_id: !input solakon_mode_select
@@ -358,11 +404,25 @@ action:
         entity_id: !input solakon_power_limit_number
       data:
         value: 0
+
   # --- 4. Batterieschonende Regelung (Zwischen-SOC UND Zyklus Inaktiv) ---
   - conditions:
     - condition: template
       value_template: '{{ soc_value > soc_stop_limit | float(20) and soc_value <= soc_start_limit | float(50) and not cycle_active and current_mode != ''INV Discharge (PV Priority)'' }}'
     sequence:
+    # ✅ NEU: Timer-Reset-Impuls VOR dem Moduswechsel
+    - service: number.set_value
+      target:
+        entity_id: !input solakon_mode_reset_timer_entity
+      data:
+        value: 1
+    - delay:
+        milliseconds: 300
+    - service: number.set_value
+      target:
+        entity_id: !input solakon_mode_reset_timer_entity
+      data:
+        value: 3599
     - service: select.select_option
       target:
         entity_id: !input solakon_mode_select
@@ -373,6 +433,7 @@ action:
         entity_id: !input solakon_power_limit_number
       data:
         value: 0
+
   # --- 5. Aktive Regelung (Nur wenn Modus INV Discharge (PV Priority) aktiv ist) ---
   - conditions:
     - condition: template
@@ -407,13 +468,14 @@ action:
     # --- Ende HINZUGEFÜGTER BLOCK ---
 
 
-    # Timeout Reset (Priorisiert)
+    # Timeout Reset (Priorisiert) - Dieser Block bleibt, da er den Timer während des Betriebs verlängert,
+    # falls der Zähler unter 120 Sekunden fällt.
     - choose:
       - conditions:
         - condition: template
           value_template: '{{ soc_zone_1_or_2 }}'
         - condition: template
-          value_template: '{{ timeout_value < 120 and timeout_value != -1 }}' # Zusätzliche Prüfung
+          value_template: '{{ timeout_value <= 120 and timeout_value >= 0 }}'
         sequence:
         - service: number.set_value
           target:
