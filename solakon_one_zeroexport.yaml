@@ -124,7 +124,7 @@ blueprint:
     soc_entladezyklus_aktiv:
       name: Discharge Cycle State Storage (Input Select/Dropdown)
       description: Input Select Helper (MUST contain options 'on' and 'off').
-      default: input_select.solakon_entladezyklus_aktiv
+      default: input_select.soc_discharge_cycle_status
       selector:
         entity:
           domain:
@@ -535,3 +535,4 @@ action:
             # CORRECTED: Template as single-line string
             value: '{{ [ min(new_limit_calc | float(0), max_limit_zone2 | float(0)), 0 ] | max | round(0) }}'
       default: []
+
