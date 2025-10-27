@@ -43,7 +43,7 @@ Die Regelung wird anhand des aktuellen SOC in drei Betriebsmodi unterteilt:
 | Zone | SOC-Bereich | Modus | Ziel & Regelung |
 | :--- | :--- | :--- | :--- |
 | **1. Schnell-Entladung** | SOC > Obere Schwelle (z.B. 50%) | `INV Discharge (PV Priority)` | **Aggressive P-Regelung** mit 0 W-Offset für exakte Nulleinspeisung. Ein aktiver Entladezyklus-Helfer hält diesen Zustand bis zum Unterschreiten der unteren Schwelle. |
-| **2. Batterieschonend** | Untere Schwelle (z.B. 20%) < SOC $\le$ Obere Schwelle | `INV Discharge (PV Priority)` | **Lade-Priorität** durch einen **negativen Nullpunkt-Offset** (z.B. -30 W), der einen leichten Netzbezug erzwingt. Steuerung ohne P-Regler (Schwellwert-basiert). Die Entladeleistung wird zusätzlich um eine **PV-Ladereserve** reduziert, um die Ladung zu sichern. |
+| **2. Batterieschonend** | Untere Schwelle (z.B. 20%) < SOC $\le$ Obere Schwelle | `INV Discharge (PV Priority)` | **Aktive P-Regelung** zur Einhaltung eines **negativen Nullpunkt-Offsets** (z.B. -30 W), um leichten Netzbezug zu erzwingen. Die Entladeleistung wird zusätzlich durch eine **dynamische Obergrenze** (PV-Erzeugung minus PV-Ladereserve) begrenzt, um die Batterieladung zu priorisieren. |
 | **3. Sicherheitsstopp** | SOC $\le$ Untere Schwelle (z.B. 20%) | `Disabled` | Ausgangsleistung wird sofort auf **0 W** gesetzt, um die Batterie zu schonen. Der Entladezyklus wird beendet. |
 
 ---
