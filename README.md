@@ -75,27 +75,42 @@ The automation reacts to the following five critical events to ensure immediate 
 
 ## ⚙️ Input Variables and Default Entities
 
+> **Important:** The **Default Entities** (`default`) have been aligned with the common naming conventions of the Solakon ONE Home Assistant integration and highlighted in the description. Please adjust the values during installation if your entity names differ.
+
 ### 🔌 Required Entities (Solakon ONE & Shelly/Smart Meter)
 
 | Variable | Default Entity | Description |
 | :--- | :--- | :--- |
-| **Shelly/Grid Power Sensor** | *(No Default)* | Sensor for current grid power. **Positive values = Consumption**, **Negative values = Export**. |
-| **Solakon ONE - Solar Power** | `sensor.solakon_one_pv_power` | Current PV generation in Watts. |
-| **Solakon ONE - Battery SOC** | `sensor.solakon_one_battery_soc` | Battery State of Charge (%) |
-| **Solakon ONE - Output Power Controller** | `number.solakon_one_remote_active_power` | The entity to set the power target value. |
-| **Solakon ONE - Operating Mode Selection** | `select.solakon_one_remote_mode` | The entity to switch the operating mode. |
-| **Mode Reset Timer Entity (Setter)** | `number.solakon_one_remote_timeout_control` | Used to set/reset the remote timeout (to 3599 s). |
-| **Remote Timeout Countdown Sensor (Reader)** | `sensor.solakon_one_remote_timeout_countdown` | Sensor displaying the remaining timeout countdown. |
-| **Discharge Cycle Status Storage** | *(See above)* | The created `Input Select` helper (`on`/`off`). |
+| **Shelly/Grid Power Sensor** | *(No default)* | Sensor for current grid power (e.g., Shelly 3EM). **Positive values = Import**, **Negative values = Export**. |
+| **Solakon ONE - Solar Power** | `sensor.solakon_one_total_pv_power` | Current PV generation in Watts. |
+| **Solakon ONE - Battery SOC** | `sensor.solakon_one_battery_soc` | Battery State of Charge (SOC) in %. |
+| **Solakon ONE - Output Power Regulator** | `number.solakon_one_remote_active_power` | Entity for setting the power setpoint. |
+| **Solakon ONE - Operating Mode Selector** | `select.solakon_one_remote_control_mode` | Entity for switching the operating mode. |
+| **Mode Reset Timer Entity (Setter)** | `number.solakon_one_remote_timeout_set` | Used to set/reset the remote timeout (max. 3599 s). |
+| **Remote Timeout Countdown Sensor (Reader)** | `sensor.solakon_one_remote_timeout_countdown` | Sensor showing the remaining timeout countdown. |
+| **Discharge Cycle State Storage** | `input_select.solakon_entladezyklus_aktiv` | The created `Input Select` helper (`on`/`off`). **The default name is pre-filled but must exist!** |
 
-### 🎚️ Configuration Parameters (Setting Values)
+---
+
+### 🎚️ Configuration Parameters (Adjustable Values)
 
 | Parameter | Default Value | Description |
 | :--- | :--- | :--- |
-| **SOC Threshold "Fast Control"** | `50 %` | Upper threshold. Exceeding this starts the aggressive discharge cycle (Zone 1). |
+| **SOC Threshold "Fast Regulation"** | `50 %` | Upper threshold. Exceeding this starts the aggressive discharge cycle (Zone 1). |
 | **SOC Threshold "Charge Priority"** | `20 %` | Lower threshold. Falling below this stops discharge (Zone 3). |
-| **Tolerance Range (Half-Width)** | `50 W` | The allowed range in Watts around the zero point before correction. |
-| **Adjustment Factor** | `1.5` | Defines the aggressiveness of the P-Regulator in Zone 1. |
-| **Zero-Point Offset** | `-30 W` | The target value for grid power in Zone 2 (battery conservation). Negative value forces slight grid consumption. |
-| **🔋 PV Charge Reserve** | `15 W` | PV power reserved in Zone 2 to allow battery charging despite discharge. |
-| **Maximum Output Power (Hard Limit)**| `800 W` | **The absolute maximum AC output power that the Blueprint is allowed to set.** This is used to respect hardware limits and allows for additional throttling of power (e.g., to 600 W), even if the device is technically capable of more. |
+| **Tolerance Range (Half-Width)** | `25 W` | The allowable range in Watts around the zero point before a correction is made. |
+| **Regulation Factor** | `1.5` | Defines the aggressiveness of the P-Controller. |
+| **Zero-Point Offset** | `-30 W` | The target value for grid power in Zone 2. A negative value forces a slight grid import. |
+| **🔋 PV Charge Reserve** | `50 W` | PV power (in Watts) reserved in Zone 2 to ensure battery charging despite discharging. |
+| **Maximum Output Power (Hard Limit)**| `800 W` | The maximum AC output power the blueprint is allowed to set. Used to comply with hardware parameters. |
+
+---
+
+## 🛑 Important Error Messages (System Log)
+
+The blueprint includes built-in validation that stops the automation upon critical failures and writes a clear message to the Home Assistant System Log.
+
+| Log Message | Cause | Solution |
+| :--- | :--- | :--- |
+| **The upper SOC threshold (X%) must be greater than the lower SOC threshold (Y%).** | The values for **SOC Threshold "Fast Regulation"** and **SOC Threshold "Charge Priority"** are equal or swapped. | Ensure the upper threshold (e.g., 50) is always higher than the lower threshold (e.g., 20). |
+| **One or more critical entities are UNAVAILABLE or have invalid values.** | One of the critical entities (SOC, Timeout Sensor, Grid Power, Output Power Regulator) is `unavailable` or providing invalid data (e.g., if the Solakon integration is disconnected). | Check the status of the Solakon ONE entities and ensure the integration is active and connected. |
