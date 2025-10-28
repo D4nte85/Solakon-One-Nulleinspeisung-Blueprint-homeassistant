@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung⚡ (V149)
+  name: Solakon ONE Nulleinspeisung⚡ (V153)
   description: |
     **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonen-Logik**
 
@@ -21,9 +21,8 @@ blueprint:
     * **Modus:** "INV Discharge (PV Priority)".
     * **Regelung:** **Aggressive P-Regelung** mit einem **Nullpunkt-Offset von 0 W**. Steuert die Entladung und die exakte Nulleinspeisung.
 
-    #### 2. Batterieschonende Regelung (Zwischen-SOC und Zyklus Inaktiv)
-    * **Bedingung:** Der SOC liegt zwischen der **Unteren Schwelle** (20%) und der **Oberen Schwelle** (50%), und der Entladezyklus ist inaktiv.
-    * **Modus:** Steuerung von **"INV Discharge (PV Priority)"** und **"Disabled"** durch die PV-Leistung.
+    #### 2. Batterieschonende Regelung (Zwischen-SOC und PV-Bedingung erfüllt)
+    * **Bedingung:** Der SOC liegt zwischen der **Unteren Schwelle** (20%) und der **Oberen Schwelle** (50%), und der **Entladezyklus ist inaktiv** (wichtig für P-Regler-Zone 5b).
       * **Start:** Umschaltung auf **"INV Discharge (PV Priority)"** nur, wenn die **PV-Leistung die PV-Reserve strikt überschreitet**.
       * **Stopp (Schleifenschutz):** Umschaltung auf **"Disabled"** und 0 W Limit, wenn die PV-Leistung während des Betriebs auf oder unter die PV-Reserve fällt.
     * **Regelung:** **Aktive P-Regelung** mit verschobenem Nullpunkt und Lade-Priorität. Der **Nullpunkt-Offset** (`nulleinspeisung_offset`, Standard: -30 W) verschiebt das Regelziel in den leichten **Netzbezug** (Laden).
@@ -33,10 +32,10 @@ blueprint:
     * **Bedingung:** SOC fällt unter die **Untere Schwelle** (`soc_conservation_limit`, Standard: 20%).
     * **Modus:** "Disabled".
     * **Aktion:** Die AC-Ausgangsleistung wird sofort auf **0 W** gesetzt und der Entladezyklus beendet.
-    
+      
     ---
     ### 🔄 Zusätzliche Steuerungsmechanismen
-    * **Optimierter Timeout-Reset bei Moduswechsel:** Bevor ein Moduswechsel durchgeführt wird, erfolgt eine **zweistufige Impuls-Sequenz** (`1s` Impuls, dann `3599s` setzen), um die Akzeptanz des kritischen Modusbefehls sicherzustellen und Timeout-Fehler zu verhindern.
+    * **Optimierter Timeout-Reset bei Moduswechsel:** Bevor ein Moduswechsel durchgeführt wird, erfolgt eine **zweistufige Impuls-Sequenz** (`1s` Impuls, dann `3599s` setzen), um die Akzeptanz des kritischen Modusbefehls sicherzustellen und Timeout-Fehler zu verhindern. **Diese Logik wurde nun in einem YAML-Anker (`&timeout_reset_impulse`) zusammengefasst.**
     * **Timeout-Reset (Fortlaufend):** Der Remote Control Timeout (max. 3600s) wird in den aktiven Entlade-Zonen (1 und 2) **automatisch auf 3599s zurückgesetzt**, sobald der Countdown unter 120s fällt.
     * **Trigger:** Die Automatisierung wird ausgelöst durch Änderungen der Netzleistung und PV-Leistung (mit 3s Stabilität), das Über- bzw. Unterschreiten der SOC-Schwellen, Moduswechsel und den Remote Timeout Countdown Sensor (< 150s).
   domain: automation
@@ -267,6 +266,23 @@ action:
       soc_value: '{{ states(solakon_soc_sensor) | float(-1) }}'
       timeout_value: '{{ states(countdown_sensor) | int(-1) }}'
       error_log_message: "Solakon ONE Blueprint Fehler:"
+      
+      # Definieren der Timeout-Reset Impuls-Sequenz als Anker (&timeout_reset_impulse)
+      # Enthält: Setze 1s + 300ms Pause + Setze 3599s
+      # Wird in den Zonen 1, 2, 3, 4a, 4b und 5 verwendet.
+      timeout_reset_impulse: &timeout_reset_impulse
+        - service: number.set_value
+          target:
+            entity_id: !input solakon_mode_reset_timer_entity
+          data:
+            value: 1
+        - delay:
+            milliseconds: 300
+        - service: number.set_value
+          target:
+            entity_id: !input solakon_mode_reset_timer_entity
+          data:
+            value: 3599
 
   # --- Validierung der Eingaben ---
   - choose:
@@ -322,7 +338,7 @@ action:
       - condition: template
         value_template: >
           {{ soc_value > soc_start_limit | float(50) and 
-             not cycle_active }}
+              not cycle_active }}
       sequence:
       - service: input_select.select_option
         target:
@@ -334,20 +350,9 @@ action:
           - condition: template
             value_template: '{{ current_mode != "INV Discharge (PV Priority)" }}'
           sequence:
-          - service: number.set_value # 1. Reset auf 1s (Impuls zur Entsperrung)
-            target:
-              entity_id: !input solakon_mode_reset_timer_entity
-            data:
-              value: 1
+          - *timeout_reset_impulse # Impuls-Sequenz aus Anker
           - delay:
-              milliseconds: 300
-          - service: number.set_value # 2. Timeout auf 3599 setzen (VOR Moduswechsel)
-            target:
-              entity_id: !input solakon_mode_reset_timer_entity
-            data:
-              value: 3599
-          - delay:
-              milliseconds: 300
+              milliseconds: 300 # Zusätzliche Pause vor Moduswechsel
           - service: select.select_option # 3. Moduswechsel
             target:
               entity_id: !input solakon_mode_select
@@ -371,20 +376,9 @@ action:
           - condition: template
             value_template: '{{ current_mode != ''Disabled'' }}'
           sequence:
-          - service: number.set_value # 1. Reset auf 1s (Impuls zur Entsperrung)
-            target:
-              entity_id: !input solakon_mode_reset_timer_entity
-            data:
-              value: 1
+          - *timeout_reset_impulse # Impuls-Sequenz aus Anker
           - delay:
-              milliseconds: 300
-          - service: number.set_value # 2. Timeout auf 3599 setzen (VOR Moduswechsel)
-            target:
-              entity_id: !input solakon_mode_reset_timer_entity
-            data:
-              value: 3599
-          - delay:
-              milliseconds: 300
+              milliseconds: 300 # Zusätzliche Pause vor Moduswechsel
           - service: select.select_option # 3. Moduswechsel
             target:
               entity_id: !input solakon_mode_select
@@ -402,20 +396,9 @@ action:
       - condition: template
         value_template: '{{ soc_value < soc_stop_limit | float(20) and not cycle_active and current_mode != ''Disabled'' }}'
       sequence:
-      - service: number.set_value # 1. Reset auf 1s (Impuls zur Entsperrung)
-        target:
-          entity_id: !input solakon_mode_reset_timer_entity
-        data:
-          value: 1
+      - *timeout_reset_impulse # Impuls-Sequenz aus Anker
       - delay:
-          milliseconds: 300
-      - service: number.set_value # 2. Timeout auf 3599 setzen (VOR Moduswechsel)
-        target:
-          entity_id: !input solakon_mode_reset_timer_entity
-        data:
-          value: 3599
-      - delay:
-          milliseconds: 300
+          milliseconds: 300 # Zusätzliche Pause vor Moduswechsel
       - service: select.select_option # 3. Moduswechsel
         target:
           entity_id: !input solakon_mode_select
@@ -427,36 +410,25 @@ action:
         data:
           value: 0
           
-      # --- 4. Batterieschonende Regelung (Zwischen-SOC UND Zyklus Inaktiv) - START/STOPP Logik Bündelung ---
+      # --- 4. Batterieschonende Regelung (Zwischen-SOC und PV-Bedingung) - START/STOPP Logik Bündelung ---
     - conditions:
       - condition: template
         value_template: >
           {{ soc_value > soc_stop_limit | float(20) and 
-             soc_value <= soc_start_limit | float(50) and 
-             not cycle_active }}
+              soc_value <= soc_start_limit | float(50) and
+              not cycle_active }}
       sequence:
       - choose:
-          # --- 4a. START der Schonregelung (PV > Reserve UND Modus ist nicht aktiv) ---
+          # --- 4a. START der Schonregelung (PV > Reserve UND Modus ist inaktiv) ---
         - conditions:
           - condition: template
             value_template: >
               {{ pv_power > pv_reserve_float and 
-                 current_mode != "INV Discharge (PV Priority)" }}
+                  current_mode != "INV Discharge (PV Priority)" }}
           sequence:
-          - service: number.set_value # 1. Reset auf 1s (Impuls zur Entsperrung)
-            target:
-              entity_id: !input solakon_mode_reset_timer_entity
-            data:
-              value: 1
+          - *timeout_reset_impulse # Impuls-Sequenz aus Anker
           - delay:
-              milliseconds: 300
-          - service: number.set_value # 2. Timeout auf 3599 setzen (VOR Moduswechsel)
-            target:
-              entity_id: !input solakon_mode_reset_timer_entity
-            data:
-              value: 3599
-          - delay:
-              milliseconds: 300
+              milliseconds: 300 # Zusätzliche Pause vor Moduswechsel
           - service: select.select_option # 3. Moduswechsel
             target:
               entity_id: !input solakon_mode_select
@@ -473,22 +445,11 @@ action:
           - condition: template
             value_template: >
               {{ pv_power <= pv_reserve_float and 
-                 current_mode == "INV Discharge (PV Priority)" }}
+                  current_mode == "INV Discharge (PV Priority)" }}
           sequence:
-          - service: number.set_value # 1. Reset auf 1s (Impuls zur Entsperrung)
-            target:
-              entity_id: !input solakon_mode_reset_timer_entity
-            data:
-              value: 1
+          - *timeout_reset_impulse # Impuls-Sequenz aus Anker
           - delay:
-              milliseconds: 300
-          - service: number.set_value # 2. Timeout auf 3599 setzen (VOR Moduswechsel)
-            target:
-              entity_id: !input solakon_mode_reset_timer_entity
-            data:
-              value: 3599
-          - delay:
-              milliseconds: 300
+              milliseconds: 300 # Zusätzliche Pause vor Moduswechsel
           - service: select.select_option # 3. Moduswechsel
             target:
               entity_id: !input solakon_mode_select
@@ -499,7 +460,7 @@ action:
               entity_id: !input solakon_power_limit_number
             data:
               value: 0
-        default: [] # Kein Wechsel, wenn PV > Reserve UND Modus aktiv ODER PV <= Reserve UND Modus inaktiv.
+        default: []
           
       # --- 5. Aktive Regelung (Nur wenn Modus INV Discharge (PV Priority) aktiv ist) ---
     - conditions:
@@ -522,25 +483,15 @@ action:
           - condition: template
             value_template: '{{ timeout_value < 120 and timeout_value != -1 }}'
           sequence:
-          - service: number.set_value
-            target:
-              entity_id: !input solakon_mode_reset_timer_entity
-            data:
-              value: 1
-          - delay:
-              milliseconds: 300
-          - service: number.set_value
-            target:
-              entity_id: !input solakon_mode_reset_timer_entity
-            data:
-              value: 3599
+          - *timeout_reset_impulse # Impuls-Sequenz aus Anker (Wird hier nur als Auffrischung verwendet)
         default: []
 
       # P-Regelungsvariablen (für die P-Regelungs-Aktionen)
       - variables:
           tolerance_float: '{{ tolerance | float(25) }}'
           # Offset-Wert: Negativ im Input wird zu POSITIV im Offset (Bezug erzwingen)
-          offset: '{{ offset_value | float(-30) * -1 if soc_value < soc_start_limit | float(50) and not cycle_active else 0.0 }}'
+          # Offset wird nur in Zone 2 genutzt (cycle_active = 'off' UND Zwischen-SOC)
+          offset: '{{ offset_value | float(-30) * -1 if not cycle_active and soc_value < soc_start_limit | float(50) and soc_value >= soc_stop_limit | float(20) else 0.0 }}'
           tolerance_high: '{{ offset + tolerance_float }}'
           tolerance_low: '{{ offset - tolerance_float }}'
           current_limit: '{{ states(solakon_power_limit_number) | float(0) }}'
@@ -599,3 +550,5 @@ action:
                 
                 {# Sendet das Minimum des P-Regler-Werts und der dynamischen Obergrenze, mindestens 0 W. #}
                 {{ max(min(calculated_limit, final_max_limit), 0) | round(0) }}
+        default: []
+    default: []
