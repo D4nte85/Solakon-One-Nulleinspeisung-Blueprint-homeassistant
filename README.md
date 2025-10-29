@@ -52,8 +52,8 @@ Die Regelung wird anhand des aktuellen SOC in drei Betriebsmodi unterteilt:
 
 Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten, werden zwei Timer-Mechanismen genutzt:
 
-1.  **Kontinuierlicher Timeout-Reset (Refresh):** Der interne **Remote-Timeout-Timer** wird in den aktiven Zonen (1 und 2) proaktiv auf einen hohen Wert (3599s) zurückgesetzt, sobald er einen kritischen Wert (**120s**) unterschreitet.
-2.  **Forcierter Reset vor Moduswechsel (Puls-Sequenz):** Bei jedem **kritischen Moduswechsel** (`Disabled` $\leftrightarrow$ `INV Discharge (PV Priority)`) wird zusätzlich eine **zweistufige Puls-Sequenz** (`1s` Puls, dann `3599s` Setzen) ausgeführt. Dies stellt sicher, dass der Solakon den folgenden Modusbefehl zuverlässig annimmt und Timeout-Fehler verhindert werden.
+1.  **Kontinuierlicher Timeout-Reset (Refresh):** Der interne **Remote-Timeout-Timer** wird in den aktiven Zonen (1 und 2) proaktiv auf einen hohen Wert (3599s) zurückgesetzt, sobald er einen kritischen Wert (**120s**) unterschreitet.
+2.  **Forcierter Reset vor Moduswechsel (Puls-Sequenz):** Bei jedem **kritischen Moduswechsel** (`Disabled` $\leftrightarrow$ `INV Discharge (PV Priority)`) wird zusätzlich eine **zweistufige Puls-Sequenz** (`1s` Puls, dann `3599s` Setzen) ausgeführt. Dies stellt sicher, dass der Solakon den folgenden Modusbefehl zuverlässig annimmt und Timeout-Fehler verhindert werden.
 
 ---
 
@@ -61,17 +61,17 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten, werd
 
 Die Automatisierung reagiert auf folgende fünf kritische Ereignisse, um eine sofortige und stabile Regelung zu gewährleisten:
 
-1.  **Leistungsänderungen (mit 3s Verzögerung):**
-    * Zustandsänderung des **Netz-Leistungssensors** (`shelly_grid_power_sensor`) für $\ge 3$ Sekunden.
-    * Zustandsänderung des **Solarleistungssensors** (`solakon_solar_power_sensor`) für $\ge 3$ Sekunden.
-    * *(Zweck: Löst die stabile P-Regelung aus.)*
-2.  **SOC-Schwellwert-Erreichung:**
-    * Batterie-SOC (`solakon_soc_sensor`) **über** der **Oberen Schwelle** (`soc_fast_limit`).
-    * Batterie-SOC **unter** der **Unteren Schwelle** (`soc_conservation_limit`).
-    * *(Zweck: Steuert den Wechsel zwischen den Entladezonen.)*
-3.  **Moduswechsel:**
-    * Zustandsänderung der **Betriebsmodus-Auswahl** (`solakon_mode_select`).
-    * *(Zweck: Reagiert auf manuelle oder externe Modusänderungen.)*
+1.  **Leistungsänderungen (mit 3s Verzögerung):**
+    * Zustandsänderung des **Netz-Leistungssensors** (`shelly_grid_power_sensor`) für $\ge 3$ Sekunden.
+    * Zustandsänderung des **Solarleistungssensors** (`solakon_solar_power_sensor`) für $\ge 3$ Sekunden.
+    * *(Zweck: Löst die stabile P-Regelung aus.)*
+2.  **SOC-Schwellwert-Erreichung:**
+    * Batterie-SOC (`solakon_soc_sensor`) **über** der **Oberen Schwelle** (`soc_fast_limit`).
+    * Batterie-SOC **unter** der **Unteren Schwelle** (`soc_conservation_limit`).
+    * *(Zweck: Steuert den Wechsel zwischen den Entladezonen.)*
+3.  **Moduswechsel:**
+    * Zustandsänderung der **Betriebsmodus-Auswahl** (`solakon_mode_select`).
+    * *(Zweck: Reagiert auf manuelle oder externe Modusänderungen.)*
 
 ---
 
