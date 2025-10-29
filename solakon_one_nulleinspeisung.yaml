@@ -54,7 +54,7 @@ blueprint:
     solakon_solar_power_sensor:
       name: Solakon ONE - Solarleistung (PV-Erzeugung)
       description: |
-        Der Sensor, der die aktuelle Solarerzeugung in Watt anzeigt. **(Standard-Entität: `sensor.solakon_one_total_pv_power`)**
+        Der Sensor, der die aktuelle Solarerzeugung in Watt anzeigt. **(Standard-Entität `sensor.solakon_one_total_pv_power`)**
       default: sensor.solakon_one_total_pv_power
       selector:
         entity:
@@ -68,7 +68,7 @@ blueprint:
     solakon_soc_sensor:
       name: Solakon ONE - Batteriespeicherkapazität (SOC)
       description: |
-        Der SOC-Sensor des Solakon ONE (%). **(Standard-Entität: `sensor.solakon_one_battery_soc`)**
+        Der SOC-Sensor des Solakon ONE (%). **(Standard-Entität `sensor.solakon_one_battery_soc`)**
       default: sensor.solakon_one_battery_soc
       selector:
         entity:
@@ -80,7 +80,7 @@ blueprint:
     solakon_discharge_current_number:
       name: Solakon ONE - Max. Entladestrom (Discharge Current Limit) ⚡
       description: |
-        Die Entität zur Steuerung des maximalen Entladestroms (A). **(Standard-Entität: `number.solakon_one_battery_max_discharge_current`)**
+        Die Entität zur Steuerung des maximalen Entladestroms (A). **(Standard-Entität `number.solakon_one_battery_max_discharge_current`)**
       default: number.solakon_one_battery_max_discharge_current
       selector:
         entity:
@@ -92,7 +92,7 @@ blueprint:
     solakon_power_limit_number:
       name: Solakon ONE - Ausgangsleistungsregler (AC-Output)
       description: |
-        Die Entität zur Steuerung der Lade-/Entladeleistung (Sollwert). **(Standard-Entität: `number.solakon_one_remote_active_power`)**
+        Die Entität zur Steuerung der Lade-/Entladeleistung (Sollwert). **(Standard-Entität `number.solakon_one_remote_active_power`)**
       default: number.solakon_one_remote_active_power
       selector:
         entity:
@@ -103,7 +103,7 @@ blueprint:
     solakon_mode_select:
       name: Solakon ONE - Betriebsmodus-Auswahl
       description: |
-        Die Entität zur Steuerung des Betriebsmodus. **(Standard-Entität: `select.solakon_one_remote_control_mode`)**
+        Die Entität zur Steuerung des Betriebsmodus. **(Standard-Entität `select.solakon_one_remote_control_mode`)**
       default: select.solakon_one_remote_control_mode
       selector:
         entity:
@@ -114,7 +114,7 @@ blueprint:
     solakon_mode_reset_timer_entity:
       name: Modus-Reset Timer Entität (Solakon ONE - **Setter**)
       description: |
-        Die Solakon ONE **Number** Entität, die die Zeit steuert (in Sekunden, max. 3600). Wird zum **Setzen/Zurücksetzen** des Remote Timeout verwendet. **(Standard-Entität: `number.solakon_one_remote_timeout_set`)**
+        Die Solakon ONE **Number** Entität, die die Zeit steuert (in Sekunden, max. 3600). Wird zum **Setzen/Zurücksetzen** des Remote Timeout verwendet. **(Standard-Entität `number.solakon_one_remote_timeout_set`)**
       default: number.solakon_one_remote_timeout_set
       selector:
         entity:
@@ -613,3 +613,4 @@ action:
               
         default: []
     default: []
+
