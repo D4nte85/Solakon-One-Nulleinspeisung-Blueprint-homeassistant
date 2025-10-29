@@ -260,7 +260,7 @@ blueprint:
       selector:
         number:
           min: 0
-          max: 50
+          max: 40
           unit_of_measurement: A
     
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -885,4 +885,5 @@ action:
     data:
       entity_id: !input active_power_number
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
+
 
