@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung⚡ (V158)
+  name: Solakon ONE Nulleinspeisung⚡ (V165)
   description: |
     **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonenlogik**
 
@@ -20,18 +20,17 @@ blueprint:
     * **Bedingung:** Der SOC liegt über dem **Oberen Schwellenwert** (`soc_fast_limit`, Standard: 50%) ODER der Entladezyklus ist bereits aktiv.
     * **Modus:** "INV Discharge (PV Priority)".
     * **Regelung:** **Aggressive P-Regelung** mit einem **Nullpunkt-Offset von 0 W**. Steuert Entladung und exakte Nulleinspeisung.
+    * **Entladestrom:** Auf das Maximum gesetzt, um volle P-Regelung zu ermöglichen.
 
-    #### 2. Batterieschonende Regelung (Zwischen-SOC und PV-Bedingung erfüllt)
-    * **Bedingung:** Der SOC liegt zwischen dem **Unteren Schwellenwert** (20%) und dem **Oberen Schwellenwert** (50%), und der **Entladezyklus ist inaktiv** (wichtig für P-Regler Zone 2).
-      * **Start:** Umschalten auf **"INV Discharge (PV Priority)"** nur, wenn die **PV-Leistung die PV-Reserve strikt übersteigt**.
-      * **Stopp (Schleifenschutz):** Umschalten auf **"Disabled"** und 0 W Limit, falls die PV-Leistung im Betrieb auf oder unter die PV-Reserve fällt.
-    * **Regelung:** **Aktive P-Regelung** mit verschobenem Nullpunkt und Ladepriorität. Der **Nullpunkt-Offset** (`nulleinspeisung_offset`, Standard: -30 W) verschiebt das Regelziel hin zu leichtem **Netzbezug** (Laden).
-    * **PV-Ladepriorität (Dynamisches Oberlimit):** Die Entladeleistung wird dynamisch durch den **kleineren Wert** aus dem P-Regler-Vorschlag und der **verfügbaren PV-Leistung minus der PV-Reserve** begrenzt.
+    #### 2. Batterieschonende Regelung (Zwischen-SOC)
+    * **Bedingung:** Der SOC liegt zwischen dem **Unteren Schwellenwert** (20%) und dem **Oberen Schwellenwert** (50%), und der **Entladezyklus ist inaktiv**.
+      * **Aktion:** Umschalten auf **"INV Discharge (PV Priority)"** und Setzen des maximalen Entladestroms auf **0 A**. **Die Batterie wird NICHT entladen.**
+    * **Regelung:** **Aktive P-Regelung** mit verschobenem Nullpunkt (Netzbezug-Offset). Die Steuerung erfolgt über das AC-Output-Limit, welches zusätzlich dynamisch durch die **PV-Ladereserve** gedeckelt wird (Maximaler Output = PV-Leistung - Reserve).
 
     #### 3. Sicherheitsstopp (SOC <= Unterer Schwellenwert)
     * **Bedingung:** SOC fällt unter den **Unteren Schwellenwert** (`soc_conservation_limit`, Standard: 20%).
     * **Modus:** "Disabled".
-    * **Aktion:** Die AC-Ausgangsleistung wird sofort auf **0 W** gesetzt und der Entladezyklus beendet.
+    * **Aktion:** Die AC-Ausgangsleistung wird sofort auf **0 W** gesetzt, der Entladezyklus beendet und der Entladestrom auf das Max-Limit zurückgesetzt.
       
     ---
     ### 🔄 Zusätzliche Steuermechanismen
@@ -41,6 +40,18 @@ blueprint:
   domain: automation
   author: AI-Assistent
   input:
+    solakon_discharge_current_number:
+      name: Solakon ONE - Max. Entladestrom (Discharge Current Limit) ⚡
+      description: |
+        Die Entität zur Steuerung des maximalen Entladestroms (A). **(Standard-Entität: `number.solakon_one_battery_max_discharge_current`)**
+      default: number.solakon_one_battery_max_discharge_current
+      selector:
+        entity:
+          filter:
+            - domain:
+                - number
+          multiple: false
+          reorder: false
     shelly_grid_power_sensor:
       name: Shelly/Netzleistungs-Sensor (Shelly 3EM o.ä.)
       description: Der Sensor, der die Netzleistung misst. (Muss 'power' device_class haben)
@@ -194,7 +205,7 @@ blueprint:
       description: |
         Die PV-Leistung (in Watt, W), die reserviert werden soll. Dieser Puffer kompensiert
         interne Wechselrichter-Verluste und sichert eine garantierte Akkuladung.
-        (Nur in der schonenden Zone 2 verwendet)
+        (Wird in Zone 2 zur dynamischen Begrenzung der Entladeleistung verwendet)
       selector:
         number:
           min: 0.0
@@ -213,12 +224,26 @@ blueprint:
           step: 10.0
           unit_of_measurement: W
           mode: slider
+    max_discharge_current:
+      name: Max. Entladestrom (Standardwert)
+      default: 40
+      description: |
+        Der Standardwert (in A) für den maximalen Entladestrom.
+        Dieser Wert wird gesetzt, wenn die Entladung erlaubt ist.
+      selector:
+        number:
+          min: 0.0
+          max: 40.0
+          step: 1.0
+          unit_of_measurement: A
+          mode: slider
   source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/main/solakon_one_nulleinspeisung.yaml
 mode: queued
 max_exceeded: silent
 variables:
   # Die Variablendeklaration folgt der einzig sicher funktionierenden Weise, wie Blueprints
   # in Home Assistant funktionieren; alle anderen Möglichkeiten sind fehlerhaft und werfen Fehler.
+  discharge_current_entity: !input solakon_discharge_current_number
   solakon_mode: !input solakon_mode_select
   solakon_soc_sensor: !input solakon_soc_sensor
   pv_power_sensor: !input solakon_solar_power_sensor
@@ -234,6 +259,7 @@ variables:
   cycle_active_helper: !input soc_entladezyklus_aktiv
   pv_reserve: !input pv_charge_reserve
   max_limit: !input max_active_power_limit
+  max_discharge_current: !input max_discharge_current
 trigger:
   - platform: state
     entity_id: !input shelly_grid_power_sensor
@@ -286,7 +312,8 @@ action:
         value_template: >
           {{ soc_value == -1 or timeout_value == -1 or
             is_state(grid_power_sensor, 'unavailable') or
-            is_state(solakon_power_limit_number, 'unavailable') }}
+            is_state(solakon_power_limit_number, 'unavailable') or
+            is_state(discharge_current_entity, 'unavailable') }}
       sequence:
       - service: system_log.write
         data:
@@ -307,13 +334,15 @@ action:
       grid_power: '{{ states(grid_power_sensor) | float(0) }}'
       pv_power: '{{ states(pv_power_sensor) | float(0) }}'
       current_mode: '{{ states(solakon_mode) }}'
-      pv_reserve_float: '{{ pv_reserve | float(50) }}'
+      pv_reserve_float: '{{ pv_reserve | float(50) }}' # PV Reserve wieder definiert
+      max_current_float: '{{ max_discharge_current | float(40) }}'
 
   # --- MODUS-UMSCHALTUNG UND ZYKLUS-STEUERUNG (Abschnitte 1-4) ---
   # Dieser Choose-Block steuert nur den Select-Mode und den Entladezyklus-Helfer.
   - choose:
       
       # --- 1. Schnelle Regelung & Entladezyklus Start (SOC > Oberer Schwellenwert) ---
+      # Setze Max. Entladestrom auf Standard (40 A)
     - conditions:
       - condition: template
         value_template: >
@@ -325,6 +354,11 @@ action:
           entity_id: !input soc_entladezyklus_aktiv
         data:
           option: 'on'
+      - service: number.set_value
+        target:
+          entity_id: !input solakon_discharge_current_number
+        data:
+          value: '{{ max_current_float }}'
       - choose: 
         - conditions:
           - condition: template
@@ -352,6 +386,7 @@ action:
         default: []
         
       # --- 2. Sicherheitsstopp Ende & Entladezyklus Stopp (SOC <= Unterer Schwellenwert) ---
+      # Setze Max. Entladestrom auf Standard (40 A)
     - conditions:
       - condition: template
         value_template: '{{ soc_value <= soc_stop_limit | float(20) and cycle_active
@@ -362,6 +397,11 @@ action:
           entity_id: !input soc_entladezyklus_aktiv
         data:
           option: 'off'
+      - service: number.set_value
+        target:
+          entity_id: !input solakon_discharge_current_number
+        data:
+          value: '{{ max_current_float }}'
       - choose:
         - conditions:
           - condition: template
@@ -394,10 +434,16 @@ action:
           value: 0
           
       # --- 3. Sicherheitsstopp (SOC < Unterer Schwellenwert UND Zyklus Inaktiv) ---
+      # Setze Max. Entladestrom auf Standard (40 A)
     - conditions:
       - condition: template
         value_template: '{{ soc_value < soc_stop_limit | float(20) and not cycle_active and current_mode != ''Disabled'' }}'
       sequence:
+      - service: number.set_value
+        target:
+          entity_id: !input solakon_discharge_current_number
+        data:
+          value: '{{ max_current_float }}'
       - service: number.set_value
         target:
           entity_id: !input solakon_mode_reset_timer_entity
@@ -423,79 +469,45 @@ action:
         data:
           value: 0
           
-      # --- 4. Batterieschonende Regelung (Zwischen-SOC und PV-Bedingung) - START/STOPP-Logik ---
+      # --- 4. Batterieschonende Regelung (Zwischen-SOC und Zyklus Inaktiv) - START-Logik ---
+      # Setze Max. Entladestrom auf 0 A
     - conditions:
       - condition: template
         value_template: >
           {{ soc_value > soc_stop_limit | float(20) and 
               soc_value <= soc_start_limit | float(50) and
-              not cycle_active }}
+              not cycle_active and
+              current_mode != "INV Discharge (PV Priority)" }}
       sequence:
-      - choose:
-          # --- 4a. START der Schon-Regelung (PV > Reserve UND Modus ist inaktiv) ---
-        - conditions:
-          - condition: template
-            value_template: >
-              {{ pv_power > pv_reserve_float and 
-                  current_mode != "INV Discharge (PV Priority)" }}
-          sequence:
-          - service: number.set_value
-            target:
-              entity_id: !input solakon_mode_reset_timer_entity
-            data:
-              value: 1
-          - delay:
-              milliseconds: 300
-          - service: number.set_value
-            target:
-              entity_id: !input solakon_mode_reset_timer_entity
-            data:
-              value: 3599
-          - delay:
-              milliseconds: 300
-          - service: select.select_option
-            target:
-              entity_id: !input solakon_mode_select
-            data:
-              option: INV Discharge (PV Priority)
-          - service: number.set_value
-            target:
-              entity_id: !input solakon_power_limit_number
-            data:
-              value: 0
-              
-          # --- 4b. STOPP der Schon-Regelung (PV <= Reserve UND Modus ist aktiv) ---
-        - conditions:
-          - condition: template
-            value_template: >
-              {{ pv_power <= pv_reserve_float and 
-                  current_mode == "INV Discharge (PV Priority)" }}
-          sequence:
-          - service: number.set_value
-            target:
-              entity_id: !input solakon_mode_reset_timer_entity
-            data:
-              value: 1
-          - delay:
-              milliseconds: 300
-          - service: number.set_value
-            target:
-              entity_id: !input solakon_mode_reset_timer_entity
-            data:
-              value: 3599
-          - delay:
-              milliseconds: 300
-          - service: select.select_option
-            target:
-              entity_id: !input solakon_mode_select
-            data:
-              option: Disabled
-          - service: number.set_value
-            target:
-              entity_id: !input solakon_power_limit_number
-            data:
-              value: 0
-        default: []
+      - service: number.set_value
+        target:
+          entity_id: !input solakon_discharge_current_number
+        data:
+          value: 0 # <--- Entladestrom auf 0 A gesetzt
+      - service: number.set_value
+        target:
+          entity_id: !input solakon_mode_reset_timer_entity
+        data:
+          value: 1
+      - delay:
+          milliseconds: 300
+      - service: number.set_value
+        target:
+          entity_id: !input solakon_mode_reset_timer_entity
+        data:
+          value: 3599
+      - delay:
+          milliseconds: 300
+      - service: select.select_option
+        target:
+          entity_id: !input solakon_mode_select
+        data:
+          option: INV Discharge (PV Priority)
+      - service: number.set_value
+        target:
+          entity_id: !input solakon_power_limit_number
+        data:
+          value: 0
           
     default: [] # Fallback für den äußeren Choose-Block
 
@@ -533,6 +545,7 @@ action:
       - choose:
             
           # --- 5.2a Zone 2: Batterieschonend (Zwischen-SOC und Zyklus Inaktiv - PRÄFERIERT!) ---
+          # Entladestrom ist auf 0 A gesetzt, aber die AC-Output-Regelung ist dynamisch.
         - conditions:
           - condition: template
             value_template: >
@@ -545,17 +558,17 @@ action:
               offset: '{{ offset_value | float(-30) * -1 }}'
               tolerance_high: '{{ offset + tolerance | float(25) }}'
               tolerance_low: '{{ offset - tolerance | float(25) }}'
-                
+              
           # Zonen-spezifische Toleranz-Prüfung
           - condition: template
             value_template: >
               {{ grid_power > tolerance_high or grid_power < tolerance_low }}
-                
+              
           - variables:
               current_limit: '{{ states(solakon_power_limit_number) | float(0) }}'
               reg_abweichung: '{{ grid_power | float(0) - offset | float(30) }}'
               new_limit_calc: '{{ current_limit + reg_abweichung * adj_factor }}'
-                
+              
           - service: number.set_value
             target:
               entity_id: !input solakon_power_limit_number
@@ -564,13 +577,13 @@ action:
                 {% set calculated_limit = new_limit_calc | float(0) %}
                 
                 {# Definiert das obere Limit: Minimum von Hard Limit und max(0, PV-Leistung - PV-Reserve). #}
-                {% set dynamic_pv_limit = max(states(pv_power_sensor) | float(0) - pv_reserve | float(50), 0) %}
+                {% set dynamic_pv_limit = max(states(pv_power_sensor) | float(0) - pv_reserve_float, 0) %}
                 {% set final_max_limit = min(max_limit | float(800), dynamic_pv_limit) %}
                 
                 {# Sendet das Minimum aus P-Regler-Wert und dem dynamischen Oberlimit, mindestens 0 W. #}
                 {{ max(min(calculated_limit, final_max_limit), 0) | round(0) }}
-                  
-            # --- 5.2b Zone 1: Aggressiv (Zyklus Aktiv oder Hoher SOC - FALLBACK) ---
+                
+          # --- 5.2b Zone 1: Aggressiv (Zyklus Aktiv oder Hoher SOC - FALLBACK) ---
         - conditions:
           - condition: template
             value_template: '{{ cycle_active or soc_value > soc_start_limit | float(50) }}'
@@ -580,12 +593,12 @@ action:
               offset: 0.0
               tolerance_high: '{{ offset + tolerance | float(25) }}'
               tolerance_low: '{{ offset - tolerance | float(25) }}'
-                
+              
           # Zonen-spezifische Toleranz-Prüfung
           - condition: template
             value_template: >
               {{ grid_power > tolerance_high or grid_power < tolerance_low }}
-                
+              
           - variables:
               current_limit: '{{ states(solakon_power_limit_number) | float(0) }}'
               reg_abweichung: '{{ grid_power | float(0) - offset | float(0) }}'
@@ -597,7 +610,6 @@ action:
             data:
               # Begrenzung: Max des berechneten Wertes und 0, dann min des globalen Max Limits
               value: '{{ [ min(new_limit_calc | float(0), max_limit | float(800)), 0 ] | max | round(0) }}'
-                
+              
         default: []
     default: []
-
