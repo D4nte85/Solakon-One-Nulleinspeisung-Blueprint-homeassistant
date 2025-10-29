@@ -14,14 +14,14 @@ Installieren Sie den Blueprint direkt über diesen Button in Ihrer Home Assistan
 
 Der Blueprint benötigt einen `Input Select` Helfer, um den Status des Entladezyklus zu speichern.
 
-1.  Gehen Sie in Home Assistant zu **Einstellungen** (Settings) -> **Geräte & Dienste** (Devices & Services) -> **Helfer** (Helpers).
-2.  Klicken Sie auf **Helfer erstellen** (Create Helper).
-3.  Wählen Sie den Typ **Auswahl** (**Input Select**).
-4.  Geben Sie einen Namen ein, z.B. `SOC Entladezyklus Status`.
-5.  Fügen Sie unter **Optionen** (Options) genau diese beiden Werte hinzu:
-    * `on`
-    * `off`
-6.  Speichern Sie den Helfer. Die resultierende Entität (z.B. `input_select.soc_entladezyklus_status`) muss dann im Blueprint unter **Entladezyklus-Zustandsspeicher** ausgewählt werden.
+1.  Gehen Sie in Home Assistant zu **Einstellungen** (Settings) -> **Geräte & Dienste** (Devices & Services) -> **Helfer** (Helpers).
+2.  Klicken Sie auf **Helfer erstellen** (Create Helper).
+3.  Wählen Sie den Typ **Auswahl** (**Input Select**).
+4.  Geben Sie einen Namen ein, z.B. `SOC Entladezyklus Status`.
+5.  Fügen Sie unter **Optionen** (Options) genau diese beiden Werte hinzu:
+    * `on`
+    * `off`
+6.  Speichern Sie den Helfer. Die resultierende Entität (z.B. `input_select.soc_entladezyklus_status`) muss dann im Blueprint unter **Entladezyklus-Zustandsspeicher** ausgewählt werden.
 
 ---
 
@@ -88,6 +88,7 @@ Die Automatisierung reagiert auf folgende fünf kritische Ereignisse, um eine so
 | **Solakon ONE - Batterieladestand** | `sensor.solakon_one_battery_soc` | Batterieladestand (State of Charge) in %. |
 | **Solakon ONE - Ausgangsleistungsregler** | `number.solakon_one_remote_active_power` | Entität zum Setzen des Leistungs-Sollwerts. |
 | **Solakon ONE - Betriebsmodus-Auswahl** | `select.solakon_one_remote_control_mode` | Entität zum Umschalten des Betriebsmodus. |
+| **Solakon ONE - Max. Entladestrom** | `number.solakon_one_battery_max_discharge_current` | Die Entität zur Steuerung des maximalen Entladestroms (A). |
 | **Modus-Reset-Timer-Entität (Setter)** | `number.solakon_one_remote_timeout_set` | Dient zum Setzen/Zurücksetzen des Remote-Timeouts (max. 3599 s). |
 | **Remote Timeout Countdown Sensor (Ausleser)** | `sensor.solakon_one_remote_timeout_countdown` | Sensor, der den verbleibenden Timeout-Countdown anzeigt. |
 | **Entladezyklus-Zustandsspeicher** | `input_select.soc_entladezyklus_status` | Der erstellte `Input Select` Helfer (`on`/`off`). **Der Standardname wird automatisch eingetragen, muss aber existieren!** |
@@ -103,6 +104,7 @@ Die Automatisierung reagiert auf folgende fünf kritische Ereignisse, um eine so
 | **Toleranzbereich (Halbbreite)** | `25 W` | Der zulässige Bereich in Watt um den Nullpunkt, bevor eine Korrektur vorgenommen wird. |
 | **Regelungs-Faktor** | `1.5` | Definiert die Aggressivität des P-Reglers. |
 | **Nullpunkt-Offset** | `-30 W` | Der Zielwert für die Netzleistung in Zone 2. Negativer Wert erzwingt leichten Netzbezug. |
+| **Max. Entladestrom (Standardwert)** | `40 A` | Der maximale Entladestrom (A) in Zone 1. |
 | **🔋 PV-Ladereserve** | `50 W` | Die PV-Leistung (in Watt), die reserviert wird. Dieser Puffer gleicht **interne Wandlerverluste** aus und wird in Zone 2 zur **dynamischen Begrenzung der Ausgangsleistung** genutzt, um die Batterieladung zu gewährleisten. |
 | **Maximale Ausgangsleistung (Hard Limit)**| `800 W` | Die maximale AC-Ausgangsleistung, die das Blueprint setzen darf. Dient zur Einhaltung der Hardware-Parameter. |
 
