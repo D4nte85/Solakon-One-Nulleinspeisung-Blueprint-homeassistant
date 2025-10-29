@@ -1,7 +1,7 @@
 blueprint:
   name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert
   description: |
-    **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonenlogik (V169)**
+    **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonenlogik (V170)**
 
     Dieser Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung** für den Solakon ONE Wechselrichter. Er nutzt einen Proportionalregler (P-Regler) zur Feinsteuerung der AC-Ausgangsleistung und eine **dreistufige State-of-Charge (SOC)-Logik** zur effizienten Verwaltung des Batteriespeichers.
 
@@ -56,7 +56,7 @@ blueprint:
 
     solar_power_sensor:
       name: Solakon ONE - Solarleistung (PV-Erzeugung) ☀️
-      description: 'Die aktuelle PV-Gesamterzeugung in Watt. (Standard: sensor.solakon_one_total_pv_power)' # KORRIGIERT
+      description: Die aktuelle PV-Gesamterzeugung in Watt.
       default: sensor.solakon_one_total_pv_power
       selector:
         entity:
@@ -65,7 +65,7 @@ blueprint:
 
     active_power_number:
       name: Solakon ONE - Ausgangsleistungsregler ⚙️
-      description: 'Die Entität zum Setzen des Leistungs-Sollwerts (Remote Active Power). (Standard: number.solakon_one_remote_active_power)' # KORRIGIERT
+      description: Die Entität zum Setzen des Leistungs-Sollwerts (Remote Active Power).
       default: number.solakon_one_remote_active_power
       selector:
         entity:
@@ -74,7 +74,7 @@ blueprint:
     # ENTLADE LIMIT
     max_discharge_current_number:
       name: Solakon ONE - Max. Entladestrom (A) 🔋
-      description: 'Die Entität zur Steuerung des maximalen Entladestroms (A). (Standard: number.solakon_one_battery_max_discharge_current)' # KORRIGIERT
+      description: Die Entität zur Steuerung des maximalen Entladestroms (A).
       default: number.solakon_one_battery_max_discharge_current
       selector:
         entity:
@@ -83,7 +83,7 @@ blueprint:
     # MODUS/SELECT
     mode_select:
       name: Solakon ONE - Betriebsmodus-Auswahl 🔄
-      description: 'Die Entität zum Umschalten des Betriebsmodus (Remote Control Mode). (Standard: select.solakon_one_remote_control_mode)' # KORRIGIERT
+      description: Die Entität zum Umschalten des Betriebsmodus (Remote Control Mode).
       default: select.solakon_one_remote_control_mode
       selector:
         entity:
@@ -92,7 +92,7 @@ blueprint:
     # TIME SENSOREN
     remote_timeout_set_number:
       name: Modus-Reset-Timer-Entität (Setter) ⏲️
-      description: 'Dient zum Setzen/Zurücksetzen des Remote-Timeouts (max. 3599 s). (Standard: number.solakon_one_remote_timeout_set)' # KORRIGIERT
+      description: Dient zum Setzen/Zurücksetzen des Remote-Timeouts (max. 3599 s).
       default: number.solakon_one_remote_timeout_set
       selector:
         entity:
@@ -100,7 +100,7 @@ blueprint:
 
     remote_timeout_countdown_sensor:
       name: Remote Timeout Countdown Sensor (Ausleser) ⏱️
-      description: 'Sensor, der den verbleibenden Timeout-Countdown anzeigt. (Standard: sensor.solakon_one_remote_timeout_countdown)' # KORRIGIERT
+      description: Sensor, der den verbleibenden Timeout-Countdown anzeigt.
       default: sensor.solakon_one_remote_timeout_countdown
       selector:
         entity:
@@ -113,7 +113,7 @@ blueprint:
 
     soc_sensor:
       name: Solakon ONE - Batterieladestand (SOC) 📊
-      description: 'Der aktuelle Batterieladestand in %. (Standard: sensor.solakon_one_battery_soc)' # KORRIGIERT
+      description: Der aktuelle Batterieladestand in %.
       default: sensor.solakon_one_battery_soc
       selector:
         entity:
@@ -176,7 +176,7 @@ blueprint:
           
     offset:
       name: Nullpunkt-Offset (Zielwert in Zone 2)
-      description: 'Der Zielwert für die Netzleistung in Zone 2. Negativer Wert erzwingt leichten Netzbezug (z.B. -30 W).' # KORRIGIERT
+      description: Der Zielwert für die Netzleistung in Zone 2. Negativer Wert erzwingt leichten Netzbezug (z.B. -30 W).
       default: -30
       selector:
         number:
@@ -186,7 +186,7 @@ blueprint:
 
     default_discharge_current:
       name: Max. Entladestrom (Standardwert in Zone 1)
-      description: 'Der maximale Entladestrom (A), der in der aggressiven Zone 1 gesetzt wird (z.B. 40 A).' # KORRIGIERT
+      description: Der maximale Entladestrom (A), der in der aggressiven Zone 1 gesetzt wird (z.B. 40 A).
       default: 40
       selector:
         number:
@@ -196,7 +196,7 @@ blueprint:
 
     pv_charge_reserve:
       name: 🔋 PV-Ladereserve (Watt)
-      description: 'Die PV-Leistung, die in Zone 2 reserviert wird, um die Ladung zu gewährleisten. Dient zur dynamischen Begrenzung der Ausgangsleistung (z.B. 50 W).' # KORRIGIERT
+      description: Die PV-Leistung, die in Zone 2 reserviert wird, um die Ladung zu gewährleisten. Dient zur dynamischen Begrenzung der Ausgangsleistung (z.B. 50 W).
       default: 50
       selector:
         number:
@@ -206,7 +206,7 @@ blueprint:
           
     max_active_power_limit:
       name: Maximale Ausgangsleistung (Hard Limit)
-      description: 'Die maximale AC-Ausgangsleistung, die das Blueprint setzen darf (z.B. 800 W).' # KORRIGIERT
+      description: Die maximale AC-Ausgangsleistung, die das Blueprint setzen darf (z.B. 800 W).
       default: 800
       selector:
         number:
