@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung⚡ (V158)
+  name: Solakon ONE Nulleinspeisung⚡ (V160)
   description: |
     **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonenlogik**
 
@@ -280,22 +280,74 @@ action:
             Bitte passen Sie die Werte an. Automation gestoppt.
       - stop: Ungültige Schwellenwerte
         
-      # Fall 2: Kritische Entitäten sind nicht verfügbar
+      # --- Fall 2: Kritische Entitäten sind nicht verfügbar (Aufgeteilt pro Entität) ---
+      
+      # 2.1 Prüfung: SOC-Sensor
     - conditions:
       - condition: template
         value_template: >
-          {{ soc_value == -1 or timeout_value == -1 or
-            is_state(grid_power_sensor, 'unavailable') or
-            is_state(solakon_power_limit_number, 'unavailable') }}
+          {{ soc_value == -1 or states(solakon_soc_sensor) in ['unknown', 'unavailable'] }}
       sequence:
       - service: system_log.write
         data:
           logger: automation.solakon_zero_export
           level: error
           message: >
-            {{ error_log_message }} Eine oder mehrere kritische Entitäten sind UNAVAILABLE
-            oder haben ungültige Werte. Automation gestoppt.
-      - stop: Kritische Entität nicht verfügbar
+            {{ error_log_message }} SOC-Sensor ({{ solakon_soc_sensor }}) ist UNKNOWN/UNAVAILABLE oder hat ungültige Werte. Automation gestoppt.
+      - stop: SOC-Entität fehlerhaft
+      
+      # 2.2 Prüfung: Remote Timeout Countdown Sensor
+    - conditions:
+      - condition: template
+        value_template: >
+          {{ timeout_value == -1 or states(countdown_sensor) in ['unknown', 'unavailable'] }}
+      sequence:
+      - service: system_log.write
+        data:
+          logger: automation.solakon_zero_export
+          level: error
+          message: >
+            {{ error_log_message }} Remote Timeout Countdown Sensor ({{ countdown_sensor }}) ist UNKNOWN/UNAVAILABLE oder hat ungültige Werte. Automation gestoppt.
+      - stop: Timeout-Entität fehlerhaft
+      
+      # 2.3 Prüfung: Netzleistungs-Sensor
+    - conditions:
+      - condition: template
+        value_template: '{{ states(grid_power_sensor) in [''unknown'', ''unavailable''] }}'
+      sequence:
+      - service: system_log.write
+        data:
+          logger: automation.solakon_zero_export
+          level: error
+          message: >
+            {{ error_log_message }} Netzleistungs-Sensor ({{ grid_power_sensor }}) ist UNKNOWN/UNAVAILABLE. Automation gestoppt.
+      - stop: Netzleistungs-Entität fehlerhaft
+      
+      # 2.4 Prüfung: Ausgangsleistungsregler (Number)
+    - conditions:
+      - condition: template
+        value_template: '{{ states(solakon_power_limit_number) in [''unknown'', ''unavailable''] }}'
+      sequence:
+      - service: system_log.write
+        data:
+          logger: automation.solakon_zero_export
+          level: error
+          message: >
+            {{ error_log_message }} Ausgangsleistungsregler ({{ solakon_power_limit_number }}) ist UNKNOWN/UNAVAILABLE. Automation gestoppt.
+      - stop: Leistungsregler-Entität fehlerhaft
+      
+      # 2.5 Prüfung: Betriebsmodus-Auswahl (Select)
+    - conditions:
+      - condition: template
+        value_template: '{{ states(solakon_mode_select) in [''unknown'', ''unavailable''] }}'
+      sequence:
+      - service: system_log.write
+        data:
+          logger: automation.solakon_zero_export
+          level: error
+          message: >
+            {{ error_log_message }} Betriebsmodus-Auswahl ({{ solakon_mode_select }}) ist UNKNOWN/UNAVAILABLE. Automation gestoppt.
+      - stop: Modus-Select-Entität fehlerhaft
         
     default: []
 
@@ -531,7 +583,7 @@ action:
           
       # 5.2 P-Regelung: Entscheidet, welche Zone aktiv ist, und wendet die entsprechende Logik an (Zone 2 zuerst).
       - choose:
-            
+              
           # --- 5.2a Zone 2: Batterieschonend (Zwischen-SOC und Zyklus Inaktiv - PRÄFERIERT!) ---
         - conditions:
           - condition: template
@@ -550,7 +602,7 @@ action:
           - condition: template
             value_template: >
               {{ grid_power > tolerance_high or grid_power < tolerance_low }}
-                
+              
           - variables:
               current_limit: '{{ states(solakon_power_limit_number) | float(0) }}'
               reg_abweichung: '{{ grid_power | float(0) - offset | float(30) }}'
@@ -569,8 +621,8 @@ action:
                 
                 {# Sendet das Minimum aus P-Regler-Wert und dem dynamischen Oberlimit, mindestens 0 W. #}
                 {{ max(min(calculated_limit, final_max_limit), 0) | round(0) }}
-                  
-            # --- 5.2b Zone 1: Aggressiv (Zyklus Aktiv oder Hoher SOC - FALLBACK) ---
+                
+          # --- 5.2b Zone 1: Aggressiv (Zyklus Aktiv oder Hoher SOC - FALLBACK) ---
         - conditions:
           - condition: template
             value_template: '{{ cycle_active or soc_value > soc_start_limit | float(50) }}'
@@ -585,7 +637,7 @@ action:
           - condition: template
             value_template: >
               {{ grid_power > tolerance_high or grid_power < tolerance_low }}
-                
+              
           - variables:
               current_limit: '{{ states(solakon_power_limit_number) | float(0) }}'
               reg_abweichung: '{{ grid_power | float(0) - offset | float(0) }}'
@@ -597,7 +649,6 @@ action:
             data:
               # Begrenzung: Max des berechneten Wertes und 0, dann min des globalen Max Limits
               value: '{{ [ min(new_limit_calc | float(0), max_limit | float(800)), 0 ] | max | round(0) }}'
-                
+              
         default: []
     default: []
-
