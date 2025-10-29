@@ -306,20 +306,7 @@ blueprint:
       selector:
         number:
           min: 0
-          max: 1000
-          unit_of_measurement: W
-    
-    grid_power_spike_limit:
-      name: 🔒 Grid-Power Spike-Filter
-      description: |
-        Maximaler erlaubter Absolutwert für Netzleistung (z.B. 5000 W).
-        Höhere Werte werden als Sensor-Fehler ignoriert (→ 0 W gesetzt).
-        Schützt vor Shelly-Neustart-Spikes und Modbus-Lesefehlern.
-      default: 5000
-      selector:
-        number:
-          min: 1000
-          max: 10000
+          max: 1200
           unit_of_measurement: W
     
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -744,17 +731,9 @@ action:
   # (Werden nur bei aktivem Modus berechnet)
   # ===========================================
   - variables:
-      # Grid Power mit Spike-Filter
-      grid_power_raw_sensor: !input grid_power_sensor
-      grid_power_spike_limit_int: !input grid_power_spike_limit
-      grid_power_raw: "{{ states(grid_power_raw_sensor) | float(0) }}"
-      grid_power_float: >
-        {% if grid_power_raw | abs > grid_power_spike_limit_int %}
-          0
-        {% else %}
-          {{ grid_power_raw }}
-        {% endif %}
-      
+      # Grid Power
+      grid_power: !input grid_power_sensor
+    
       # Solar Power
       solar_power: !input solar_power_sensor
       
@@ -780,7 +759,7 @@ action:
       
       # PI-Regler Berechnung
       # 1. Aktueller Fehler
-      error: "{{ grid_power_float - target_offset }}"
+      error: "{{ grid_power - target_offset }}"
       
       # 2. Integral mit Anti-Windup
       integral_old: "{{ states(integral_entity) | float(0) }}"
@@ -885,5 +864,6 @@ action:
     data:
       entity_id: !input active_power_number
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
+
 
 
