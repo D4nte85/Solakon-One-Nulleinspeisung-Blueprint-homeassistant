@@ -710,7 +710,6 @@ action:
           {{ [max_zone_2_limit, p_regler_power] | min }}
         {% endif %}
 
-  # NEU: Zuerst das Entlade-Limit absichern!
   - choose:
       # FALL E.1: Limit für Zone 1 setzen (Aggressiv)
       - conditions:
@@ -775,3 +774,4 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
     seconds: 3
+
