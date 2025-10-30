@@ -354,13 +354,11 @@ trigger:
   - platform: state
     entity_id: !input grid_power_sensor
     id: grid_power_change
-    for:
-      seconds: 3
+    
   - platform: state
     entity_id: !input solar_power_sensor
     id: solar_power_change
-    for:
-      seconds: 3
+
   # -------------------------------------------------------------------------------------------------
   # 2. SOC-Schwellwert-Erreichung (Steuert Zonen-Wechsel)
   # -------------------------------------------------------------------------------------------------
@@ -832,6 +830,8 @@ action:
     data:
       entity_id: !input active_power_number
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
+  - delay:
+      seconds: 3
 
 
 
