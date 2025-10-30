@@ -40,10 +40,10 @@ Der Blueprint benötigt einen `Input Select` Helfer, um den Status des Entladezy
 
 Die Regelung wird anhand des aktuellen SOC in drei Betriebsmodi unterteilt:
 
-| Zone | SOC-Bereich | Modus | Ziel & Regelung (Aktualisierte Logik V149) |
+| Zone | SOC-Bereich | Modus | Ziel & Regelung |
 | :--- | :--- | :--- | :--- |
 | **1. Schnell-Entladung** | SOC > Obere Schwelle (z.B. 50%) | `INV Discharge (PV Priority)` | **Aggressive P-Regelung** mit 0 W-Offset für exakte Nulleinspeisung. Ein aktiver Entladezyklus-Helfer hält diesen Zustand bis zum Unterschreiten der unteren Schwelle. |
-| **2. Batterieschonend** | Untere Schwelle (z.B. 20%) < SOC $\le$ Obere Schwelle | `INV Discharge (PV Priority)` / `Disabled` | **Start/Stopp-Logik:** Die Entladung **startet** (`INV Discharge`) nur, wenn die **PV-Erzeugung die PV-Ladereserve strikt übersteigt**. Die Entladung **stoppt** (`Disabled` und 0 W Limit) sofort, wenn die PV-Erzeugung die Reserve nicht mehr deckt. **Aktive P-Regelung** mit **negativem Nullpunkt-Offset** (z.B. -30 W) für leichten Netzbezug. Die Entladeleistung wird dynamisch durch (**PV-Erzeugung minus PV-Ladereserve**) begrenzt. |
+| **2. Batterieschonend** | Untere Schwelle (z.B. 20%) < SOC $\le$ Obere Schwelle | `INV Discharge (PV Priority)` (nur bei PV > Reserve) | **Aktive P-Regelung** mit **positivem Nullpunkt-Offset** (z.B. +30 W) für leichten Netzbezug (Ladepriorität). Die **Ausgangsleistung** wird dynamisch durch (**PV-Erzeugung minus PV-Ladereserve**) begrenzt, um die Reserve für die Ladung zu sichern. **START:** Nur wenn PV > Reserve. **STOPP:** Automatisch wenn PV ≤ Reserve. |
 | **3. Sicherheitsstopp** | SOC $\le$ Untere Schwelle (z.B. 20%) | `Disabled` | Ausgangsleistung wird sofort auf **0 W** gesetzt, um die Batterie zu schonen. Der Entladezyklus wird beendet. |
 
 ---
@@ -59,7 +59,7 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten, werd
 
 ### 🚦 Trigger-Bedingungen (Automatisierungs-Auslöser)
 
-Die Automatisierung reagiert auf folgende fünf kritische Ereignisse, um eine sofortige und stabile Regelung zu gewährleisten:
+Die Automatisierung reagiert auf folgende kritische Ereignisse, um eine sofortige und stabile Regelung zu gewährleisten:
 
 1.  **Leistungsänderungen (mit 3s Verzögerung):**
     * Zustandsänderung des **Netz-Leistungssensors** (`shelly_grid_power_sensor`) für $\ge 3$ Sekunden.
@@ -72,6 +72,9 @@ Die Automatisierung reagiert auf folgende fünf kritische Ereignisse, um eine so
 3.  **Moduswechsel:**
     * Zustandsänderung der **Betriebsmodus-Auswahl** (`solakon_mode_select`).
     * *(Zweck: Reagiert auf manuelle oder externe Modusänderungen.)*
+4.  **Timeout-Countdown kritisch:**
+    * Der **Remote Timeout Countdown** (`solakon_timeout_countdown_sensor`) fällt unter **150 Sekunden**.
+    * *(Zweck: Ermöglicht proaktives Timeout-Management.)*
 
 ---
 
@@ -83,13 +86,13 @@ Die Automatisierung reagiert auf folgende fünf kritische Ereignisse, um eine so
 
 | Variable | Standard-Entität | Beschreibung |
 | :--- | :--- | :--- |
-| **Shelly/Netz-Leistungssensor** | *(kein Standard)* | Sensor für die aktuelle Netzleistung (z.B. Shelly 3EM). **Positive Werte = Bezug**, **Negative Werte = Einspeisung**. |
+| **Shelly/Netz-Leistungssensor** | *(kein Standard)* | Sensor für die aktuelle Netzleistung (z.B. Shelly 3EM). **Positive Werte = Bezug**, **Negative Werte = Einspeisung**. Muss `device_class: power` haben. |
 | **Solakon ONE - Solarleistung** | `sensor.solakon_one_total_pv_power` | Aktuelle PV-Erzeugung in Watt. |
 | **Solakon ONE - Batterieladestand** | `sensor.solakon_one_battery_soc` | Batterieladestand (State of Charge) in %. |
 | **Solakon ONE - Ausgangsleistungsregler** | `number.solakon_one_remote_active_power` | Entität zum Setzen des Leistungs-Sollwerts. |
 | **Solakon ONE - Betriebsmodus-Auswahl** | `select.solakon_one_remote_control_mode` | Entität zum Umschalten des Betriebsmodus. |
-| **Modus-Reset-Timer-Entität (Setter)** | `number.solakon_one_remote_timeout_set` | Dient zum Setzen/Zurücksetzen des Remote-Timeouts (max. 3599 s). |
-| **Remote Timeout Countdown Sensor (Ausleser)** | `sensor.solakon_one_remote_timeout_countdown` | Sensor, der den verbleibenden Timeout-Countdown anzeigt. |
+| **Modus-Reset-Timer-Entität (Setter)** | `number.solakon_one_remote_timeout_set` | Dient zum Setzen/Zurücksetzen des Remote-Timeouts (max. 3600 s). |
+| **Remote Timeout Countdown Sensor (Ausleser)** | `sensor.solakon_one_remote_timeout_countdown` | Sensor oder Number-Entität, die den verbleibenden Timeout-Countdown anzeigt. |
 | **Entladezyklus-Zustandsspeicher** | `input_select.soc_entladezyklus_status` | Der erstellte `Input Select` Helfer (`on`/`off`). **Der Standardname wird automatisch eingetragen, muss aber existieren!** |
 
 ---
@@ -98,21 +101,83 @@ Die Automatisierung reagiert auf folgende fünf kritische Ereignisse, um eine so
 
 | Parameter | Standardwert | Beschreibung |
 | :--- | :--- | :--- |
-| **SOC-Schwelle "Schnelle Regelung"** | `50 %` | Obere Schwelle. Überschreiten startet den aggressiven Entladezyklus (Zone 1). |
-| **SOC-Schwelle "Lade-Priorität"** | `20 %` | Untere Schwelle. Unterschreiten stoppt die Entladung (Zone 3). |
-| **Toleranzbereich (Halbbreite)** | `25 W` | Der zulässige Bereich in Watt um den Nullpunkt, bevor eine Korrektur vorgenommen wird. |
-| **Regelungs-Faktor** | `1.5` | Definiert die Aggressivität des P-Reglers. |
-| **Nullpunkt-Offset** | `-30 W` | Der Zielwert für die Netzleistung in Zone 2. Negativer Wert erzwingt leichten Netzbezug. |
-| **🔋 PV-Ladereserve** | `50 W` | Die PV-Leistung (in Watt), die reserviert wird. Dieser Puffer gleicht **interne Wandlerverluste** aus und stellt sicher, dass die Batterie trotz Entladung geladen werden kann. **Wird auch für die Start/Stopp-Logik in Zone 2 verwendet!** |
-| **Maximale Ausgangsleistung (Hard Limit)**| `800 W` | Die maximale AC-Ausgangsleistung, die das Blueprint setzen darf. Dient zur Einhaltung der Hardware-Parameter. |
+| **SOC-Schwelle "Schnelle Regelung"** | `50 %` | Obere Schwelle. Überschreiten startet den aggressiven Entladezyklus (Zone 1). Min: 21%, Max: 100% |
+| **SOC-Schwelle "Lade-Priorität"** | `20 %` | Untere Schwelle. Unterschreiten stoppt die Entladung (Zone 3). Min: 0%, Max: 49% |
+| **Toleranzbereich (Halbbreite)** | `25 W` | Der zulässige Bereich in Watt um den Nullpunkt, bevor eine Korrektur vorgenommen wird. Min: 10W, Max: 200W |
+| **Regelungs-Faktor** | `1.5` | Definiert die Aggressivität des P-Reglers. Min: 0.5, Max: 3.0 |
+| **Nullpunkt-Offset (Netzbezug)** | `30 W` | Der Zielwert für die Netzleistung in Zone 2. Positiver Wert verschiebt Regelziel in Richtung Netzbezug (Ladepriorität). Min: 0W, Max: 100W |
+| **🔋 PV-Ladereserve** | `50 W` | Die PV-Leistung (in Watt), die reserviert wird. Dieser Puffer gleicht **interne Wandlerverluste** aus und wird in Zone 2 zur **dynamischen Begrenzung der Ausgangsleistung** genutzt, um die Batterieladung zu gewährleisten. Min: 0W, Max: 500W |
+| **Maximale Ausgangsleistung (Hard Limit)**| `800 W` | Die maximale AC-Ausgangsleistung, die das Blueprint setzen darf. Dient zur Einhaltung der Hardware-Parameter. Min: 0W, Max: 1200W |
 
 ---
 
 ## 🛑 Wichtige Fehlermeldungen (System-Log)
 
-Der Blueprint enthält eine integrierte Validierung, die bei kritischen Fehlern die Automatisierung stoppt und eine klare Meldung in das Home Assistant System-Log schreibt.
+Der Blueprint enthält eine integrierte Validierung, die bei kritischen Fehlern die Automatisierung stoppt und eine klare Meldung in das Home Assistant System-Log schreibt (`Logger: automation.solakon_zero_export`).
 
 | Meldung im Log | Ursache | Lösung |
 | :--- | :--- | :--- |
-| **Die obere SOC-Schwelle (X%) muss größer sein als die untere SOC-Schwelle (Y%).** | Die Werte für **SOC-Schwelle "Schnelle Regelung"** und **SOC-Schwelle "Lade-Priorität"** sind gleich oder vertauscht. | Stellen Sie sicher, dass die obere Schwelle (z.B. 50) immer höher ist als die untere Schwelle (z.B. 20). |
-| **Eine oder mehrere kritische Entitäten sind UNVERFÜGBAR oder haben ungültige Werte.** | Eine der kritischen Entitäten (SOC, Timeout-Sensor, Netzleistung, Ausgangsleistungsregler) ist `unavailable` oder liefert ungültige Daten (z.B. wenn die Solakon-Integration nicht verbunden ist). | Prüfen Sie den Status der Solakon ONE Entitäten und stellen Sie sicher, dass die Integration aktiv und verbunden ist. |
+| **Der obere SOC-Schwellenwert (X%) muss größer sein als der untere SOC-Schwellenwert (Y%).** | Die Werte für **SOC-Schwelle "Schnelle Regelung"** und **SOC-Schwelle "Lade-Priorität"** sind gleich oder vertauscht. | Stellen Sie sicher, dass die obere Schwelle (z.B. 50) immer höher ist als die untere Schwelle (z.B. 20). |
+| **SOC-Sensor (entity_id) ist UNKNOWN/UNAVAILABLE oder hat ungültige Werte.** | Der SOC-Sensor liefert keine gültigen Daten. | Prüfen Sie die Solakon ONE Integration und Verbindung. |
+| **Remote Timeout Countdown Sensor (entity_id) ist UNKNOWN/UNAVAILABLE oder hat ungültige Werte.** | Der Countdown-Sensor ist nicht verfügbar. | Prüfen Sie, ob die Entität existiert und die Integration verbunden ist. |
+| **Netzleistungs-Sensor (entity_id) ist UNKNOWN/UNAVAILABLE.** | Der Shelly/Netzleistungssensor liefert keine Daten. | Prüfen Sie die Shelly-Verbindung und Konfiguration. |
+| **Ausgangsleistungsregler (entity_id) ist UNKNOWN/UNAVAILABLE.** | Die Number-Entität zur Leistungsregelung ist nicht verfügbar. | Prüfen Sie die Solakon ONE Integration. |
+| **Betriebsmodus-Auswahl (entity_id) ist UNKNOWN/UNAVAILABLE.** | Die Select-Entität für den Betriebsmodus ist nicht verfügbar. | Prüfen Sie die Solakon ONE Integration. |
+
+---
+
+## 📊 Funktionsweise im Detail
+
+### Zone 1: Schnell-Entladung (SOC > 50%)
+- **Aktivierung:** Automatisch beim Überschreiten der oberen SOC-Schwelle
+- **Modus:** `INV Discharge (PV Priority)`
+- **Regelung:** P-Regler mit 0W-Offset (exakte Nulleinspeisung)
+- **Entladezyklus-Helfer:** Wird auf `on` gesetzt
+- **Deaktivierung:** Erst beim Unterschreiten der unteren SOC-Schwelle (20%)
+
+### Zone 2: Batterieschonend (20% < SOC ≤ 50%)
+- **Aktivierung:** Nur wenn PV-Leistung > PV-Ladereserve
+- **Modus:** `INV Discharge (PV Priority)` (bei ausreichend PV)
+- **Regelung:** P-Regler mit +30W-Offset (leichter Netzbezug = Ladepriorität)
+- **Leistungslimit:** Dynamisch begrenzt auf max(PV-Leistung - PV-Reserve, 0)
+- **Entladezyklus-Helfer:** Bleibt auf `off`
+- **Automatischer Stopp:** Bei PV-Leistung ≤ PV-Reserve → Modus auf `Disabled`
+
+### Zone 3: Sicherheitsstopp (SOC ≤ 20%)
+- **Aktivierung:** Automatisch beim Unterschreiten der unteren SOC-Schwelle
+- **Modus:** `Disabled`
+- **Aktion:** Ausgangsleistung = 0W
+- **Entladezyklus-Helfer:** Wird auf `off` gesetzt
+- **Batterieschutz:** Keine Entladung mehr möglich
+
+---
+
+## 🔧 Empfohlene Einstellungen
+
+### Für konservative Batterienutzung:
+- SOC-Schwelle "Schnelle Regelung": 60%
+- SOC-Schwelle "Lade-Priorität": 30%
+- Nullpunkt-Offset: 50W
+- PV-Ladereserve: 100W
+
+### Für maximale Eigenverbrauchsoptimierung:
+- SOC-Schwelle "Schnelle Regelung": 40%
+- SOC-Schwelle "Lade-Priorität": 15%
+- Nullpunkt-Offset: 20W
+- PV-Ladereserve: 30W
+
+### Für ausgewogenen Betrieb (Standard):
+- SOC-Schwelle "Schnelle Regelung": 50%
+- SOC-Schwelle "Lade-Priorität": 20%
+- Nullpunkt-Offset: 30W
+- PV-Ladereserve: 50W
+
+---
+
+## ⚠️ Wichtige Hinweise
+
+1. **Entladezyklus-Helfer:** Muss vor der Installation des Blueprints erstellt werden
+2. **Solakon ONE Integration:** Muss vollständig eingerichtet und verbunden sein
+3. **Netzleistungssensor:** Muss korrekt kalibriert sein (positiv = Bezug, negativ = Einspeisung)
+4. **Timeout-Management:** Der Blueprint setzt den Timeout automatisch zurück - keine manuelle Intervention nötig
+5. **Queued-Modus:** Der Blueprint läuft im `queued`-Modus, d.h. Trigger werden sequentiell abgearbeitet
