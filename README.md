@@ -74,7 +74,7 @@ Die Regelung wird anhand des aktuellen SOC in drei Betriebsmodi unterteilt:
 | Zone | SOC-Bereich | Modus | Max. Entladestrom | Regelziel | Besonderheiten |
 |:-----|:-----------|:------|:-----------------|:---------|:--------------|
 | **1. Aggressive Entladung** | SOC > 50% | `INV Discharge (PV Priority)` | 40 A | 0 W (exakte Nulleinspeisung) | Läuft **durchgehend bis SOC ≤ 20%** (kein Yo-Yo-Effekt). Auch nachts aktiv. |
-| **2. Batterieschonend** | 20% < SOC ≤ 50% | `INV Discharge (PV Priority)` | **0 A** (nur AC-Limit) | -30 W (leichter Netzbezug = Laden) | Dynamisches Limit: **Max(0, PV - Reserve)**. Optional: Nachtabschaltung möglich. |
+| **2. Batterieschonend** | 20% < SOC ≤ 50% | `INV Discharge (PV Priority)` | **0 A** (nur AC-Limit) | 30 W (leichter Netzbezug = Laden) | Dynamisches Limit: **Max(0, PV - Reserve)**. Optional: Nachtabschaltung möglich. |
 | **3. Sicherheitsstopp** | SOC ≤ 20% | `Disabled` | 0 A | - | Ausgang = 0 W. Vollständiger Schutz der Batterie. |
 
 **Wichtig:** 
