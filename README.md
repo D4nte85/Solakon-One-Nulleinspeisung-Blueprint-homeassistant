@@ -198,7 +198,7 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 ```yaml
 SOC Zone 1 Start: 60%
 SOC Zone 3 Stopp: 30%
-Nullpunkt-Offset: -50W
+Nullpunkt-Offset: 50W
 PV-Ladereserve: 100W
 P-Faktor: 1.5
 I-Faktor: 0.05
@@ -208,7 +208,7 @@ I-Faktor: 0.05
 ```yaml
 SOC Zone 1 Start: 40%
 SOC Zone 3 Stopp: 15%
-Nullpunkt-Offset: -20W
+Nullpunkt-Offset: 20W
 PV-Ladereserve: 30W
 P-Faktor: 2.0
 I-Faktor: 0.08
@@ -218,7 +218,7 @@ I-Faktor: 0.08
 ```yaml
 SOC Zone 1 Start: 50%
 SOC Zone 3 Stopp: 20%
-Nullpunkt-Offset: -30W
+Nullpunkt-Offset: 30W
 PV-Ladereserve: 50W
 P-Faktor: 1.5
 I-Faktor: 0.05
@@ -236,7 +236,7 @@ Toleranzbereich: 25W
 - Zone 2 aktiv (20% < SOC ≤ 50%)
 - PV steigt langsam an
 - Max. Entladestrom: 0A (batterieschonend)
-- Regelziel: -30W (leichter Netzbezug)
+- Regelziel: 30W (leichter Netzbezug)
 - Batterie wird geladen
 
 **Mittags (12:00 - SOC: 55%)**
