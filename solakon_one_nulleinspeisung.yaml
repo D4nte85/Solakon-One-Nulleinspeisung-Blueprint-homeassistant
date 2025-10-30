@@ -247,14 +247,14 @@ blueprint:
     offset:
       name: ⚙️ Zone 2 - Nullpunkt-Offset (Regelziel)
       description: |
-        Zielwert für Netzleistung in Zone 2 (z.B. -30 W).
-        Negativer Wert = leichter Netzbezug erwünscht → Batterie wird geladen.
+        Zielwert für Netzleistung in Zone 2 (z.B. 30 W).
+        Positiver Wert = leichter Netzbezug erwünscht → Batterie wird geladen.
         0 W = Exakte Nulleinspeisung (wie Zone 1).
-      default: -30
+      default: 30
       selector:
         number:
-          min: -200
-          max: 0
+          min: 0
+          max: 100
           unit_of_measurement: W
     
     pv_charge_reserve:
@@ -738,7 +738,7 @@ action:
       
       # PI-Regler Berechnung
       # 1. Aktueller Fehler
-      error: "{{ grid_power_float - target_offset }}"
+      error: "{{ grid_power_float + target_offset }}"
       
       # 2. Integral mit Anti-Windup
       integral_old: "{{ states(integral_entity) | float(0) }}"
@@ -832,5 +832,6 @@ action:
     data:
       entity_id: !input active_power_number
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
+
 
 
