@@ -561,7 +561,7 @@ action:
                     value_template: "{{ not cycle_active and soc_value >= soc_stop_limit | float(20) and soc_value <= soc_start_limit | float(50) }}"
                 sequence:
                   - variables:
-                      offset: "{{ offset_value | float(-30) *}}"
+                      offset: "{{ offset_value | float(30)}}"
                       tolerance_high: "{{ offset + tolerance | float(25) }}"
                       tolerance_low: "{{ offset - tolerance | float(25) }}"
                   - condition: template
@@ -603,3 +603,4 @@ action:
 
             default: []
     default: []
+
