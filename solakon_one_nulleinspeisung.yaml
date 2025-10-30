@@ -25,7 +25,7 @@ blueprint:
     * **Bedingung:** Der SOC liegt zwischen dem **Unteren Schwellenwert** (20%) und dem **Oberen Schwellenwert** (50%), und der **Entladezyklus ist inaktiv** (wichtig für P-Regler Zone 2).
       * **Start:** Umschalten auf **"INV Discharge (PV Priority)"** nur, wenn die **PV-Leistung die PV-Reserve strikt übersteigt**.
       * **Stopp (Schleifenschutz):** Umschalten auf **"Disabled"** und 0 W Limit, falls die PV-Leistung im Betrieb auf oder unter die PV-Reserve fällt.
-    * **Regelung:** **Aktive P-Regelung** mit verschobenem Nullpunkt und Ladepriorität. Der **Nullpunkt-Offset** (`nulleinspeisung_offset`, Standard: -30 W) verschiebt das Regelziel hin zu leichtem **Netzbezug** (Laden).
+    * **Regelung:** **Aktive P-Regelung** mit verschobenem Nullpunkt und Ladepriorität. Der **Nullpunkt-Offset** (`nulleinspeisung_offset`, Standard: 30 W) verschiebt das Regelziel hin zu leichtem **Netzbezug** (Laden).
     * **PV-Ladepriorität (Dynamisches Oberlimit):** Die Entladeleistung wird dynamisch durch den **kleineren Wert** aus dem P-Regler-Vorschlag und der **verfügbaren PV-Leistung minus der PV-Reserve** begrenzt.
 
     #### 3. Sicherheitsstopp (SOC <= Unterer Schwellenwert)
