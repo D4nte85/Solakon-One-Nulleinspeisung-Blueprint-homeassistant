@@ -171,12 +171,12 @@ blueprint:
           mode: slider
     nulleinspeisung_offset:
       name: Nullpunkt-Offset (Neg. erzwingt Bezug)
-      default: -30
+      default: 30
       description: Negativer Watt-Wert zur Verschiebung des Nullpunktes unterhalb des SOC-Schwellenwerts. (Nur in der schonenden Zone 2 verwendet)
       selector:
         number:
-          min: -100.0
-          max: 0.0
+          min: 0.0
+          max: 100.0
           step: 10.0
           unit_of_measurement: W
           mode: slider
@@ -561,7 +561,7 @@ action:
                     value_template: "{{ not cycle_active and soc_value >= soc_stop_limit | float(20) and soc_value <= soc_start_limit | float(50) }}"
                 sequence:
                   - variables:
-                      offset: "{{ offset_value | float(-30) * -1 }}"
+                      offset: "{{ offset_value | float(-30) *}}"
                       tolerance_high: "{{ offset + tolerance | float(25) }}"
                       tolerance_low: "{{ offset - tolerance | float(25) }}"
                   - condition: template
