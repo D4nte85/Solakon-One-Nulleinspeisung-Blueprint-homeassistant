@@ -576,7 +576,7 @@ action:
                     data:
                       value: >
                         {% set calculated_limit = new_limit_calc | float(0) %}
-                        {% set dynamic_pv_limit = max(states(pv_power_sensor) | float(0) - pv_reserve | float(50), 0) %}
+                        {% set dynamic_pv_limit = max(pv_power - pv_reserve | float(50), 0) %}
                         {% set final_max_limit = min(max_limit | float(800), dynamic_pv_limit) %}
                         {{ max(min(calculated_limit, final_max_limit), 0) | round(0) }}
 
@@ -603,4 +603,5 @@ action:
 
             default: []
     default: []
+
 
