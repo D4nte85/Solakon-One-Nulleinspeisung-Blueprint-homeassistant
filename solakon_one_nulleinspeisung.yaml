@@ -773,4 +773,5 @@ action:
     data:
       entity_id: !input active_power_number
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
-
+  - delay:
+    seconds: 3
