@@ -9,7 +9,6 @@ blueprint:
     - ✅ PI-Regler statt P-Regler: Eliminiert bleibende Regelabweichung
     - ✅ Rate Limiter: Begrenzt Leistungsänderungen für sanfteres Verhalten
     - ✅ Variables-Split: Berechnungen nur bei aktivem Modus
-    - ✅ Grid-Power-Plausibilitätsprüfung: Filter für Sensor-Spikes
     - ✅ Zonenwechsel-Logging: Dokumentation aller State-Änderungen
     - ✅ Nachtabschaltung: Optional für Zone 2
     - ✅ Keine Trigger-Verzögerung: Sofortige Reaktion auf Änderungen
@@ -173,6 +172,9 @@ blueprint:
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
     # 🎚️ REGELUNGS-PARAMETER
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════════════════════════════════
+    # 🎚️ REGELUNGS-PARAMETER
+    # ═══════════════════════════════════════════════════════════════════════════════════════════════
     
     regulator_factor:
       name: 🎛️ P-Faktor (Proportional-Verstärkung)
@@ -260,7 +262,7 @@ blueprint:
       selector:
         number:
           min: 0
-          max: 40
+          max: 50
           unit_of_measurement: A
     
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -306,7 +308,7 @@ blueprint:
       selector:
         number:
           min: 0
-          max: 1200
+          max: 1000
           unit_of_measurement: W
     
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -733,7 +735,8 @@ action:
   - variables:
       # Grid Power
       grid_power: !input grid_power_sensor
-    
+      grid_power_float: "{{ states(grid_power) | float(0) }}"
+      
       # Solar Power
       solar_power: !input solar_power_sensor
       
@@ -759,7 +762,7 @@ action:
       
       # PI-Regler Berechnung
       # 1. Aktueller Fehler
-      error: "{{ grid_power - target_offset }}"
+      error: "{{ grid_power_float - target_offset }}"
       
       # 2. Integral mit Anti-Windup
       integral_old: "{{ states(integral_entity) | float(0) }}"
@@ -864,6 +867,3 @@ action:
     data:
       entity_id: !input active_power_number
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
-
-
-
