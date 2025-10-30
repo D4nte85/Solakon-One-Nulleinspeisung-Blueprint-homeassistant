@@ -1,17 +1,9 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (Optimiert V196)
+  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V197)
   description: |
-    **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonenlogik (V196 - Optimiert)**
+    **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonenlogik**
 
     Dieser Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung** für den Solakon ONE Wechselrichter. Er nutzt einen **PI-Regler (Proportional-Integral-Regler)** zur präzisen Steuerung der AC-Ausgangsleistung und eine **dreistufige State-of-Charge (SOC)-Logik** zur effizienten Verwaltung des Batteriespeichers.
-
-    **Optimierungen in V196:**
-    - ✅ PI-Regler statt P-Regler: Eliminiert bleibende Regelabweichung
-    - ✅ Rate Limiter: Begrenzt Leistungsänderungen für sanfteres Verhalten
-    - ✅ Variables-Split: Berechnungen nur bei aktivem Modus
-    - ✅ Zonenwechsel-Logging: Dokumentation aller State-Änderungen
-    - ✅ Nachtabschaltung: Optional für Zone 2
-    - ✅ Keine Trigger-Verzögerung: Sofortige Reaktion auf Änderungen
 
     ---
     ### 🧠 PI-Regler & Steuerlogik
@@ -22,8 +14,6 @@ blueprint:
     * **P-Anteil (Proportional):** Reagiert auf die aktuelle Abweichung mit konfigurierbarer Aggressivität (Regelungs-Faktor).
     
     * **I-Anteil (Integral):** Summiert Abweichungen über die Zeit auf und eliminiert bleibende Regelabweichungen. Wird bei Zonenwechseln zurückgesetzt (Anti-Windup).
-    
-    * **Rate Limiter:** Begrenzt die maximale Leistungsänderung pro Zyklus (z.B. ±150W) für sanfteres Verhalten und Hardware-Schonung.
     
     * **Leistungsbegrenzung:** Gesichert durch ein **oberes Hard Limit** und ein **hartkodiertes unteres Limit von 0 W**.
 
@@ -210,18 +200,6 @@ blueprint:
         number:
           min: 0
           max: 200
-          unit_of_measurement: W
-    
-    max_power_change_per_cycle:
-      name: ⚡ Rate Limiter (Max. Änderung pro Zyklus)
-      description: |
-        Begrenzt Leistungssprünge für sanfteres Verhalten (z.B. 150 W).
-        Schont Hardware (Relais, Kontakte) und verbessert Netzverträglichkeit.
-      default: 150
-      selector:
-        number:
-          min: 50
-          max: 500
           unit_of_measurement: W
     
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -744,7 +722,6 @@ action:
       tolerance_int: !input tolerance
       regulator_factor_float: !input regulator_factor
       ki_factor_float: !input ki_factor
-      max_power_change_int: !input max_power_change_per_cycle
       offset_int: !input offset
       max_active_power_limit_int: !input max_active_power_limit
       pv_charge_reserve_int: !input pv_charge_reserve
@@ -774,28 +751,17 @@ action:
       power_correction_pi: >
         {{ error * regulator_factor_float + integral_new * ki_factor_float }}
       
-      # 4. Neuer Power-Sollwert (unbegrenzt)
+      # 4. Neuer Power-Sollwert
       new_power_unlimited: "{{ current_active_power + power_correction_pi }}"
       
-      # 5. Rate Limiter (max. Änderung pro Zyklus)
-      power_diff: "{{ new_power_unlimited - current_active_power }}"
-      new_power_rate_limited: >
-        {% if power_diff > max_power_change_int %}
-          {{ current_active_power + max_power_change_int }}
-        {% elif power_diff < -max_power_change_int %}
-          {{ current_active_power - max_power_change_int }}
-        {% else %}
-          {{ new_power_unlimited }}
-        {% endif %}
-      
-      # 6. Max Power Limit in Zone 2 = Max(0, PV - Reserve)
+      # 5. Max Power Limit in Zone 2 = Max(0, PV - Reserve)
       max_zone_2_limit: >
         {% set pv_minus_reserve = states(solar_power) | float(0) - pv_charge_reserve_int %}
         {{ [0, pv_minus_reserve] | max }}
         
-      # 7. Finale Power: Logik in einem Template zusammengefasst
+      # 6. Finale Power: Logik in einem Template zusammengefasst
       final_power_calculated: >
-        {% set p_regler_power = new_power_rate_limited %}
+        {% set p_regler_power = new_power_unlimited %}
         {% if is_state(cycle_active, 'on') %}
           {# ZONE 1: Hard Limit #}
           {{ [max_active_power_limit_int, p_regler_power] | min }}
