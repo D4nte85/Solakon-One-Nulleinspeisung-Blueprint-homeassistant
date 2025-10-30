@@ -162,6 +162,9 @@ blueprint:
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
     # 🎚️ REGELUNGS-PARAMETER
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════════════════════════════════
+    # 🎚️ REGELUNGS-PARAMETER
+    # ═══════════════════════════════════════════════════════════════════════════════════════════════
     
     regulator_factor:
       name: 🎛️ P-Faktor (Proportional-Verstärkung)
@@ -354,7 +357,7 @@ trigger:
   - platform: state
     entity_id: !input grid_power_sensor
     id: grid_power_change
-    
+
   - platform: state
     entity_id: !input solar_power_sensor
     id: solar_power_change
@@ -447,10 +450,6 @@ action:
                 data:
                   entity_id: !input cycle_active_input_select
                   option: 'on'
-              - service: input_number.set_value
-                data:
-                  entity_id: !input integral_helper
-                  value: 0
               # 2. Modus-Wechsel zu 'INV Discharge PV Priority' (mit Puls-Sequenz zur Sicherheit)
               - choose:
                   - conditions: "{{ states(solakon_mode) != 'INV Discharge (PV Priority)' }}"
@@ -469,61 +468,6 @@ action:
                           entity_id: !input mode_select
                           option: 'INV Discharge (PV Priority)'
           
-          # FALL E: NACHT-ABSCHALTUNG (Nur Zone 2 betroffen)
-          - conditions:
-              # Nachtabschaltung aktiviert
-              - condition: template
-                value_template: "{{ night_shutdown_enabled_bool }}"
-              # Es ist Nacht (PV unter Schwelle)
-              - condition: template
-                value_template: "{{ (states(solar_power_for_night_check) | float(0)) < night_pv_threshold }}"
-              # Nur in Zone 2 (cycle = off)
-              - condition: state
-                entity_id: !input cycle_active_input_select
-                state: 'off'
-              # Modus ist aktuell aktiv
-              - condition: template
-                value_template: "{{ states(solakon_mode) == 'INV Discharge (PV Priority)' }}"
-            sequence:
-              # Logging
-              - service: logbook.log
-                data:
-                  name: Solakon Nachtmodus
-                  message: "🌙 Nachtabschaltung aktiviert (Zone 2) - PV: {{ states(solar_power_for_night_check) }}W"
-                  entity_id: !input solar_power_sensor
-              # Integral zurücksetzen
-              - service: input_number.set_value
-                data:
-                  entity_id: !input integral_helper
-                  value: 0
-              - service: input_number.set_value
-                data:
-                  entity_id: !input integral_helper
-                  value: 0
-              - service: input_number.set_value
-                data:
-                  entity_id: !input integral_helper
-                  value: 0
-              # Modus auf 'Disabled' setzen
-              - service: number.set_value
-                data:
-                  entity_id: !input remote_timeout_set_number
-                  value: 1
-              - delay: '00:00:01'
-              - service: number.set_value
-                data:
-                  entity_id: !input remote_timeout_set_number
-                  value: 3599
-              - service: select.select_option
-                data:
-                  entity_id: !input mode_select
-                  option: 'Disabled'
-              # Power Limit auf 0 W
-              - service: number.set_value
-                data:
-                  entity_id: !input active_power_number
-                  value: 0
-
           # FALL B: ZONE 3 - Sicherheits-STOPP (SOC <= Untere Schwelle UND Zyklus ON)
           - conditions:
               - condition: template
@@ -548,10 +492,6 @@ action:
                 data:
                   entity_id: !input cycle_active_input_select
                   option: 'off'
-              - service: input_number.set_value
-                data:
-                  entity_id: !input integral_helper
-                  value: 0
               # 2. Modus-Wechsel zu 'Disabled' (mit Puls-Sequenz zur Sicherheit)
               - choose:
                   - conditions: "{{ states(solakon_mode) != 'Disabled' }}"
@@ -634,10 +574,6 @@ action:
                 data:
                   entity_id: !input integral_helper
                   value: 0
-              - service: input_number.set_value
-                data:
-                  entity_id: !input integral_helper
-                  value: 0
               # Modus-Wechsel zu 'INV Discharge PV Priority'
               - choose:
                   - conditions: "{{ states(solakon_mode) != 'INV Discharge (PV Priority)' }}"
@@ -656,13 +592,18 @@ action:
                           entity_id: !input mode_select
                           option: 'INV Discharge (PV Priority)'
           
-          # FALL E: NACHT-ABSCHALTUNG (Nur Zone 2 betroffen)
           - conditions:
+              # Nachtabschaltung aktiviert
               - condition: template
-                value_template: "{{ is_night }}"
+                value_template: "{{ night_shutdown_enabled_bool }}"
+              # Es ist Nacht (PV unter Schwelle)
+              - condition: template
+                value_template: "{{ (states(solar_power_for_night_check) | float(0)) < night_pv_threshold }}"
+              # Nur in Zone 2 (cycle = off)
               - condition: state
                 entity_id: !input cycle_active_input_select
-                state: 'off'  # Nur Zone 2
+                state: 'off'
+              # Modus ist aktuell aktiv
               - condition: template
                 value_template: "{{ states(solakon_mode) == 'INV Discharge (PV Priority)' }}"
             sequence:
@@ -670,8 +611,13 @@ action:
               - service: logbook.log
                 data:
                   name: Solakon Nachtmodus
-                  message: "🌙 Nachtabschaltung aktiviert (Zone 2) - PV: {{ states(solar_power_sensor) }}W"
+                  message: "🌙 Nachtabschaltung aktiviert (Zone 2) - PV: {{ states(solar_power_for_night_check) }}W"
                   entity_id: !input solar_power_sensor
+              # Integral zurücksetzen
+              - service: input_number.set_value
+                data:
+                  entity_id: !input integral_helper
+                  value: 0
               # Modus auf 'Disabled' setzen
               - service: number.set_value
                 data:
@@ -736,7 +682,7 @@ action:
       
       # PI-Regler Berechnung
       # 1. Aktueller Fehler
-      error: "{{ grid_power_float + target_offset }}"
+      error: "{{ grid_power_float - target_offset }}"
       
       # 2. Integral mit Anti-Windup
       integral_old: "{{ states(integral_entity) | float(0) }}"
@@ -830,8 +776,3 @@ action:
     data:
       entity_id: !input active_power_number
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
-  - delay:
-      seconds: 3
-
-
-
