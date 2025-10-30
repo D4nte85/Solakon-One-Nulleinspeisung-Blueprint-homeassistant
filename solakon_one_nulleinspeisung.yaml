@@ -762,7 +762,6 @@ action:
             data:
               entity_id: !input remote_timeout_set_number
               value: 3599
-          - delay: '00:00:00.05' 
               
   # 3. Power Limit setzen (Nur wenn Toleranz überschritten ist)
   - condition: template
@@ -772,7 +771,7 @@ action:
     data:
       entity_id: !input active_power_number
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
-  - delay:
-      seconds: 3
+  - delay:'00:00:03'
+
 
 
