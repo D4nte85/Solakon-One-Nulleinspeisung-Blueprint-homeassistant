@@ -163,7 +163,7 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
-| **Nullpunkt-Offset** | -30 W | -200 W | 0 W | Regelziel in Zone 2. Negativ = leichter Netzbezug (Batterie wird geladen). |
+| **Nullpunkt-Offset** | 30 W | 200 W | 0 W | Regelziel in Zone 2. Positiv = leichter Netzbezug (Batterie wird geladen). |
 | **PV-Ladereserve** | 50 W | 0 W | 1000 W | Reservierte PV-Leistung für Ladung. Dynamisches Limit: Max(0, PV - Reserve). |
 
 **Erklärung PV-Ladereserve:**
