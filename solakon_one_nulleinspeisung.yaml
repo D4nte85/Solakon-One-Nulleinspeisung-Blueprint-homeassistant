@@ -714,32 +714,31 @@ action:
               entity_id: !input max_discharge_current_number
               value: 0
 
-  # 2. Kombinierte Aktion: Integral speichern, Timeout-Reset ODER Power Limit setzen
-  - choose: 
-      # Fall A: Integral speichern (immer wenn P-Regler läuft und Fehler > Toleranz)
-      - conditions:
-          - condition: template
-            value_template: "{{ error | abs > tolerance_int }}"
-        sequence:
-          - service: input_number.set_value
-            data:
-              entity_id: !input integral_helper
-              value: "{{ integral_new }}"
+  # 2. Kombinierte Aktion: Integral speichern, Timeout-Reset, Power Limit setzen
+  # Integral speichern (immer wenn P-Regler läuft und Fehler > Toleranz)
+  - conditions:
+      - condition: template
+        value_template: "{{ error | abs > tolerance_int }}"
+    sequence:
+      - service: input_number.set_value
+        data:
+          entity_id: !input integral_helper
+          value: "{{ integral_new }}"
       
-      # Fall B: Timeout-Reset erforderlich
-      - conditions:
-          - condition: template
-            value_template: "{{ states(timeout_countdown) | int(9999) < 120 }}"
-        sequence:
-          - service: number.set_value
-            data:
-              entity_id: !input remote_timeout_set_number
-              value: 10
-          - delay: '00:00:01'
-          - service: number.set_value
-            data:
-              entity_id: !input remote_timeout_set_number
-              value: 3599
+      # Timeout-Reset erforderlich
+  - conditions:
+      - condition: template
+        value_template: "{{ states(timeout_countdown) | int(9999) < 120 }}"
+    sequence:
+      - service: number.set_value
+        data:
+          entity_id: !input remote_timeout_set_number
+          value: 10
+      - delay: '00:00:01'
+      - service: number.set_value
+        data:
+          entity_id: !input remote_timeout_set_number
+          value: 3599
               
   # 3. Power Limit setzen (Nur wenn Toleranz überschritten ist)
   - condition: template
@@ -751,6 +750,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   # Warte 3 Sekunden auf Stabilisierung des Geräts nach Leistungsänderung
   - delay: '00:00:03'
+
 
 
 
