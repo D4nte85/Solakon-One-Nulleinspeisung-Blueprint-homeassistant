@@ -1,62 +1,42 @@
 ```mermaid
 graph TD
-    %% -----------------------------------------------------------------
-    %% Mermaid Flowchart - Solakon ONE SOC-Logik (V166)
-    %% -----------------------------------------------------------------
+    A[Start: Netzleistung, PV oder SOC Aenderung] --> B{"Kritische Entitaeten vorhanden?"}
 
-    %% 1. START und Validierung
-    A0((START)) --> A1[/Lade Vars/]
-    A1 --> A2{VALIDIERUNG:<br>Limits & Entitäten OK?}
-    A2 -- JA (Fehler) --> A3[Error Log]
-    A3 --> A_END((STOP))
-    A2 -- NEIN (Gueltig) --> B0
+    B -- Nein --> Z((STOPP: Kritischer Fehler))
 
-    %% 2. Modus-Umschaltung und Zyklus-Steuerung
-    B0{CHOOSE:<br>SOC & Zyklus}
+    B -- Ja --> C{"SOC Groesser Obere Schwelle UND Zyklus Aus?"}
 
-    %% FALL A: Zone 1 - Aggressiv Start
-    B0 -- FALL A: SOC > Start UND Zyklus OFF --> B1_A[Setze 'cycle_active' = 'on']
-    B1_A --> B2_A[Setze Discharge Current = Max]
-    B2_A --> B3_A[Modus-Wechsel zu 'INV Discharge PV Priority']
-    B3_A --> C0
+    %% --- ZONE 1 START (Aggressive Entladung) ---
+    C -- Ja --> D[ZONE 1: Aggressive Entladung<br>Modus: Discharge PV Prio setzen<br>Max. Strom: Max Konfig<br>PI-Ziel: 0 W<br>Zyklus: Ein]
+    D --> E
 
-    %% FALL B: Zone 3 - Stopp
-    B0 -- FALL B: SOC <= Stop UND Zyklus ON --> B1_B[Setze 'cycle_active' = 'off']
-    B1_B --> B2_B[Modus-Wechsel zu 'Disabled' und Limit auf 0 W]
-    B2_B --> C0
+    C -- Nein --> E
 
-    %% FALL C: Zone 3 - Sicherung
-    B0 -- FALL C: SOC < Stop UND Zyklus OFF --> B1_C[Modus-Wechsel zu 'Disabled' und Limit auf 0 W]
-    B1_C --> C0
+    E{"Zyklus Ein ODER SOC In-Between Zone 2?"}
 
-    %% FALL D: Zone 2 - Schonend Start (P-Regler aktiv, 0A Entladung)
-    B0 -- FALL D: Stop < SOC <= Start UND Zyklus OFF --> B1_D[Setze Discharge Current = 0 A]
-    B1_D --> B2_D[Modus-Wechsel zu 'INV Discharge PV Priority']
-    B2_D --> C0
+    %% --- ZONE 3 / Zyklus End ---
+    E -- Zyklus Ein UND SOC Kleiner Untere Schwelle --> F[ZONE 3: Sicherheits-STOPP<br>Zyklus: Aus<br>Modus: Disabled<br>Active Power: 0 W]
+    F --> END((Ende))
 
-    %% 3. Aktive P-Regelung und Timeout-Reset
-    C0{Modus = 'INV Discharge PV Priority'?}
-    C0 -- NEIN --> A_END
-    C0 -- JA --> C1{Timeout < 120s?}
-    C1 -- JA --> C2[Führe Modus-Reset Pulsfolge aus]
-    C2 --> C3
-    C1 -- NEIN --> C3
+    %% --- ZONE 2 START (Batterieschonend) ---
+    E -- Zyklus Aus UND SOC In-Between Zone 2 --> G{"Nachtabschaltung aktiv UND PV Kleiner Schwelle?"}
 
-    C3{CHOOSE: P-Regler Zone}
+    G -- Ja --> F
+    
+    G -- Nein --> H[ZONE 2: Batterieschonend<br>Modus: Discharge PV Prio setzen<br>Max. Strom: 0 A<br>PI-Ziel: +Offset<br>Power Limit: Max 0, PV - Reserve]
+    H --> I
 
-    %% B1: Zone 2: Batterieschonend
-    C3 -- B1: Zone 2 Schonend UND Zyklus OFF --> C4_B1[/Definiere Offset/Toleranz/]
-    C4_B1 --> C5_B1{Netzleistung<br>ausserhalb Toleranz?}
-    C5_B1 -- JA --> C6_B1[Power Limit Z2: Setze Minimum von P-Regler oder PV abzl. Reserve]
-    C6_B1 --> A_END
-    C5_B1 -- NEIN --> A_END
+    %% --- PI-Regler / Kontinuierliche Steuerung ---
+    I{"Modus Discharge aktiv UND Tag?"}
+    
+    I -- Ja --> J[PI-REGLER-LOGIK<br>1. Fehler = Netzleistung - PI-Ziel<br>2. Neue Power = P + I Anteil<br>3. Active Power Limit anwenden<br>4. WENN Fehler Groesser Toleranz: Integral speichern & Power setzen<br>5. WENN Timeout Kleiner 120s: Timeout Reset]
+    J --> END
 
-    %% B2: Zone 1: Aggressiv
-    C3 -- B2: Zone 1 Aggressiv ODER Zyklus ON --> C4_B2[/Definiere Offset 0 W/Toleranzfenster/]
-    C4_B2 --> C5_B2{Netzleistung<br>ausserhalb Toleranz?}
-    C5_B2 -- JA --> C6_B2[Power Limit Z1: Setze Minimum von P-Regler oder Hard Limit]
-    C6_B2 --> A_END
-    C5_B2 -- NEIN --> A_END
+    I -- Nein --> END
 
-    %% Finaler Stop
-    A_END((STOP))
+    style D fill:#c9ffc9,stroke:#333
+    style H fill:#c9ffc9,stroke:#333
+    style F fill:#ffcccc,stroke:#333
+    style J fill:#fff7c2,stroke:#333
+    style END fill:#cccccc,stroke:#333
+    style Z fill:#cccccc,stroke:#333
