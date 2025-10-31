@@ -714,9 +714,9 @@ action:
               entity_id: !input max_discharge_current_number
               value: 0
 
-  # 2. Kombinierte Aktion: Timeout-Reset ODER Integral speichern
+  # 2. Timeout-Reset
   - choose: 
-        # Fall A: Timeout-Reset erforderlich
+        # Timeout-Reset erforderlich
       - conditions:
           - condition: template
             value_template: "{{ states(timeout_countdown) | int(9999) < 120 }}"
@@ -731,19 +731,17 @@ action:
               entity_id: !input remote_timeout_set_number
               value: 3599
   
-      # Fall B: Integral speichern (immer wenn P-Regler läuft und Fehler > Toleranz)
-      - conditions:
-          - condition: template
-            value_template: "{{ error | abs > tolerance_int }}"
-        sequence:
-          - service: input_number.set_value
-            data:
-              entity_id: !input integral_helper
-              value: "{{ integral_new }}"
-      
+  # 3. Integral speichern (immer wenn P-Regler läuft und Fehler > Toleranz)
+  - condition: template
+    value_template: "{{ error | abs > tolerance_int }}"
+  - service: input_number.set_value
+    data:
+      entity_id: !input integral_helper
+      value: "{{ integral_new }}"
+  
 
               
-  # 3. Power Limit setzen (Nur wenn Toleranz überschritten ist)
+  # 4. Power Limit setzen (Nur wenn Toleranz überschritten ist)
   - condition: template
     value_template: "{{ error | abs > tolerance_int }}"
   
@@ -753,11 +751,3 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   # Warte 3 Sekunden auf Stabilisierung des Geräts nach Leistungsänderung
   - delay: '00:00:03'
-
-
-
-
-
-
-
-
