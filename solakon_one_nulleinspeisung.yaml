@@ -516,6 +516,7 @@ action:
               # Modus auf 'Disabled' setzen
               - choose:
                   - conditions: "{{ states(solakon_mode) != 'Disabled' }}"
+                    sequence:
                       - service: select.select_option
                         data:
                           entity_id: !input mode_select
@@ -745,6 +746,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   # Warte 3 Sekunden auf Stabilisierung des Geräts nach Leistungsänderung
   - delay: '00:00:03'
+
 
 
 
