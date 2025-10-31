@@ -725,8 +725,7 @@ action:
           entity_id: !input integral_helper
           value: "{{ integral_new }}"
       
-      # Timeout-Reset erforderlich
-  - conditions:
+  # Timeout-Reset erforderlich
       - condition: template
         value_template: "{{ states(timeout_countdown) | int(9999) < 120 }}"
     sequence:
@@ -741,7 +740,6 @@ action:
           value: 3599
               
   # 3. Power Limit setzen (Nur wenn Toleranz überschritten ist)
-  - conditions:
     - condition: template
       value_template: "{{ error | abs > tolerance_int }}"
     
@@ -751,6 +749,7 @@ action:
         value: "{{ [0, final_power_calculated] | max | round(0) }}"
   # Warte 3 Sekunden auf Stabilisierung des Geräts nach Leistungsänderung
   - delay: '00:00:03'
+
 
 
 
