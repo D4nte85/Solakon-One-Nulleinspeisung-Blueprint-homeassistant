@@ -734,6 +734,11 @@ action:
           - service: number.set_value
             data:
               entity_id: !input remote_timeout_set_number
+              value: 10
+          - delay: '00:00:01'
+          - service: number.set_value
+            data:
+              entity_id: !input remote_timeout_set_number
               value: 3599
               
   # 3. Power Limit setzen (Nur wenn Toleranz überschritten ist)
@@ -746,6 +751,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   # Warte 3 Sekunden auf Stabilisierung des Geräts nach Leistungsänderung
   - delay: '00:00:03'
+
 
 
 
