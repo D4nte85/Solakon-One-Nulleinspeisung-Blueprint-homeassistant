@@ -741,15 +741,17 @@ action:
           value: 3599
               
   # 3. Power Limit setzen (Nur wenn Toleranz überschritten ist)
-  - condition: template
-    value_template: "{{ error | abs > tolerance_int }}"
-  
-  - service: number.set_value
-    data:
-      entity_id: !input active_power_number
-      value: "{{ [0, final_power_calculated] | max | round(0) }}"
+  - conditions:
+    - condition: template
+      value_template: "{{ error | abs > tolerance_int }}"
+    
+    - service: number.set_value
+      data:
+        entity_id: !input active_power_number
+        value: "{{ [0, final_power_calculated] | max | round(0) }}"
   # Warte 3 Sekunden auf Stabilisierung des Geräts nach Leistungsänderung
   - delay: '00:00:03'
+
 
 
 
