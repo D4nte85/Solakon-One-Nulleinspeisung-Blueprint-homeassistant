@@ -652,10 +652,10 @@ action:
       error: >
         {% if is_state(cycle_active, 'on') %}
           {# ZONE 1: Hard Limit #}
-          {{ [800, grid_power_float] | min }}
+          {{ [(800 - current_active_power), grid_power_float] | min }}
         {% else %}
           {# ZONE 2: Dynamisches PV-Limit #}
-          {{ [800, grid_power_float, pv_minus_reserve] | min - offset_int }}
+          {{ [(800 - current_active_power), grid_power_float, pv_minus_reserve] | min - offset_int }}
         {% endif %}
       
       # 2. Integral mit Anti-Windup
@@ -745,6 +745,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   # Warte 3 Sekunden auf Stabilisierung des Geräts nach Leistungsänderung
   - delay: '00:00:03'
+
 
 
 
