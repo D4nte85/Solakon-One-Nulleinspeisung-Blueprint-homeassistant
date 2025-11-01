@@ -651,11 +651,11 @@ action:
       # 1. Aktueller Fehler 
       error: >
         {% if is_state(cycle_active, 'on') %}
-          {# ZONE 1: Hard Limit #}
+          {# ZONE 1: Min(verfügbare Kapazität, Grid) #}
           {{ [(max_active_power_limit_int - current_active_power), grid_power_float] | min }}
         {% else %}
-          {# ZONE 2: Dynamisches PV-Limit #}
-          {{ [(max_active_power_limit_int - current_active_power), grid_power_float, (pv_minus_reserve - current_active_power)] | min - offset_int }}
+          {# ZONE 2: Min(verfügbare Kapazität, Grid, PV-Kapazität) - Offset #}
+          {{ [(max_active_power_limit_int - current_active_power), grid_power_float, (max_zone_2_limit - current_active_power)] | min - offset_int }}
         {% endif %}
       
       # 2. Integral mit Anti-Windup
@@ -745,6 +745,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   # Warte 3 Sekunden auf Stabilisierung des Geräts nach Leistungsänderung
   - delay: '00:00:03'
+
 
 
 
