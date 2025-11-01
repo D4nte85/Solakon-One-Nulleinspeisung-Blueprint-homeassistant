@@ -641,18 +641,22 @@ action:
       
       # PI-Regler-Variablen
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
-      
-      # Target Offset basiert auf Zone (0 W in Zone 1, Offset_Int in Zone 2)
-      target_offset: >
-        {% if is_state(cycle_active, 'on') %}
-          0
-        {% else %}
-          {{ offset_int }}
-        {% endif %}
+        
+      # 5. Max Power Limit in Zone 2 = Max(0, PV - Reserve)
+      max_zone_2_limit: >
+        {% set pv_minus_reserve = states(solar_power) | float(0) - pv_charge_reserve_int %}
+        {{ [0, pv_minus_reserve] | max }}
       
       # PI-Regler Berechnung
-      # 1. Aktueller Fehler
-      error: "{{ grid_power_float - target_offset }}"
+      # 1. Aktueller Fehler 
+      error: >
+        {% if is_state(cycle_active, 'on') %}
+          {# ZONE 1: Hard Limit #}
+          {{ [800, grid_power_float] | min }}
+        {% else %}
+          {# ZONE 2: Dynamisches PV-Limit #}
+          {{ [800, grid_power_float, pv_minus_reserve] | min - offset_int }}
+        {% endif %}
       
       # 2. Integral mit Anti-Windup
       integral_old: "{{ states(integral_entity) | float(0) }}"
@@ -666,11 +670,6 @@ action:
       
       # 4. Neuer Power-Sollwert
       new_power_unlimited: "{{ current_active_power + power_correction_pi }}"
-      
-      # 5. Max Power Limit in Zone 2 = Max(0, PV - Reserve)
-      max_zone_2_limit: >
-        {% set pv_minus_reserve = states(solar_power) | float(0) - pv_charge_reserve_int %}
-        {{ [0, pv_minus_reserve] | max }}
         
       # 6. Finale Power: Logik in einem Template zusammengefasst
       final_power_calculated: >
@@ -746,6 +745,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   # Warte 3 Sekunden auf Stabilisierung des Geräts nach Leistungsänderung
   - delay: '00:00:03'
+
 
 
 
