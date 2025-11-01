@@ -642,7 +642,7 @@ action:
       # PI-Regler-Variablen
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
         
-      # 5. Max Power Limit in Zone 2 = Max(0, PV - Reserve)
+      # Max Power Limit in Zone 2 = Max(0, PV - Reserve)
       max_zone_2_limit: >
         {% set pv_minus_reserve = states(solar_power) | float(0) - pv_charge_reserve_int %}
         {{ [0, pv_minus_reserve] | max }}
@@ -671,7 +671,7 @@ action:
       # 4. Neuer Power-Sollwert
       new_power_unlimited: "{{ current_active_power + power_correction_pi }}"
         
-      # 6. Finale Power: Logik in einem Template zusammengefasst
+      # 5. Finale Power: Logik in einem Template zusammengefasst
       final_power_calculated: >
         {% set p_regler_power = new_power_unlimited %}
         {% if is_state(cycle_active, 'on') %}
@@ -745,6 +745,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   # Warte 3 Sekunden auf Stabilisierung des Geräts nach Leistungsänderung
   - delay: '00:00:03'
+
 
 
 
