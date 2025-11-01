@@ -454,7 +454,7 @@ action:
                       - service: number.set_value
                         data:
                           entity_id: !input remote_timeout_set_number
-                          value: 1
+                          value: 10
                       - delay: '00:00:01' 
                       - service: number.set_value
                         data:
@@ -731,16 +731,10 @@ action:
               entity_id: !input remote_timeout_set_number
               value: 3599
   # 3. Integral speichern
-  - choose: 
-      # Integral speichern (immer wenn P-Regler läuft und Fehler > Toleranz)
-    - conditions:
-        - condition: template
-          value_template: "{{ error | abs > tolerance_int }}"
-      sequence:
-        - service: input_number.set_value
-          data:
-            entity_id: !input integral_helper
-            value: "{{ integral_new }}"
+  - service: input_number.set_value
+    data:
+      entity_id: !input integral_helper
+      value: "{{ integral_new }}"
 
   # 4. Power Limit setzen (Nur wenn Toleranz überschritten ist)
   - condition: template
@@ -752,5 +746,6 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   # Warte 3 Sekunden auf Stabilisierung des Geräts nach Leistungsänderung
   - delay: '00:00:03'
+
 
 
