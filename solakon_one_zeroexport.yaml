@@ -1,51 +1,49 @@
 blueprint:
-  name: Solakon ONE Zero Export ⚡ (V166)
+  name: Solakon ONE Zero Feed-in⚡ (V166)
   description: |
-    **Detailed Function Description: Dynamic Zero Export with SOC Zone Logic**
+    **Detailed Function Description: Dynamic Zero Feed-in with SOC Zone Logic**
 
-    This Blueprint controls the AC output power limit (AC-Output-Limit) of the Solakon ONE inverter.
-    The goal is dynamic **Zero Export** via a Proportional Controller (P-Controller) while efficiently managing the battery with a **three-stage State-of-Charge (SOC) logic**.
+    This Blueprint controls the AC output power limit (AC-Output-Limit) of the Solakon ONE inverter. The goal is **dynamic zero feed-in** via a Proportional Controller (P-Controller) combined with efficient battery management through a **three-stage State-of-Charge (SOC) logic**.
+
     ---
     ### 🧠 P-Controller & Control Logic
-    * **Measurement Principle (P-Control):** Regulation is performed by a **Proportional Controller (P-Controller)** based on the **Grid Power Sensor** entity (Shelly/similar).
-    **IMPORTANT:** It is assumed that **positive values mean Grid Consumption** and **negative values mean Grid Export**.
-    * **Positive Grid Power (Consumption):** Increase AC output power.
-      * **Negative Grid Power (Export):** Decrease AC output power.
-    * **Correction Aggressiveness:** The reaction speed is controlled via the **Adjustment Factor**.
+    * **Measurement Principle (P-Control):** The control is implemented as a **Proportional Controller (P-Controller)** based on the **Shelly/Grid Power Sensor** entity. **IMPORTANT:** It is assumed that **positive values mean Grid Consumption** and **negative values mean Grid Feed-in**.
+      * **Positive Grid Power (Consumption):** Increase the AC output power.
+      * **Negative Grid Power (Feed-in):** Reduce the AC output power.
+    * **Correction Aggressiveness:** The responsiveness is controlled via the **Adjustment Factor**.
     * **Power Limitation:** The regulated output power is secured by an **upper limit** (`max_active_power_limit`) and a **hardcoded lower limit of 0 W**.
+
     ---
     ### 🔋 Three-Stage SOC Zone Logic
 
     #### 1. Fast Control & Discharge Cycle (SOC > Upper Threshold OR Cycle Active)
     * **Condition:** The SOC is above the **Upper Threshold** (`soc_fast_limit`, Default: 50%) OR the discharge cycle is already active.
     * **Mode:** "INV Discharge (PV Priority)".
-    * **Control:** **Aggressive P-Control** with a **zero-point offset of 0 W**. Controls discharge and exact zero export.
+    * **Control:** **Aggressive P-Control** with a **zero-point offset of 0 W**. Controls discharge and exact zero feed-in.
 
-    #### 2. Battery-Friendly Control (Intermediate SOC and PV Condition Met)
-    * **Condition:** The SOC is between the **Lower Threshold** (20%) and the **Upper Threshold** (50%), and the **Discharge Cycle is Inactive** (important for P-Controller Zone 2).
-    * **Start:** Switch to **"INV Discharge (PV Priority)"** only if the **PV Power strictly exceeds the PV Reserve**.
-    * **Stop (Loop Protection):** Switch to **"Disabled"** and 0 W limit if the PV power drops to or below the PV reserve during operation.
-    * **Control:** **Active P-Control** with a shifted zero point and charge priority. The **Zero-Point Offset** (`zero_export_offset`, Default: 30 W) shifts the control target towards slight **Grid Consumption** (charging).
-    * **PV Charge Priority (Dynamic Upper Limit):** The discharge power is dynamically limited by the **smaller value** of the P-Controller proposal and the **available PV power minus the PV Reserve**.
+    #### 2. Battery-Conserving Control (Intermediate SOC and PV Condition met)
+    * **Condition:** The SOC is between the **Lower Threshold** (20%) and the **Upper Threshold** (50%), and the **discharge cycle is inactive** (important for P-Controller Zone 2).
+      * **Start:** Switch to **"INV Discharge (PV Priority)"** only if the **PV power strictly exceeds the PV reserve**.
+      * **Stop (Anti-Oscillation):** Switch to **"Disabled"** and 0 W limit if the PV power drops to or below the PV reserve during operation.
+    * **Control:** **Active P-Control** with a shifted zero-point and charge priority. The **zero-point offset** (`nulleinspeisung_offset`, Default: 30 W) shifts the control target towards slight **Grid Consumption** (charging).
+    * **PV Charge Priority (Dynamic Upper Limit):** The discharge power is dynamically limited by the **smaller value** of the P-Controller proposal and the **available PV power minus the PV reserve**.
 
     #### 3. Safety Stop (SOC <= Lower Threshold)
-    * **Condition:** SOC drops below the **Lower Threshold** (`soc_conservation_limit`, Default: 20%).
+    * **Condition:** SOC falls below the **Lower Threshold** (`soc_conservation_limit`, Default: 20%).
     * **Mode:** "Disabled".
-    * **Action:** AC output power is immediately set to **0 W** and the discharge cycle is ended.
+    * **Action:** The AC output power is immediately set to **0 W** and the discharge cycle is ended.
 
     ---
     ### 🔄 Additional Control Mechanisms
-    * **Optimized Timeout Reset on Mode Change:** Before a mode change is executed, a **two-stage impulse sequence** (`1s` pulse, then setting to `3599s`) is performed to secure the acceptance of the critical mode command and avoid timeout errors.
-    * **Timeout Reset (Continuous):** The Remote Control Timeout (max. 3600s) is **automatically reset to 3599s** in the active discharge zones (1 and 2) as soon as the countdown drops below 120s.
+    * **Optimized Timeout Reset on Mode Change:** Before a mode change is executed, a **two-stage pulse sequence** (`1s` pulse, then setting to `3599s`) is performed to secure the acceptance of the critical mode command and avoid timeout errors.
+    * **Timeout Reset (Continuous):** The Remote Control Timeout (max. 3600s) is **automatically reset to 3599s** in the active discharge zones (1 and 2) as soon as the countdown falls below 120s.
     * **Trigger:** The automation is triggered by changes in grid power and PV power (with 3s stability), exceeding or falling below the SOC thresholds, mode changes, and the Remote Timeout Countdown Sensor (< 150s).
   domain: automation
   author: AI-Assistent
   input:
-    grid_power_sensor:
-      name: Grid Power Sensor (Shelly 3EM or similar)
-      description: |
-        The sensor that measures grid power.
-        (Must have 'power' device_class)
+    shelly_grid_power_sensor:
+      name: Shelly/Grid Power Sensor (Shelly 3EM or similar)
+      description: The sensor that measures grid power. (Must have 'power' device_class)
       selector:
         entity:
           filter:
@@ -54,7 +52,7 @@ blueprint:
               device_class:
                 - power
           multiple: false
-    solakon_pv_power_sensor:
+    solakon_solar_power_sensor:
       name: Solakon ONE - Solar Power (PV Generation)
       description: |
         The sensor that displays the current solar generation in Watts. **(Default Entity: `sensor.solakon_one_total_pv_power`)**
@@ -78,7 +76,7 @@ blueprint:
             - sensor
           multiple: false
     solakon_power_limit_number:
-      name: Solakon ONE - Output Power Regulator (AC-Output)
+      name: Solakon ONE - Output Power Controller (AC-Output)
       description: |
         The entity for controlling the charge/discharge power (setpoint). **(Default Entity: `number.solakon_one_remote_active_power`)**
       default: number.solakon_one_remote_active_power
@@ -88,7 +86,7 @@ blueprint:
             - number
           multiple: false
     solakon_mode_select:
-      name: Solakon ONE - Operating Mode Selection
+      name: Solakon ONE - Operating Mode Selector
       description: |
         The entity for controlling the operating mode. **(Default Entity: `select.solakon_one_remote_control_mode`)**
       default: select.solakon_one_remote_control_mode
@@ -100,15 +98,14 @@ blueprint:
     solakon_mode_reset_timer_entity:
       name: Mode Reset Timer Entity (Solakon ONE - **Setter**)
       description: |
-        The Solakon ONE **Number** entity that controls the time (in seconds, max. 3600). Used to **Set/Reset** the Remote Timeout.
-        **(Default Entity: `number.solakon_one_remote_timeout_set`)**
+        The Solakon ONE **Number** entity that controls the time (in seconds, max. 3600). Used to **Set/Reset** the Remote Timeout. **(Default Entity: `number.solakon_one_remote_timeout_set`)**
       default: number.solakon_one_remote_timeout_set
       selector:
         entity:
           domain:
             - number
           multiple: false
-    remote_timeout_countdown_sensor:
+    solakon_timeout_countdown_sensor:
       name: Remote Timeout Countdown Sensor (Solakon ONE - **Reader**) 🟢
       description: |
         The **Sensor** or **Number** entity that displays the currently remaining countdown value of the Remote Timeout in seconds.
@@ -120,10 +117,10 @@ blueprint:
                 - sensor
                 - number
           multiple: false
-    soc_discharge_cycle_helper:
-      name: Discharge Cycle State Helper (Input Select/Dropdown)
-      description: Input Select Helper (MUST contain options 'on' and 'off').
-      default: input_select.soc_discharge_cycle_status
+    soc_entladezyklus_aktiv:
+      name: Discharge Cycle State Storage (Input Select/Dropdown)
+      description: Input Select Helper (MUST contain the options 'on' and 'off').
+      default: input_select.soc_entladezyklus_status
       selector:
         entity:
           domain:
@@ -132,9 +129,7 @@ blueprint:
     soc_fast_limit:
       name: SOC Threshold "Fast Control" (e.g., 50%)
       default: 50
-      description: |
-        The upper SOC value (e.g., 50%).
-        When exceeded, the aggressive discharge cycle starts.
+      description: The upper SOC value (e.g., 50%). Exceeding this value starts the aggressive discharge cycle.
       selector:
         number:
           min: 21.0
@@ -145,9 +140,7 @@ blueprint:
     soc_conservation_limit:
       name: SOC Threshold "Charge Priority" (e.g., 20%)
       default: 20
-      description: |
-        The lower SOC value
-        (e.g., 20%). When fallen below, the mode is switched to "Disabled".
+      description: The lower SOC value (e.g., 20%). Falling below this value switches to "Disabled".
       selector:
         number:
           min: 0.0
@@ -155,12 +148,10 @@ blueprint:
           step: 1.0
           unit_of_measurement: '%'
           mode: slider
-    zero_export_tolerance:
+    nulleinspeisung_toleranz:
       name: Tolerance Range (Half-width)
       default: 25
-      description: |
-        The allowed range
-        in Watts around the zero or offset point.
+      description: The allowed range in Watts around the zero or offset point.
       selector:
         number:
           min: 10.0
@@ -168,24 +159,20 @@ blueprint:
           step: 10.0
           unit_of_measurement: W
           mode: slider
-    adjustment_factor:
+    anpassungs_faktor:
       name: Control Factor (Correction Speed)
       default: 1.5
-      description: |
-        Defines the aggressiveness of the
-        P-Controller.
+      description: Defines the aggressiveness of the P-Controller.
       selector:
         number:
           min: 0.5
           max: 3.0
           step: 0.1
           mode: slider
-    zero_export_offset:
-      name: Zero-Point Offset (Forces consumption)
+    nulleinspeisung_offset:
+      name: Zero-point Offset (Neg. enforces Consumption)
       default: 30
-      description: |
-        Watt value to shift the zero point, forcing slight consumption (e.g. 30W).
-        (Only used in the battery-friendly Zone 2)
+      description: Negative Watt value to shift the zero-point below the SOC threshold. (Only used in the conserving Zone 2)
       selector:
         number:
           min: 0.0
@@ -197,10 +184,9 @@ blueprint:
       name: 🔋 PV Charge Reserve (Intermediate SOC)
       default: 50
       description: |
-        The PV power (in Watts, W) that should be reserved.
-        This buffer compensates
-        internal inverter losses and ensures guaranteed battery charging.
-        (Only used in the conservative Zone 2)
+        The PV power (in Watts, W) to be reserved. This buffer compensates
+        internal inverter losses and secures guaranteed battery charging.
+        (Only used in the conserving Zone 2)
       selector:
         number:
           min: 0.0
@@ -211,9 +197,7 @@ blueprint:
     max_active_power_limit:
       name: Maximum Output Power (Hard Limit)
       default: 800
-      description: |
-        The absolute limit for the AC output power in Watts, regardless of the control.
-        (Should correspond to the maximum value of your Solakon ONE)
+      description: The absolute limit for AC output power in Watts, regardless of regulation. (Should match the maximum value of your Solakon ONE)
       selector:
         number:
           min: 0.0
@@ -221,7 +205,7 @@ blueprint:
           step: 10.0
           unit_of_measurement: W
           mode: slider
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/tree/Solakon-ONE-Zero-Export
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/main/solakon_one_nulleinspeisung.yaml
 
 mode: queued
 max_exceeded: silent
@@ -229,27 +213,27 @@ max_exceeded: silent
 variables:
   solakon_mode: !input solakon_mode_select
   solakon_soc_sensor: !input solakon_soc_sensor
-  pv_power_sensor: !input solakon_pv_power_sensor
-  grid_power_sensor: !input grid_power_sensor
+  pv_power_sensor: !input solakon_solar_power_sensor
+  grid_power_sensor: !input shelly_grid_power_sensor
   timer_entity: !input solakon_mode_reset_timer_entity
-  countdown_sensor: !input remote_timeout_countdown_sensor
+  countdown_sensor: !input solakon_timeout_countdown_sensor
   solakon_power_limit_number: !input solakon_power_limit_number
   soc_start_limit: !input soc_fast_limit
   soc_stop_limit: !input soc_conservation_limit
-  tolerance: !input zero_export_tolerance
-  adj_factor: !input adjustment_factor
-  offset_value: !input zero_export_offset
-  cycle_active: !input soc_discharge_cycle_helper
+  tolerance: !input nulleinspeisung_toleranz
+  adj_factor: !input anpassungs_faktor
+  offset_value: !input nulleinspeisung_offset
+  cycle_active: !input soc_entladezyklus_aktiv
   pv_reserve: !input pv_charge_reserve
   max_limit: !input max_active_power_limit
 
 trigger:
   - platform: state
-    entity_id: !input grid_power_sensor
+    entity_id: !input shelly_grid_power_sensor
     for:
       seconds: 3
   - platform: state
-    entity_id: !input solakon_pv_power_sensor
+    entity_id: !input solakon_solar_power_sensor
     for:
       seconds: 3
   - platform: numeric_state
@@ -261,7 +245,7 @@ trigger:
   - platform: state
     entity_id: !input solakon_mode_select
   - platform: numeric_state
-    entity_id: !input remote_timeout_countdown_sensor
+    entity_id: !input solakon_timeout_countdown_sensor
     below: 150
 
 condition: []
@@ -286,10 +270,10 @@ action:
         - service: system_log.write
           data:
             level: error
-            message: "Solakon ONE Blueprint Error: The upper SOC threshold ({{ soc_start_limit}}%) must be greater than the lower SOC threshold ({{ soc_stop_limit }}%). Automation stopped."
-        - stop: SOC limits are set incorrectly.
-
-    # CHECK B: Critical Entities Available
+            message: "Solakon ONE Blueprint Error The upper SOC threshold ({{ soc_start_limit}}%) must be greater than the lower SOC threshold ({{ soc_stop_limit }}%). Automation stopped."
+        - stop: The SOC limits are set incorrectly.
+          
+    # CHECK B: Critical Entities available
     - conditions:
         - condition: or
           conditions:
@@ -297,7 +281,7 @@ action:
             - condition: template
               value_template: >
                 {{ is_state(solakon_soc_sensor, 'unknown') or is_state(solakon_soc_sensor, 'unavailable') or
-                   is_state(countdown_sensor, 'unknown') or is_state(countdown_sensor, 'unavailable') }}
+                  is_state(countdown_sensor, 'unknown') or is_state(countdown_sensor, 'unavailable') }}
             # Mode Selector
             - condition: template
               value_template: "{{ is_state(solakon_mode, 'unknown') or is_state(solakon_mode, 'unavailable') }}"
@@ -308,191 +292,191 @@ action:
         - service: system_log.write
           data:
             level: error
-            message: "Solakon ONE Blueprint Error: One or more critical entities (SOC, Timeout Sensor, Active Power Regulator) are UNAVAILABLE or have invalid values. Automation stopped."
+            message: "Solakon ONE Blueprint Error One or more critical entities (SOC, Timeout Sensor, Output Power Controller) are UNAVAILABLE or have invalid values. Automation stopped."
         - stop: Critical entities are faulty.
-
+          
     default:
 
   # --- MODE SWITCHING AND CYCLE CONTROL ---
   - choose:
-      # --- 1. Fast Control & Discharge Cycle Start (SOC > Upper Limit) ---
-      - conditions:
-          - condition: template
-            value_template: "{{ soc_value > soc_start_limit | float(50) and states(cycle_active) == 'off' }}"
-        sequence:
-          - service: input_select.select_option
-            target:
-              entity_id: !input soc_discharge_cycle_helper
-            data:
-              option: "on"
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ current_mode != 'INV Discharge (PV Priority)' }}"
-                sequence:
-                  # Impulse sequence to secure the mode command and timeout setting
-                  - service: number.set_value
-                    target:
-                      entity_id: !input solakon_mode_reset_timer_entity
-                    data:
-                      value: 1
-                  - delay:
-                      milliseconds: 300
-                  - service: number.set_value
-                    target:
-                      entity_id: !input solakon_mode_reset_timer_entity
-                    data:
-                      value: 3599
-                  - delay:
-                      milliseconds: 300
-                  - service: select.select_option
-                    target:
-                      entity_id: !input solakon_mode_select
-                    data:
-                      option: INV Discharge (PV Priority)
-            default: []
+    # --- 1. Fast Control & Discharge Cycle Start (SOC > Upper Limit) ---
+    - conditions:
+        - condition: template
+          value_template: "{{ soc_value > soc_start_limit | float(50) and states(cycle_active) == 'off' }}"
+      sequence:
+        - service: input_select.select_option
+          target:
+            entity_id: !input soc_entladezyklus_aktiv
+          data:
+            option: "on"
+        - choose:
+            - conditions:
+                - condition: template
+                  value_template: "{{ current_mode != 'INV Discharge (PV Priority)' }}"
+              sequence:
+                # Pulse sequence to secure the mode command and set timeout
+                - service: number.set_value
+                  target:
+                    entity_id: !input solakon_mode_reset_timer_entity
+                  data:
+                    value: 1
+                - delay:
+                    milliseconds: 300
+                - service: number.set_value
+                  target:
+                    entity_id: !input solakon_mode_reset_timer_entity
+                  data:
+                    value: 3599
+                - delay:
+                    milliseconds: 300
+                - service: select.select_option
+                  target:
+                    entity_id: !input solakon_mode_select
+                  data:
+                    option: INV Discharge (PV Priority)
+          default: []
 
-      # --- 2. Safety Stop End & Discharge Cycle Stop (SOC <= Lower Limit) ---
-      - conditions:
-          - condition: template
-            value_template: "{{ soc_value <= soc_stop_limit | float(20) and states(cycle_active) == 'on' }}"
-        sequence:
-          - service: input_select.select_option
-            target:
-              entity_id: !input soc_discharge_cycle_helper
-            data:
-              option: "off"
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ current_mode != 'Disabled' }}"
-                sequence:
-                  # Impulse sequence to secure the mode command and timeout setting
-                  - service: number.set_value
-                    target:
-                      entity_id: !input solakon_mode_reset_timer_entity
-                    data:
-                      value: 1
-                  - delay:
-                      milliseconds: 300
-                  - service: number.set_value
-                    target:
-                      entity_id: !input solakon_mode_reset_timer_entity
-                    data:
-                      value: 3599
-                  - delay:
-                      milliseconds: 300
-                  - service: select.select_option
-                    target:
-                      entity_id: !input solakon_mode_select
-                    data:
-                      option: Disabled
-            default: []
-          - service: number.set_value
-            target:
-              entity_id: !input solakon_power_limit_number
-            data:
-              value: 0
+    # --- 2. Safety Stop End & Discharge Cycle Stop (SOC <= Lower Limit) ---
+    - conditions:
+        - condition: template
+          value_template: "{{ soc_value <= soc_stop_limit | float(20) and states(cycle_active) == 'on' }}"
+      sequence:
+        - service: input_select.select_option
+          target:
+            entity_id: !input soc_entladezyklus_aktiv
+          data:
+            option: "off"
+        - choose:
+            - conditions:
+                - condition: template
+                  value_template: "{{ current_mode != 'Disabled' }}"
+              sequence:
+                # Pulse sequence to secure the mode command and set timeout
+                - service: number.set_value
+                  target:
+                    entity_id: !input solakon_mode_reset_timer_entity
+                  data:
+                    value: 1
+                - delay:
+                    milliseconds: 300
+                - service: number.set_value
+                  target:
+                    entity_id: !input solakon_mode_reset_timer_entity
+                  data:
+                    value: 3599
+                - delay:
+                    milliseconds: 300
+                - service: select.select_option
+                  target:
+                    entity_id: !input solakon_mode_select
+                  data:
+                    option: Disabled
+          default: []
+        - service: number.set_value
+          target:
+            entity_id: !input solakon_power_limit_number
+          data:
+            value: 0
 
-      # --- 3. Safety Stop (SOC < Lower Limit AND Cycle Inactive, Force Mode Change) ---
-      - conditions:
-          - condition: template
-            value_template: "{{ soc_value < soc_stop_limit | float(20) and states(cycle_active) == 'off' and current_mode != 'Disabled' }}"
-        sequence:
-          # Impulse sequence to secure the mode command and timeout setting
-          - service: number.set_value
-            target:
-              entity_id: !input solakon_mode_reset_timer_entity
-            data:
-              value: 1
-          - delay:
-              milliseconds: 300
-          - service: number.set_value
-            target:
-              entity_id: !input solakon_mode_reset_timer_entity
-            data:
-              value: 3599
-          - delay:
-              milliseconds: 300
-          - service: select.select_option
-            target:
-              entity_id: !input solakon_mode_select
-            data:
-              option: Disabled
-          - service: number.set_value
-            target:
-              entity_id: !input solakon_power_limit_number
-            data:
-              value: 0
+    # --- 3. Safety Stop (SOC < Lower Limit AND Cycle Inactive, Force Mode Change) ---
+    - conditions:
+        - condition: template
+          value_template: "{{ soc_value < soc_stop_limit | float(20) and states(cycle_active) == 'off' and current_mode != 'Disabled' }}"
+      sequence:
+        # Pulse sequence to secure the mode command and set timeout
+        - service: number.set_value
+          target:
+            entity_id: !input solakon_mode_reset_timer_entity
+          data:
+            value: 1
+        - delay:
+            milliseconds: 300
+        - service: number.set_value
+          target:
+            entity_id: !input solakon_mode_reset_timer_entity
+          data:
+            value: 3599
+        - delay:
+            milliseconds: 300
+        - service: select.select_option
+          target:
+            entity_id: !input solakon_mode_select
+          data:
+            option: Disabled
+        - service: number.set_value
+          target:
+            entity_id: !input solakon_power_limit_number
+          data:
+            value: 0
 
-      # --- 4. Battery-Friendly Control (Intermediate Limit) ---
-      - conditions:
-          - condition: template
-            value_template: "{{ soc_value > soc_stop_limit | float(20) and soc_value <= soc_start_limit | float(50) and states(cycle_active) == 'off' }}"
-        sequence:
-          - choose:
-              # --- 4a. START of Conservative Control (PV > Reserve) ---
-              - conditions:
-                  - condition: template
-                    value_template: "{{ pv_power_value > pv_reserve_float and current_mode != 'INV Discharge (PV Priority)' }}"
-                sequence:
-                  # Impulse sequence to secure the mode command and timeout setting
-                  - service: number.set_value
-                    target:
-                      entity_id: !input solakon_mode_reset_timer_entity
-                    data:
-                      value: 1
-                  - delay:
-                      milliseconds: 300
-                  - service: number.set_value
-                    target:
-                      entity_id: !input solakon_mode_reset_timer_entity
-                    data:
-                      value: 3599
-                  - delay:
-                      milliseconds: 300
-                  - service: select.select_option
-                    target:
-                      entity_id: !input solakon_mode_select
-                    data:
-                      option: INV Discharge (PV Priority)
-                  - service: number.set_value
-                    target:
-                      entity_id: !input solakon_power_limit_number
-                    data:
-                      value: 0
+    # --- 4. Battery-Conserving Control (Intermediate Limit) ---
+    - conditions:
+        - condition: template
+          value_template: "{{ soc_value > soc_stop_limit | float(20) and soc_value <= soc_start_limit | float(50) and states(cycle_active) == 'off' }}"
+      sequence:
+        - choose:
+            # --- 4a. START of Conserving Control (PV > Reserve) ---
+            - conditions:
+                - condition: template
+                  value_template: "{{ pv_power_value > pv_reserve_float and current_mode != 'INV Discharge (PV Priority)' }}"
+              sequence:
+                # Pulse sequence to secure the mode command and set timeout
+                - service: number.set_value
+                  target:
+                    entity_id: !input solakon_mode_reset_timer_entity
+                  data:
+                    value: 1
+                - delay:
+                    milliseconds: 300
+                - service: number.set_value
+                  target:
+                    entity_id: !input solakon_mode_reset_timer_entity
+                  data:
+                    value: 3599
+                - delay:
+                    milliseconds: 300
+                - service: select.select_option
+                  target:
+                    entity_id: !input solakon_mode_select
+                  data:
+                    option: INV Discharge (PV Priority)
+                - service: number.set_value
+                  target:
+                    entity_id: !input solakon_power_limit_number
+                  data:
+                    value: 0
 
-              # --- 4b. STOP of Conservative Control (PV <= Reserve) ---
-              - conditions:
-                  - condition: template
-                    value_template: "{{ pv_power_value <= pv_reserve_float and current_mode == 'INV Discharge (PV Priority)' }}"
-                sequence:
-                  # Impulse sequence to secure the mode command and timeout setting
-                  - service: number.set_value
-                    target:
-                      entity_id: !input solakon_mode_reset_timer_entity
-                    data:
-                      value: 1
-                  - delay:
-                      milliseconds: 300
-                  - service: number.set_value
-                    target:
-                      entity_id: !input solakon_mode_reset_timer_entity
-                    data:
-                      value: 3599
-                  - delay:
-                      milliseconds: 300
-                  - service: select.select_option
-                    target:
-                      entity_id: !input solakon_mode_select
-                    data:
-                      option: Disabled
-                  - service: number.set_value
-                    target:
-                      entity_id: !input solakon_power_limit_number
-                    data:
-                      value: 0
-            default: []
+            # --- 4b. STOP of Conserving Control (PV <= Reserve) ---
+            - conditions:
+                - condition: template
+                  value_template: "{{ pv_power_value <= pv_reserve_float and current_mode == 'INV Discharge (PV Priority)' }}"
+              sequence:
+                # Pulse sequence to secure the mode command and set timeout
+                - service: number.set_value
+                  target:
+                    entity_id: !input solakon_mode_reset_timer_entity
+                  data:
+                    value: 1
+                - delay:
+                    milliseconds: 300
+                - service: number.set_value
+                  target:
+                    entity_id: !input solakon_mode_reset_timer_entity
+                  data:
+                    value: 3599
+                - delay:
+                    milliseconds: 300
+                - service: select.select_option
+                  target:
+                    entity_id: !input solakon_mode_select
+                  data:
+                    option: Disabled
+                - service: number.set_value
+                  target:
+                    entity_id: !input solakon_power_limit_number
+                  data:
+                    value: 0
+          default: []
 
     default: []
 
@@ -501,14 +485,14 @@ action:
       - conditions:
           - condition: template
             value_template: "{{ current_mode == 'INV Discharge (PV Priority)' }}"
-      sequence:
+        sequence:
           # 5.1 Timeout Reset (only if active)
           - choose:
               - conditions:
                   - condition: template
                     value_template: "{{ timeout_value < 120 and timeout_value != -1 }}"
-              sequence:
-                  # Impulse sequence to reset the timer
+                sequence:
+                  # Pulse sequence to reset the timer
                   - service: number.set_value
                     target:
                       entity_id: !input solakon_mode_reset_timer_entity
@@ -527,7 +511,7 @@ action:
 
           # 5.2 P-Control
           - choose:
-              # --- 5.2a Zone 2: Conservative (with Offset and dynamic PV limit) ---
+              # --- 5.2a Zone 2: Battery-Conserving (with Offset and Dynamic PV Limit) ---
               - conditions:
                   - condition: template
                     value_template: "{{ states(cycle_active) == 'off' and soc_value >= soc_stop_limit | float(20) and soc_value <= soc_start_limit | float(50) }}"
@@ -536,24 +520,24 @@ action:
                       offset: "{{ offset_value | float(30) }}"
                       tolerance_high: "{{ offset + tolerance | float(25) }}"
                       tolerance_low: "{{ offset - tolerance | float(25) }}"
-                  # Check if grid power is outside the tolerance
+                    # Check if the grid power is outside the tolerance
                   - condition: template
                     value_template: "{{ grid_power_value > tolerance_high or grid_power_value < tolerance_low }}"
                   - variables:
                       current_limit: "{{ states(solakon_power_limit_number) | float(0) }}"
                       # Deviation from the offset target
-                      reg_deviation: "{{ grid_power_value - offset }}"
-                      # Suggestion for the new limit (P-Controller)
-                      new_limit_calc: "{{ current_limit + reg_deviation * adj_factor }}"
+                      reg_abweichung: "{{ grid_power_value - offset }}"
+                      # Proposal for the new limit (P-Controller)
+                      new_limit_calc: "{{ current_limit + reg_abweichung * adj_factor }}"
                   - service: number.set_value
                     target:
                       entity_id: !input solakon_power_limit_number
                     data:
                       value: >
                         {% set calculated_limit = new_limit_calc | float(0) %}
-                        {# Dynamic limit based on PV surplus (PV Power - Reserve) #}
+                        {# Dynamic Limit based on PV surplus (PV Power - Reserve) #}
                         {% set dynamic_pv_limit = max(pv_power_value - pv_reserve_float, 0) %}
-                        {# Choose the smallest Max-Limit: Hard Limit or Dynamic PV Limit #}
+                        {# Choose the smallest max limit: Hard Limit or Dynamic PV Limit #}
                         {% set final_max_limit = min(max_limit | float(800), dynamic_pv_limit) %}
                         {# Limit the calculated value between 0 and the final_max_limit #}
                         {{ max(min(calculated_limit, final_max_limit), 0) | round(0) }}
@@ -562,20 +546,20 @@ action:
               - conditions:
                   - condition: template
                     value_template: "{{ states(cycle_active) == 'on' or soc_value > soc_start_limit | float(50) }}"
-              sequence:
+                sequence:
                   - variables:
                       offset: 0.0
                       tolerance_high: "{{ offset + tolerance | float(25) }}"
                       tolerance_low: "{{ offset - tolerance | float(25) }}"
-                  # Check if grid power is outside the tolerance
+                    # Check if the grid power is outside the tolerance
                   - condition: template
                     value_template: "{{ grid_power_value > tolerance_high or grid_power_value < tolerance_low }}"
                   - variables:
                       current_limit: "{{ states(solakon_power_limit_number) | float(0) }}"
                       # Deviation from the zero offset
-                      reg_deviation: "{{ grid_power_value - offset }}"
-                      # Suggestion for the new limit (P-Controller)
-                      new_limit_calc: "{{ current_limit + reg_deviation * adj_factor }}"
+                      reg_abweichung: "{{ grid_power_value - offset }}"
+                      # Proposal for the new limit (P-Controller)
+                      new_limit_calc: "{{ current_limit + reg_abweichung * adj_factor }}"
                   - service: number.set_value
                     target:
                       entity_id: !input solakon_power_limit_number
