@@ -120,7 +120,7 @@ blueprint:
     soc_entladezyklus_aktiv:
       name: Discharge Cycle State Storage (Input Select/Dropdown)
       description: Input Select Helper (MUST contain the options 'on' and 'off').
-      default: input_select.soc_entladezyklus_status
+      default: input_select.soc_discharge_cycle_status
       selector:
         entity:
           domain:
@@ -205,7 +205,7 @@ blueprint:
           step: 10.0
           unit_of_measurement: W
           mode: slider
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/main/solakon_one_nulleinspeisung.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/Solakon-ONE-Zero-Export/solakon_one_zeroexport.yaml
 
 mode: queued
 max_exceeded: silent
@@ -569,3 +569,4 @@ action:
 
             default: []
     default: []
+
