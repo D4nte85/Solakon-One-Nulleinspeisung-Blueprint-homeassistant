@@ -674,6 +674,8 @@ action:
       integral_new: >
         {% if grid_error_for_tolerance > tolerance_int %}
           {{ [[-1000, integral_old + error] | max, 1000] | min }}
+        {% elif integral_old | abs > 10 %}
+          {{ integral_old * 0.95 }}  {# 5% Decay wenn keine Korrektur nötig #}
         {% else %}
           {{ integral_old }}  # ← NICHT aufaddieren bei Toleranz!
         {% endif %}
@@ -760,6 +762,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   # Warte 3 Sekunden auf Stabilisierung des Geräts nach Leistungsänderung
   - delay: '00:00:03'
+
 
 
 
