@@ -223,7 +223,7 @@ variables:
   tolerance: !input nulleinspeisung_toleranz
   adj_factor: !input anpassungs_faktor
   offset_value: !input nulleinspeisung_offset
-  cycle_active_helper: !input soc_entladezyklus_aktiv
+  cycle_active: !input soc_entladezyklus_aktiv
   pv_reserve: !input pv_charge_reserve
   max_limit: !input max_active_power_limit
 
@@ -549,6 +549,7 @@ action:
 
             default: []
     default: []
+
 
 
 
