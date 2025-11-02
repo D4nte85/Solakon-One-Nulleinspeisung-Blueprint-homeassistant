@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung⚡ (V162)
+  name: Solakon ONE Nulleinspeisung⚡ (V163)
   description: |
     **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonenlogik**
 
@@ -555,6 +555,7 @@ action:
 
             default: []
     default: []
+
 
 
 
