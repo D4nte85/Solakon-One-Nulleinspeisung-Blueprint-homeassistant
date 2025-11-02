@@ -670,10 +670,12 @@ action:
         {% endif %}
       
       # 2. Integral mit Anti-Windup
-      integral_old: "{{ states(integral_entity) | float(0) }}"
-      integral_new_unbounded: "{{ integral_old + error }}"
       integral_new: >
-        {{ [[-1000, integral_new_unbounded] | max, 1000] | min }}
+        {% if grid_error_for_tolerance > tolerance_int %}
+          {{ [[-1000, integral_old + error] | max, 1000] | min }}
+        {% else %}
+          {{ integral_old }}  # ← NICHT aufaddieren bei Toleranz!
+        {% endif %}
       
       # 3. PI-Korrektur (P-Anteil + I-Anteil)
       power_correction_pi: >
@@ -757,6 +759,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   # Warte 3 Sekunden auf Stabilisierung des Geräts nach Leistungsänderung
   - delay: '00:00:03'
+
 
 
 
