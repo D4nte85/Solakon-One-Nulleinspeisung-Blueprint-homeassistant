@@ -30,7 +30,7 @@ blueprint:
     #### 2. Zone: Batterieschonende Regelung (Zwischen-SOC)
     * **Bedingung:** SOC zwischen Unterer (`soc_conservation_limit`) und Oberer Schwelle, UND Entladezyklus inaktiv.
     * **Aktion:** **Max. Entladestrom** wird auf **0 A** gesetzt (Entnahme nur über AC-Limit).
-    * **Regelung:** PI-Regler mit **Negativen Nullpunkt-Offset** (z.B. -30 W) zur Verschiebung des Regelziels hin zu leichtem **Netzbezug** (Laden).
+    * **Regelung:** PI-Regler mit **Nullpunkt-Offset** (z.B. 30 W) zur Verschiebung des Regelziels hin zu leichtem **Netzbezug** (Laden).
     * **Dynamische Obergrenze:** Entladeleistung wird durch **Max(0, PV - Reserve)** gedeckelt.
     * **Nachtabschaltung:** Optional kann Zone 2 bei PV < Schwelle deaktiviert werden (Zone 1 bleibt aktiv).
 
@@ -762,6 +762,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   # Warte 3 Sekunden auf Stabilisierung des Geräts nach Leistungsänderung
   - delay: '00:00:03'
+
 
 
 
