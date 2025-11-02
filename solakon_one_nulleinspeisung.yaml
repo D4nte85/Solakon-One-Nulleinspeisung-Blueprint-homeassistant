@@ -411,7 +411,7 @@ action:
               # --- 4a. START der Schon-Regelung ---
               - conditions:
                   - condition: template
-                    value_template: "{{ pv_power > pv_reserve_float and current_mode != 'INV Discharge (PV Priority)' }}"
+                    value_template: "{{ pv_power_sensor > pv_reserve_float and current_mode != 'INV Discharge (PV Priority)' }}"
                 sequence:
                   - service: number.set_value
                     target:
@@ -441,7 +441,7 @@ action:
               # --- 4b. STOPP der Schon-Regelung ---
               - conditions:
                   - condition: template
-                    value_template: "{{ pv_power <= pv_reserve_float and current_mode == 'INV Discharge (PV Priority)' }}"
+                    value_template: "{{ pv_power_sensor <= pv_reserve_float and current_mode == 'INV Discharge (PV Priority)' }}"
                 sequence:
                   - service: number.set_value
                     target:
@@ -522,7 +522,7 @@ action:
                     data:
                       value: >
                         {% set calculated_limit = new_limit_calc | float(0) %}
-                        {% set dynamic_pv_limit = max(pv_power - pv_reserve | float(50), 0) %}
+                        {% set dynamic_pv_limit = max(pv_power_sensor - pv_reserve | float(50), 0) %}
                         {% set final_max_limit = min(max_limit | float(800), dynamic_pv_limit) %}
                         {{ max(min(calculated_limit, final_max_limit), 0) | round(0) }}
 
@@ -549,6 +549,7 @@ action:
 
             default: []
     default: []
+
 
 
 
