@@ -256,89 +256,41 @@ action:
       timeout_value: "{{ states(countdown_sensor) | int(-1) }}"
       error_log_message: "Solakon ONE Blueprint Fehler:"
 
-  # --- Input-Validierung ---
-  - choose:
-      # Fall 1: SOC-Schwellenwerte sind ungültig/vertauscht
-      - conditions:
+# --- Input-Validierung ---
+ - choose:
+  # PRÜFUNG A: SOC-Limits
+  - conditions:
+      - condition: template
+        value_template: "{{ soc_fast_limit_int <= soc_conservation_limit_int }}"
+    sequence:
+      - service: system_log.write
+        data:
+          level: error
+          message: "Solakon ONE Blueprint Fehler Die obere SOC-Schwelle ({{ soc_fast_limit_int }}%) muss größer sein als die untere SOC-Schwelle ({{ soc_conservation_limit_int }}%). Automatisierung gestoppt."
+      - stop: Die SOC-Limits sind falsch gesetzt.
+        
+  # PRÜFUNG B: Kritische Entitäten verfügbar
+  - conditions:
+      - condition: or
+        conditions:
+          # SOC und Timeout-Countdown: Prüfe direkt auf 'unknown'/'unavailable'
           - condition: template
-            value_template: "{{ soc_start_limit | float(0) <= soc_stop_limit | float(0) }}"
-        sequence:
-          - service: system_log.write
-            data:
-              logger: automation.solakon_zero_export
-              level: error
-              message: >
-                {{ error_log_message }} Der obere SOC-Schwellenwert ({{ soc_start_limit }}%) muss
-                größer sein als der untere SOC-Schwellenwert ({{ soc_stop_limit }}%).
-                Bitte passen Sie die Werte an. Automation gestoppt.
-          - stop: Ungültige Schwellenwerte
-
-      # Fall 2.1: SOC-Sensor
-      - conditions:
+            value_template: >
+              {{ is_state(soc, 'unknown') or is_state(soc, 'unavailable') or
+                 is_state(timeout_countdown, 'unknown') or is_state(timeout_countdown, 'unavailable') }}
+          # Grid Power: Wird später geprüft (nach Variables)
+          # Modus-Selektor
           - condition: template
-            value_template: "{{ soc_value == -1 or states(solakon_soc_sensor) in ['unknown', 'unavailable'] }}"
-        sequence:
-          - service: system_log.write
-            data:
-              logger: automation.solakon_zero_export
-              level: error
-              message: >
-                {{ error_log_message }} SOC-Sensor ({{ solakon_soc_sensor }}) ist UNKNOWN/UNAVAILABLE oder hat ungültige Werte. Automation gestoppt.
-          - stop: SOC-Entität fehlerhaft
-
-      # Fall 2.2: Remote Timeout Countdown Sensor
-      - conditions:
+            value_template: "{{ is_state(solakon_mode, 'unknown') or is_state(solakon_mode, 'unavailable') }}"
+          # Active Power Number
           - condition: template
-            value_template: "{{ timeout_value == -1 or states(countdown_sensor) in ['unknown', 'unavailable'] }}"
-        sequence:
-          - service: system_log.write
-            data:
-              logger: automation.solakon_zero_export
-              level: error
-              message: >
-                {{ error_log_message }} Remote Timeout Countdown Sensor ({{ countdown_sensor }}) ist UNKNOWN/UNAVAILABLE oder hat ungültige Werte. Automation gestoppt.
-          - stop: Timeout-Entität fehlerhaft
-
-      # Fall 2.3: Netzleistungs-Sensor
-      - conditions:
-          - condition: template
-            value_template: "{{ states(grid_power_sensor) in ['unknown', 'unavailable'] }}"
-        sequence:
-          - service: system_log.write
-            data:
-              logger: automation.solakon_zero_export
-              level: error
-              message: >
-                {{ error_log_message }} Netzleistungs-Sensor ({{ grid_power_sensor }}) ist UNKNOWN/UNAVAILABLE. Automation gestoppt.
-          - stop: Netzleistungs-Entität fehlerhaft
-
-      # Fall 2.4: Ausgangsleistungsregler (Number)
-      - conditions:
-          - condition: template
-            value_template: "{{ states(solakon_power_limit_number) in ['unknown', 'unavailable'] }}"
-        sequence:
-          - service: system_log.write
-            data:
-              logger: automation.solakon_zero_export
-              level: error
-              message: >
-                {{ error_log_message }} Ausgangsleistungsregler ({{ solakon_power_limit_number }}) ist UNKNOWN/UNAVAILABLE. Automation gestoppt.
-          - stop: Leistungsregler-Entität fehlerhaft
-
-      # Fall 2.5: Betriebsmodus-Auswahl (Select)
-      - conditions:
-          - condition: template
-            value_template: "{{ states(solakon_mode_select) in ['unknown', 'unavailable'] }}"
-        sequence:
-          - service: system_log.write
-            data:
-              logger: automation.solakon_zero_export
-              level: error
-              message: >
-                {{ error_log_message }} Betriebsmodus-Auswahl ({{ solakon_mode_select }}) ist UNKNOWN/UNAVAILABLE. Automation gestoppt.
-          - stop: Modus-Select-Entität fehlerhaft
-
-    default: []
+            value_template: "{{ state_attr(active_power_entity, 'min') is none }}"
+    sequence:
+      - service: system_log.write
+        data:
+          level: error
+          message: "Solakon ONE Blueprint Fehler Eine oder mehrere kritische Entitäten (SOC, Timeout-Sensor, Ausgangsleistungsregler) sind UNVERFÜGBAR oder haben ungültige Werte. Automatisierung gestoppt."
+      - stop: Kritische Entitäten sind fehlerhaft.
 
   - variables:
       cycle_active: "{{ is_state(cycle_active_helper, 'on') }}"
@@ -603,5 +555,6 @@ action:
 
             default: []
     default: []
+
 
 
