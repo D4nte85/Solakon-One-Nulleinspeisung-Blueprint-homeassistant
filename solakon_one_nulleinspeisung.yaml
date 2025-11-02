@@ -260,12 +260,12 @@ action:
     # PRÜFUNG A: SOC-Limits
     - conditions:
         - condition: template
-          value_template: "{{ soc_fast_limit_int <= soc_conservation_limit_int }}"
+          value_template: "{{ soc_start_limit <= soc_stop_limit }}"
       sequence:
         - service: system_log.write
           data:
             level: error
-            message: "Solakon ONE Blueprint Fehler Die obere SOC-Schwelle ({{ soc_fast_limit_int }}%) muss größer sein als die untere SOC-Schwelle ({{ soc_conservation_limit_int }}%). Automatisierung gestoppt."
+            message: "Solakon ONE Blueprint Fehler Die obere SOC-Schwelle ({{ soc_start_limit}}%) muss größer sein als die untere SOC-Schwelle ({{ soc_stop_limit }}%). Automatisierung gestoppt."
         - stop: Die SOC-Limits sind falsch gesetzt.
           
     # PRÜFUNG B: Kritische Entitäten verfügbar
@@ -276,7 +276,7 @@ action:
             - condition: template
               value_template: >
                 {{ is_state(solakon_soc_sensor, 'unknown') or is_state(solakon_soc_sensor, 'unavailable') or
-                   is_state(timeout_countdown, 'unknown') or is_state(timeout_countdown, 'unavailable') }}
+                   is_state(countdown_sensor, 'unknown') or is_state(countdown_sensor, 'unavailable') }}
             # Grid Power: Wird später geprüft (nach Variables)
             # Modus-Selektor
             - condition: template
@@ -549,6 +549,7 @@ action:
 
             default: []
     default: []
+
 
 
 
