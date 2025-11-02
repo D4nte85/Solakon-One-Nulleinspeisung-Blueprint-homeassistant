@@ -646,6 +646,9 @@ action:
       max_zone_2_limit: >
         {% set pv_minus_reserve = states(solar_power) | float(0) - pv_charge_reserve_int %}
         {{ [0, pv_minus_reserve] | max }}
+        
+      # Toleranzprüfung basiert auf tatsächlichem Grid-Fehler (nicht begrenzt)
+      grid_error_for_tolerance: "{{ (grid_power_float - target_offset) | abs }}"
       
       # PI-Regler Berechnung
       # 1. Aktueller Fehler 
@@ -734,8 +737,6 @@ action:
     data:
       entity_id: !input integral_helper
       value: "{{ integral_new }}"
-
-  grid_error_for_tolerance: "{{ (grid_power_float - target_offset) | abs }}"
   
   # 4. Power Limit setzen (Nur wenn Toleranz überschritten ist)
   - condition: template
@@ -747,6 +748,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   # Warte 3 Sekunden auf Stabilisierung des Geräts nach Leistungsänderung
   - delay: '00:00:03'
+
 
 
 
