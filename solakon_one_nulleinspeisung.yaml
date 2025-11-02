@@ -256,48 +256,42 @@ action:
       timeout_value: "{{ states(countdown_sensor) | int(-1) }}"
       error_log_message: "Solakon ONE Blueprint Fehler:"
 
- # --- Input-Validierung ---
   - choose:
-   # PRÜFUNG A: SOC-Limits
-   - conditions:
-       - condition: template
-         value_template: "{{ soc_fast_limit_int <= soc_conservation_limit_int }}"
-     sequence:
-       - service: system_log.write
-         data:
-           level: error
-           message: "Solakon ONE Blueprint Fehler Die obere SOC-Schwelle ({{ soc_fast_limit_int }}%) muss größer sein als die untere SOC-Schwelle ({{ soc_conservation_limit_int }}%). Automatisierung gestoppt."
-       - stop: Die SOC-Limits sind falsch gesetzt.
-        
-   # PRÜFUNG B: Kritische Entitäten verfügbar
-   - conditions:
-       - condition: or
-         conditions:
-           # SOC und Timeout-Countdown: Prüfe direkt auf 'unknown'/'unavailable'
-           - condition: template
-             value_template: >
-               {{ is_state(soc, 'unknown') or is_state(soc, 'unavailable') or
-                  is_state(timeout_countdown, 'unknown') or is_state(timeout_countdown, 'unavailable') }}
-           # Grid Power: Wird später geprüft (nach Variables)
-           # Modus-Selektor
-           - condition: template
-             value_template: "{{ is_state(solakon_mode, 'unknown') or is_state(solakon_mode, 'unavailable') }}"
-           # Active Power Number
-           - condition: template
-             value_template: "{{ state_attr(active_power_entity, 'min') is none }}"
-    sequence:
-      - service: system_log.write
-        data:
-          level: error
-          message: "Solakon ONE Blueprint Fehler Eine oder mehrere kritische Entitäten (SOC, Timeout-Sensor, Ausgangsleistungsregler) sind UNVERFÜGBAR oder haben ungültige Werte. Automatisierung gestoppt."
-      - stop: Kritische Entitäten sind fehlerhaft.
-
-  - variables:
-      cycle_active: "{{ is_state(cycle_active_helper, 'on') }}"
-      grid_power: "{{ states(grid_power_sensor) | float(0) }}"
-      pv_power: "{{ states(pv_power_sensor) | float(0) }}"
-      current_mode: "{{ states(solakon_mode) }}"
-      pv_reserve_float: "{{ pv_reserve | float(50) }}"
+    # PRÜFUNG A: SOC-Limits
+    - conditions:
+        - condition: template
+          value_template: "{{ soc_fast_limit_int <= soc_conservation_limit_int }}"
+      sequence:
+        - service: system_log.write
+          data:
+            level: error
+            message: "Solakon ONE Blueprint Fehler Die obere SOC-Schwelle ({{ soc_fast_limit_int }}%) muss größer sein als die untere SOC-Schwelle ({{ soc_conservation_limit_int }}%). Automatisierung gestoppt."
+        - stop: Die SOC-Limits sind falsch gesetzt.
+          
+    # PRÜFUNG B: Kritische Entitäten verfügbar
+    - conditions:
+        - condition: or
+          conditions:
+            # SOC und Timeout-Countdown: Prüfe direkt auf 'unknown'/'unavailable'
+            - condition: template
+              value_template: >
+                {{ is_state(soc, 'unknown') or is_state(soc, 'unavailable') or
+                   is_state(timeout_countdown, 'unknown') or is_state(timeout_countdown, 'unavailable') }}
+            # Grid Power: Wird später geprüft (nach Variables)
+            # Modus-Selektor
+            - condition: template
+              value_template: "{{ is_state(solakon_mode, 'unknown') or is_state(solakon_mode, 'unavailable') }}"
+            # Active Power Number
+            - condition: template
+              value_template: "{{ state_attr(active_power_entity, 'min') is none }}"
+      sequence:
+        - service: system_log.write
+          data:
+            level: error
+            message: "Solakon ONE Blueprint Fehler Eine oder mehrere kritische Entitäten (SOC, Timeout-Sensor, Ausgangsleistungsregler) sind UNVERFÜGBAR oder haben ungültige Werte. Automatisierung gestoppt."
+        - stop: Kritische Entitäten sind fehlerhaft.
+          
+    default:
 
   # --- MODUS-UMSCHALTUNG UND ZYKLUS-STEUERUNG ---
   - choose:
@@ -555,6 +549,7 @@ action:
 
             default: []
     default: []
+
 
 
 
