@@ -283,7 +283,7 @@ action:
               value_template: "{{ is_state(solakon_mode, 'unknown') or is_state(solakon_mode, 'unavailable') }}"
             # Active Power Number
             - condition: template
-              value_template: "{{ state_attr(active_power_entity, 'min') is none }}"
+              value_template: "{{ state_attr(solakon_power_limit_number, 'min') is none }}"
       sequence:
         - service: system_log.write
           data:
@@ -549,6 +549,7 @@ action:
 
             default: []
     default: []
+
 
 
 
