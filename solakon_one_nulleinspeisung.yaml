@@ -230,12 +230,8 @@ variables:
 trigger:
   - platform: state
     entity_id: !input shelly_grid_power_sensor
-    for:
-      seconds: 3
   - platform: state
     entity_id: !input solakon_solar_power_sensor
-    for:
-      seconds: 3
   - platform: numeric_state
     entity_id: !input solakon_soc_sensor
     above: !input soc_fast_limit
@@ -571,5 +567,6 @@ action:
 
             default: []
     default: []
+
 
 
