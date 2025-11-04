@@ -55,14 +55,21 @@ Der Blueprint nutzt einen modernen **PI-Regler** statt eines einfachen P-Reglers
   - Konfigurierbare Geschwindigkeit über den **I-Faktor** (z.B. 0.05)
   - **Anti-Windup:** Begrenzt auf ±1000 Punkte
   - **Automatischer Reset:** Bei jedem Zonenwechsel auf 0 zurückgesetzt
+  - **Toleranz-Decay:** 5% Abbau wenn keine Korrektur nötig (verhindert unnötiges Aufaddieren)
 
 * **Messprinzip:** 
   - Basiert auf dem **Netz-Leistungssensor** (z.B. Shelly 3EM)
   - **Positive Werte = Bezug**, **Negative Werte = Einspeisung**
   - Keine Verzögerung - sofortige Reaktion auf Sensor-Änderungen
 
+* **Fehlerberechnung mit dynamischer Begrenzung:**
+  - **Zone 1:** Fehler = Min(verfügbare Kapazität, Grid Power)
+  - **Zone 2:** Fehler = Min(verfügbare Kapazität, Grid Power - Offset, PV-Kapazität)
+  - Verhindert Integral-Windup durch intelligente Begrenzung
+
 * **Leistungsbegrenzung:**
-  - Oberes Hard Limit (z.B. 800 W)
+  - Oberes Hard Limit (z.B. 800 W) in Zone 1
+  - Dynamisches PV-basiertes Limit in Zone 2
   - Unteres Limit: fest 0 W
 
 ---
@@ -73,7 +80,7 @@ Die Regelung wird anhand des aktuellen SOC in drei Betriebsmodi unterteilt:
 
 | Zone | SOC-Bereich | Modus | Max. Entladestrom | Regelziel | Besonderheiten |
 |:-----|:-----------|:------|:-----------------|:---------|:--------------|
-| **1. Aggressive Entladung** | SOC > 50% | `INV Discharge (PV Priority)` | 40 A | 0 W (exakte Nulleinspeisung) | Läuft **durchgehend bis SOC ≤ 20%** (kein Yo-Yo-Effekt). Auch nachts aktiv. |
+| **1. Aggressive Entladung** | SOC > 50% | `INV Discharge (PV Priority)` | 40 A | 0 W (exakte Nulleinspeisung) | Läuft **durchgehend bis SOC ≤ 20%** (kein Yo-Yo-Effekt). Auch nachts aktiv. Hard Limit 800W. |
 | **2. Batterieschonend** | 20% < SOC ≤ 50% | `INV Discharge (PV Priority)` | **0 A** (nur AC-Limit) | 30 W (leichter Netzbezug = Laden) | Dynamisches Limit: **Max(0, PV - Reserve)**. Optional: Nachtabschaltung möglich. |
 | **3. Sicherheitsstopp** | SOC ≤ 20% | `Disabled` | 0 A | - | Ausgang = 0 W. Vollständiger Schutz der Batterie. |
 
@@ -81,6 +88,7 @@ Die Regelung wird anhand des aktuellen SOC in drei Betriebsmodi unterteilt:
 - Zone 1 wird **einmal aktiviert** beim Überschreiten von 50% SOC und läuft dann durch bis 20% erreicht wird
 - Zone 2 startet nur aus Zone 3 (beim Laden von unter 20% auf über 20%)
 - Dies verhindert ständiges Hin- und Herwechseln zwischen den Zonen
+- **Max. Entladestrom** wird automatisch gesteuert: 40A in Zone 1, 0A in Zone 2
 
 ---
 
@@ -92,7 +100,7 @@ Die Nachtabschaltung kann optional aktiviert werden und betrifft **nur Zone 2**:
 * **Schwelle:** PV-Leistung unter konfiguriertem Wert (z.B. 10 W)
 * **Verhalten:**
   - **Zone 1:** Läuft auch nachts weiter (hoher SOC → aggressive Entladung gewünscht)
-  - **Zone 2:** Wird bei PV < Schwelle auf `Disabled` gesetzt
+  - **Zone 2:** Wird bei PV < Schwelle auf `Disabled` gesetzt (Integral wird zurückgesetzt)
   - **Zone 3:** Ohnehin deaktiviert
 * **Sinnvoll für:** Batterieschonung bei 0 PV, wenn keine Grundlast vorhanden ist
 
@@ -107,9 +115,14 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
    - Trigger: Countdown fällt unter 120s
    
 2. **Forcierter Reset bei Moduswechsel:**
-   - Zweistufige Puls-Sequenz: 10s → 3599s
+   - Zweistufige Puls-Sequenz: 10s → 3599s (mit 1s Verzögerung)
    - Stellt sichere Modusübernahme sicher
    - Verhindert Timeout-Fehler
+
+3. **3-Sekunden-Wartezeit nach Leistungsänderung:**
+   - Nach jedem Setzen des AC-Output-Limits wartet der Blueprint 3 Sekunden
+   - Gibt dem Wechselrichter Zeit zur Stabilisierung
+   - Verhindert zu schnelle aufeinanderfolgende Änderungen
 
 ---
 
@@ -138,12 +151,13 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 |:----------|:---------|:----|:----|:-------------|
 | **P-Faktor** | 1.5 | 0.1 | 5.0 | Proportional-Verstärkung. Höher = aggressiver, schneller. |
 | **I-Faktor** | 0.05 | 0.01 | 0.2 | Integral-Verstärkung. Höher = schnellere Fehlerkorrektur, aber instabiler. |
-| **Toleranzbereich** | 25 W | 0 W | 200 W | Totband um Nullpunkt. Keine Korrektur innerhalb dieser Zone. |
+| **Toleranzbereich** | 25 W | 0 | 200 W | Totband um Regelziel. Keine Korrektur innerhalb dieser Zone. |
 
 **Tuning-Tipps:**
 - **Zu langsam?** → P-Faktor erhöhen (z.B. 2.0) oder I-Faktor erhöhen (z.B. 0.08)
 - **Schwingt/Überschwingt?** → P-Faktor senken (z.B. 1.0) oder I-Faktor senken (z.B. 0.03)
 - **Permanente Mini-Korrekturen?** → Toleranzbereich erhöhen (z.B. 35 W)
+- **Integral läuft hoch obwohl stabil?** → Toleranz-Decay greift automatisch (5% Abbau)
 
 ---
 
@@ -155,7 +169,7 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 | **Zone 3 Stopp** | 20 % | 1 % | 49 % | Untere Schwelle. Unterschreiten stoppt Entladung komplett. |
 | **Max. Entladestrom Zone 1** | 40 A | 0 A | 40 A | Entladestrom in Zone 1. Zone 2 nutzt automatisch 0 A. |
 
-**Wichtig:** Obere Schwelle muss **größer** als untere Schwelle sein!
+**Wichtig:** Obere Schwelle muss **größer** als untere Schwelle sein! Blueprint validiert dies beim Start.
 
 ---
 
@@ -163,13 +177,14 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
-| **Nullpunkt-Offset** | 30 W | 0 W | 200 W | Regelziel in Zone 2. Positiv = leichter Netzbezug (Batterie wird geladen). |
-| **PV-Ladereserve** | 50 W | 0 W | 1000 W | Reservierte PV-Leistung für Ladung. Dynamisches Limit: Max(0, PV - Reserve). |
+| **Nullpunkt-Offset** | 30 W | 0 | 100 W | Regelziel in Zone 2. Positiv = leichter Netzbezug (Batterie wird geladen). 0W = exakte Nulleinspeisung. |
+| **PV-Ladereserve** | 50 W | 0 | 1000 W | Reservierte PV-Leistung für Ladung. Dynamisches Limit: Max(0, PV - Reserve). |
 
 **Erklärung PV-Ladereserve:**
 - Bei 300W PV-Erzeugung und 50W Reserve → Max. Ausgang in Zone 2: 250W
 - Stellt sicher, dass auch bei Trickle-Charge immer etwas für die Batterie übrig bleibt
 - Gleicht Wandlerverluste aus
+- Wird automatisch in der Fehlerberechnung des PI-Reglers berücksichtigt
 
 ---
 
@@ -177,7 +192,7 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
-| **Max. Ausgangsleistung** | 800 W | 0 W | 1200 W | Absolute Obergrenze (Hard Limit) zum Schutz des Wechselrichters. |
+| **Max. Ausgangsleistung** | 800 W | 0 | 1200 W | Absolute Obergrenze (Hard Limit) in Zone 1 zum Schutz des Wechselrichters. |
 
 ---
 
@@ -202,6 +217,7 @@ Nullpunkt-Offset: 50W
 PV-Ladereserve: 100W
 P-Faktor: 1.5
 I-Faktor: 0.05
+Toleranzbereich: 30W
 ```
 
 ### Für maximale Eigenverbrauchsoptimierung:
@@ -212,6 +228,7 @@ Nullpunkt-Offset: 20W
 PV-Ladereserve: 30W
 P-Faktor: 2.0
 I-Faktor: 0.08
+Toleranzbereich: 20W
 ```
 
 ### Für ausgewogenen Betrieb (Standard):
@@ -224,6 +241,7 @@ P-Faktor: 1.5
 I-Faktor: 0.05
 Max. Ausgangsleistung: 800W
 Toleranzbereich: 25W
+Max. Entladestrom Zone 1: 40A
 ```
 
 ---
@@ -235,25 +253,29 @@ Toleranzbereich: 25W
 **Morgens (06:00 - SOC: 25%)**
 - Zone 2 aktiv (20% < SOC ≤ 50%)
 - PV steigt langsam an
-- Max. Entladestrom: 0A (batterieschonend)
+- Max. Entladestrom: **0A** (automatisch gesetzt - batterieschonend)
 - Regelziel: 30W (leichter Netzbezug)
+- Dynamisches Limit: Max(0, PV - 50W)
 - Batterie wird geladen
 
 **Mittags (12:00 - SOC: 55%)**
 - Zone 1 aktiviert (SOC > 50%)
-- Max. Entladestrom: 40A
+- Max. Entladestrom: **40A** (automatisch gesetzt)
 - Regelziel: 0W (exakte Nulleinspeisung)
+- Hard Limit: 800W
 - Aggressive Entladung bei Lastspitzen
 - **Bleibt aktiv, auch wenn SOC wieder unter 50% fällt!**
 
 **Abends (20:00 - SOC: 22%)**
 - Zone 1 immer noch aktiv (läuft bis 20%)
+- Max. Entladestrom: weiterhin 40A
 - Regelziel: weiterhin 0W
 - Optional: Nachtabschaltung nicht aktiv (Zone 1 läuft weiter)
 
 **Nacht (22:00 - SOC: 19%)**
 - Zone 3 aktiviert (SOC ≤ 20%)
 - Modus: `Disabled`
+- Max. Entladestrom: **0A** (automatisch gesetzt)
 - Ausgang: 0W
 - Batterie geschützt
 
@@ -270,8 +292,51 @@ Der Blueprint validiert die Konfiguration beim Start. Fehler werden im **System-
 | **Die obere SOC-Schwelle muss größer sein als die untere** | Schwellenwerte falsch konfiguriert | Obere Schwelle (z.B. 50%) > Untere Schwelle (z.B. 20%) |
 | **SOC-Sensor ist UNKNOWN/UNAVAILABLE** | Solakon Integration offline | Prüfen Sie die Verbindung zum Wechselrichter |
 | **Timeout Countdown Sensor ist UNKNOWN/UNAVAILABLE** | Sensor nicht verfügbar | Prüfen Sie die Solakon Integration |
-| **Netzleistungs-Sensor ist UNKNOWN/UNAVAILABLE** | Shelly/Smart Meter offline | Prüfen Sie die Shelly-Verbindung |
-| **Ausgangsleistungsregler ist UNKNOWN/UNAVAILABLE** | Number-Entity fehlt | Prüfen Sie die Solakon Integration |
+| **Modus-Selektor ist UNKNOWN/UNAVAILABLE** | Select-Entity fehlt | Prüfen Sie die Solakon Integration |
+| **Ausgangsleistungsregler hat keine min-Attribute** | Number-Entity fehlerhaft | Prüfen Sie die Solakon Integration |
+
+---
+
+## ⚙️ Technische Details
+
+### PI-Regler Implementierung
+
+**Fehlerberechnung (je nach Zone):**
+```yaml
+Zone 1: error = Min(verfügbare_Kapazität, grid_power)
+Zone 2: error = Min(verfügbare_Kapazität, grid_power - offset, pv_kapazität)
+```
+
+**Integral-Logik mit Toleranz-Decay:**
+```yaml
+Wenn |grid_error| > tolerance:
+  integral_new = Clamp(integral_old + error, -1000, 1000)
+Sonst wenn |integral_old| > 10:
+  integral_new = integral_old * 0.95  # 5% Abbau
+Sonst:
+  integral_new = integral_old  # Keine Änderung
+```
+
+**PI-Korrektur:**
+```yaml
+correction = error * P_Factor + integral_new * I_Factor
+new_power = current_power + correction
+```
+
+**Finale Leistung (mit zonabhängiger Begrenzung):**
+```yaml
+Zone 1: final_power = Min(hard_limit, new_power)
+Zone 2: final_power = Min(max(0, PV - reserve), new_power)
+```
+
+### Automatische Entladestrom-Steuerung
+
+Der Blueprint setzt den **Max. Entladestrom** automatisch:
+- **Zone 1 (Aggressive Entladung):** Prüfung ob aktueller Wert ≠ 40A → Setzen auf 40A
+- **Zone 2 (Batterieschonend):** Prüfung ob aktueller Wert ≠ 0A → Setzen auf 0A
+- **Zone 3 (Sicherheit):** Entladestrom bleibt auf letztem Wert (meist 0A aus Zone 2)
+
+**Wichtig:** Änderungen werden nur vorgenommen, wenn der aktuelle Wert vom Sollwert abweicht (verhindert unnötige API-Calls).
 
 ---
 
@@ -283,5 +348,23 @@ Der Blueprint validiert die Konfiguration beim Start. Fehler werden im **System-
 4. **PI-Regler Tuning:** Die Standardwerte sind konservativ. Bei instabilem Verhalten I-Faktor senken.
 5. **Integral-Helper:** Wird automatisch verwaltet - nicht manuell ändern!
 6. **Queued-Modus:** Trigger werden sequentiell abgearbeitet
-7. **Keine Verzögerung:** Der Blueprint reagiert sofort auf Sensor-Änderungen
+7. **Keine Trigger-Verzögerung:** Der Blueprint reagiert sofort auf Sensor-Änderungen
+8. **3-Sekunden-Wartezeit:** Nach jeder Leistungsänderung wartet der Blueprint 3 Sekunden
+9. **Entladestrom-Automatik:** Max. Entladestrom wird vollautomatisch gesteuert - keine manuelle Einstellung nötig
+10. **Toleranz-Decay:** Verhindert automatisch Integral-Windup bei stabiler Regelung
 
+---
+
+## 🔄 Trigger-Übersicht
+
+Der Blueprint reagiert auf folgende Events:
+
+| Trigger | ID | Verzögerung | Beschreibung |
+|:--------|:---|:------------|:-------------|
+| Grid Power Change | `grid_power_change` | keine | Sofortige PI-Regelung bei Netzleistungsänderung |
+| Solar Power Change | `solar_power_change` | keine | Dynamisches PV-Limit in Zone 2 |
+| SOC High | `soc_high` | keine | Zone 1 Start (SOC > 50%) |
+| SOC Low | `soc_low` | keine | Zone 3 Start (SOC ≤ 20%) |
+| Mode Change | `mode_change` | keine | Reagiert auf externe Modusänderungen |
+
+**Alle Trigger** führen die komplette Logik aus - keine separate Behandlung nötig.
