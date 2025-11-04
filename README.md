@@ -353,12 +353,12 @@ Der Blueprint setzt den **Max. Entladestrom** automatisch:
 
 Der Blueprint reagiert auf folgende Events:
 
-| Trigger | ID | Verzögerung | Beschreibung |
-|:--------|:---|:------------|:-------------|
-| Grid Power Change | `grid_power_change` | keine | Sofortige PI-Regelung bei Netzleistungsänderung |
-| Solar Power Change | `solar_power_change` | keine | Dynamisches PV-Limit in Zone 2 |
-| SOC High | `soc_high` | keine | Zone 1 Start (SOC > 50%) |
-| SOC Low | `soc_low` | keine | Zone 3 Start (SOC ≤ 20%) |
-| Mode Change | `mode_change` | keine | Reagiert auf externe Modusänderungen |
+| Trigger | ID | Beschreibung |
+|:--------|:---|:------------|
+| Grid Power Change | `grid_power_change` | Sofortige PI-Regelung bei Netzleistungsänderung |
+| Solar Power Change | `solar_power_change` | Sofortige PI-Regelung bei PV-leistungsänderung |
+| SOC High | `soc_high` | Zone 1 Start (SOC > 50%) |
+| SOC Low | `soc_low` | Zone 3 Start (SOC ≤ 20%) |
+| Mode Change | `mode_change` | Reagiert auf externe Modusänderungen |
 
 **Alle Trigger** führen die komplette Logik aus - keine separate Behandlung nötig.
