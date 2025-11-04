@@ -344,9 +344,8 @@ Der Blueprint setzt den **Max. Entladestrom** automatisch:
 5. **Integral-Helper:** Wird automatisch verwaltet - nicht manuell ändern!
 6. **Queued-Modus:** Trigger werden sequentiell abgearbeitet
 7. **Keine Trigger-Verzögerung:** Der Blueprint reagiert sofort auf Sensor-Änderungen
-8. **3-Sekunden-Wartezeit:** Nach jeder Leistungsänderung wartet der Blueprint 3 Sekunden
-9. **Entladestrom-Automatik:** Max. Entladestrom wird vollautomatisch gesteuert - keine manuelle Einstellung nötig
-10. **Toleranz-Decay:** Verhindert automatisch Integral-Windup bei stabiler Regelung
+8. **Entladestrom-Automatik:** Max. Entladestrom wird vollautomatisch gesteuert - keine manuelle Einstellung nötig
+9. **Toleranz-Decay:** Verhindert automatisch Integral-Windup bei stabiler Regelung
 
 ---
 
