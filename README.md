@@ -107,7 +107,7 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
    - Trigger: Countdown fällt unter 120s
    
 2. **Forcierter Reset bei Moduswechsel:**
-   - Zweistufige Puls-Sequenz: 1s → 3599s
+   - Zweistufige Puls-Sequenz: 10s → 3599s
    - Stellt sichere Modusübernahme sicher
    - Verhindert Timeout-Fehler
 
