@@ -119,11 +119,6 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
    - Stellt sichere Modusübernahme sicher
    - Verhindert Timeout-Fehler
 
-3. **3-Sekunden-Wartezeit nach Leistungsänderung:**
-   - Nach jedem Setzen des AC-Output-Limits wartet der Blueprint 3 Sekunden
-   - Gibt dem Wechselrichter Zeit zur Stabilisierung
-   - Verhindert zu schnelle aufeinanderfolgende Änderungen
-
 ---
 
 ## 📊 Input-Variablen und Konfiguration
