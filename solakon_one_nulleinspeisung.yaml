@@ -760,27 +760,3 @@ action:
     data:
       entity_id: !input active_power_number
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
-  # Warte 3 Sekunden auf Stabilisierung des Geräts nach Leistungsänderung
-  - delay: '00:00:03'
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
