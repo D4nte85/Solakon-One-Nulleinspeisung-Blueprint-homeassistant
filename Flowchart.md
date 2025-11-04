@@ -40,7 +40,7 @@ graph TD
     P --> Q[INTEGRAL SPEICHERN<br/>input_number setzen]
     
     Q --> R{Fehler > Toleranz?}
-    R -- Ja --> S[ACTIVE POWER SETZEN<br/>Max 0, finale Power runden<br/>3s Wartezeit]
+    R -- Ja --> S[ACTIVE POWER SETZEN<br/>Max 0, finale Power runden]
     S --> END
     R -- Nein --> END
     
