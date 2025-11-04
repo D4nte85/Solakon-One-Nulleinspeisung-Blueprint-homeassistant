@@ -61,10 +61,10 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten, werd
 
 Die Automatisierung reagiert auf folgende kritische Ereignisse, um eine sofortige und stabile Regelung zu gewährleisten:
 
-1.  **Leistungsänderungen (mit 3s Verzögerung):**
-    * Zustandsänderung des **Netz-Leistungssensors** (`shelly_grid_power_sensor`) für $\ge 3$ Sekunden.
-    * Zustandsänderung des **Solarleistungssensors** (`solakon_solar_power_sensor`) für $\ge 3$ Sekunden.
-    * *(Zweck: Löst die stabile P-Regelung aus.)*
+1.  **Leistungsänderungen:**
+    * Zustandsänderung des **Netz-Leistungssensors** (`shelly_grid_power_sensor`)
+    * Zustandsänderung des **Solarleistungssensors** (`solakon_solar_power_sensor`)
+    * *(Zweck: Löst die P-Regelung aus.)*
 2.  **SOC-Schwellwert-Erreichung:**
     * Batterie-SOC (`solakon_soc_sensor`) **über** der **Oberen Schwelle** (`soc_fast_limit`).
     * Batterie-SOC **unter** der **Unteren Schwelle** (`soc_conservation_limit`).
