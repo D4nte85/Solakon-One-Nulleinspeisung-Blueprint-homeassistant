@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Zero Feed-in⚡ (V166)
+  name: Solakon ONE Zero Feed-in⚡ (V167)
   description: |
     **Detailed Function Description: Dynamic Zero Feed-in with SOC Zone Logic**
 
@@ -571,5 +571,6 @@ action:
 
             default: []
     default: []
+
 
 
