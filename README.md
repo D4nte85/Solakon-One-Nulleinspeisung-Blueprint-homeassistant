@@ -6,7 +6,7 @@ Dieses Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung*
 
 Installieren Sie den Blueprint direkt über diesen Button in Ihrer Home Assistant Instanz:
 
-[![Open your Home Assistant instance and show the blueprint import dialog with a pre-filled URL.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2Fexperimental_battery_discharge_limit%2Fsolakon_one_nulleinspeisung.yaml)
+[![Open your Home Assistant instance and show the blueprint import dialog with a pre-filled URL.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2Fmain%2Fsolakon_one_nulleinspeisung.yaml)
 
 ---
 
