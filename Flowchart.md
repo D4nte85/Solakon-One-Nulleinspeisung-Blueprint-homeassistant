@@ -1,42 +1,61 @@
 ```mermaid
 graph TD
-    A[Start: Netzleistung, PV oder SOC Aenderung] --> B{"Kritische Entitaeten vorhanden?"}
-
-    B -- Nein --> Z((STOPP: Kritischer Fehler))
-
-    B -- Ja --> C{"SOC Groesser Obere Schwelle UND Zyklus Aus?"}
-
+    A[Start: Netzleistung, PV oder SOC Änderung] --> B{Kritische Entitäten vorhanden?<br/>SOC Limits korrekt?}
+    B -- Nein --> Z((STOPP: Kritischer Fehler<br/>System Log Eintrag))
+    B -- Ja --> C{SOC > Obere Schwelle<br/>UND Zyklus = off?}
+    
     %% --- ZONE 1 START (Aggressive Entladung) ---
-    C -- Ja --> D[ZONE 1: Aggressive Entladung<br>Modus: Discharge PV Prio setzen<br>Max. Strom: Max Konfig<br>PI-Ziel: 0 W<br>Zyklus: Ein]
+    C -- Ja --> D[ZONE 1 START: Aggressive Entladung<br/>Logbook-Eintrag<br/>Integral Reset auf 0<br/>Zyklus: on setzen<br/>Modus: Discharge PV Prio<br/>Timeout: 10s → 3599s Puls]
     D --> E
-
-    C -- Nein --> E
-
-    E{"Zyklus Ein ODER SOC In-Between Zone 2?"}
-
-    %% --- ZONE 3 / Zyklus End ---
-    E -- Zyklus Ein UND SOC Kleiner Untere Schwelle --> F[ZONE 3: Sicherheits-STOPP<br>Zyklus: Aus<br>Modus: Disabled<br>Active Power: 0 W]
+    
+    C -- Nein --> E{SOC ≤ Untere Schwelle<br/>UND Zyklus = on?}
+    
+    %% --- ZONE 3 START (Sicherheits-STOPP) ---
+    E -- Ja --> F[ZONE 3 START: Sicherheits-STOPP<br/>Logbook-Eintrag<br/>Integral Reset auf 0<br/>Zyklus: off setzen<br/>Modus: Disabled<br/>Active Power: 0 W]
     F --> END((Ende))
-
+    
+    %% --- ZONE 3 Zusatz-Absicherung ---
+    E -- Nein --> G{SOC < Untere Schwelle<br/>UND Zyklus = off<br/>UND Modus ≠ Disabled?}
+    G -- Ja --> H[ZONE 3 ABSICHERUNG<br/>Modus: Disabled<br/>Active Power: 0 W]
+    H --> END
+    
     %% --- ZONE 2 START (Batterieschonend) ---
-    E -- Zyklus Aus UND SOC In-Between Zone 2 --> G{"Nachtabschaltung aktiv UND PV Kleiner Schwelle?"}
-
-    G -- Ja --> F
+    G -- Nein --> I{SOC zwischen Schwellen<br/>UND Zyklus = off<br/>UND Modus ≠ Discharge<br/>UND Tag ODER Nacht-AUS?}
+    I -- Ja --> J[ZONE 2 START: Batterieschonend<br/>Logbook-Eintrag<br/>Integral Reset auf 0<br/>Modus: Discharge PV Prio<br/>Timeout: 10s → 3599s Puls]
+    J --> K
     
-    G -- Nein --> H[ZONE 2: Batterieschonend<br>Modus: Discharge PV Prio setzen<br>Max. Strom: 0 A<br>PI-Ziel: +Offset<br>Power Limit: Max 0, PV - Reserve]
-    H --> I
-
-    %% --- PI-Regler / Kontinuierliche Steuerung ---
-    I{"Modus Discharge aktiv UND Tag?"}
+    %% --- NACHTABSCHALTUNG Zone 2 ---
+    I -- Nein --> L{Nachtabschaltung = on<br/>UND PV < Schwelle<br/>UND Zyklus = off<br/>UND Modus = Discharge?}
+    L -- Ja --> M[NACHTABSCHALTUNG Zone 2<br/>Logbook-Eintrag<br/>Integral Reset auf 0<br/>Modus: Disabled<br/>Active Power: 0 W]
+    M --> END
     
-    I -- Ja --> J[PI-REGLER-LOGIK<br>1. Fehler = Netzleistung - PI-Ziel<br>2. Neue Power = P + I Anteil<br>3. Active Power Limit anwenden<br>4. WENN Fehler Groesser Toleranz: Integral speichern & Power setzen<br>5. WENN Timeout Kleiner 120s: Timeout Reset]
-    J --> END
-
-    I -- Nein --> END
-
-    style D fill:#c9ffc9,stroke:#333
-    style H fill:#c9ffc9,stroke:#333
-    style F fill:#ffcccc,stroke:#333
-    style J fill:#fff7c2,stroke:#333
-    style END fill:#cccccc,stroke:#333
-    style Z fill:#cccccc,stroke:#333
+    %% --- PI-REGLER BLOCK ---
+    L -- Nein --> K{Modus = Discharge<br/>UND Zyklus = on<br/>ODER Tag?}
+    
+    K -- Ja --> N[ENTLADESTROM-STEUERUNG<br/>Zone 1: 40A wenn ≠ 40A<br/>Zone 2: 0A wenn ≠ 0A]
+    N --> O[TIMEOUT-REFRESH<br/>Wenn Countdown < 120s:<br/>10s → 1s Delay → 3599s]
+    
+    O --> P[PI-REGLER BERECHNUNG<br/>1. Fehler Zone 1: Min verfüg. Kapazität, Grid<br/>   Fehler Zone 2: Min verfüg. Kapazität, Grid-Offset, PV-Kapazität<br/>2. Integral: Clamp-1000, +1000 mit Toleranz-Decay<br/>3. Korrektur: error×P + integral×I<br/>4. Neue Power: current + Korrektur<br/>5. Finale Power Zone 1: Min Hard Limit, neue Power<br/>   Finale Power Zone 2: Min PV-Reserve, neue Power]
+    
+    P --> Q[INTEGRAL SPEICHERN<br/>input_number setzen]
+    
+    Q --> R{Fehler > Toleranz?}
+    R -- Ja --> S[ACTIVE POWER SETZEN<br/>Max 0, finale Power runden<br/>3s Wartezeit]
+    S --> END
+    R -- Nein --> END
+    
+    K -- Nein --> END
+    
+    %% --- STYLING ---
+    style D fill:#c9ffc9,stroke:#333,stroke-width:2px
+    style J fill:#c9ffc9,stroke:#333,stroke-width:2px
+    style F fill:#ffcccc,stroke:#333,stroke-width:2px
+    style H fill:#ffcccc,stroke:#333,stroke-width:2px
+    style M fill:#ffd699,stroke:#333,stroke-width:2px
+    style P fill:#fff7c2,stroke:#333,stroke-width:2px
+    style N fill:#d4e6f1,stroke:#333,stroke-width:2px
+    style O fill:#d4e6f1,stroke:#333,stroke-width:2px
+    style Q fill:#d4e6f1,stroke:#333,stroke-width:2px
+    style S fill:#d4e6f1,stroke:#333,stroke-width:2px
+    style END fill:#cccccc,stroke:#333,stroke-width:2px
+    style Z fill:#cccccc,stroke:#333,stroke-width:2px
