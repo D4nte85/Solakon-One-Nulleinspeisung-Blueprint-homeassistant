@@ -1,4 +1,4 @@
-# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V201
+# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V202
 
 Dieses Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung** für den Solakon ONE Wechselrichter, basierend auf einem **PI-Regler (Proportional-Integral-Regler)** und einer intelligenten **dreistufigen Batterieladestands-Logik (SOC)**.
 
