@@ -658,46 +658,54 @@ action:
       # Toleranzprüfung basiert auf tatsächlichem Grid-Fehler (nicht begrenzt)
       grid_error_for_tolerance: "{{ (grid_power_float - target_offset) | abs }}"
       
-      # PI-Regler Berechnung
+     # PI-Regler Berechnung
       # 1. Aktueller Fehler 
       error: >
         {% if is_state(cycle_active, 'on') %}
           {# ZONE 1: Min(verfügbare Kapazität, Grid) #}
-          {{ [(max_active_power_limit_int - current_active_power), grid_power_float] | min }}
+          {{ [(max_active_power_limit_int - current_active_power), grid_power_float] | min | float(0) }}
         {% else %}
           {# ZONE 2: Min(verfügbare Kapazität, Grid, PV-Kapazität) - Offset #}
-          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_int), (max_zone_2_limit - current_active_power)] | min }}
+          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
         {% endif %}
       
       # 2. Integral mit Anti-Windup
       integral_old: "{{ states(integral_entity) | float(0) }}"
       integral_new: >
+        {% set error_float = error | float(0) %}
         {% if grid_error_for_tolerance > tolerance_int %}
-          {{ [[-1000, integral_old + error] | max, 1000] | min }}
+          {{ [[-1000, integral_old + error_float] | max, 1000] | min | float(0) }}
         {% elif integral_old | abs > 10 %}
-          {{ integral_old * 0.95 }}  {# 5% Decay wenn keine Korrektur nötig #}
+          {{ (integral_old * 0.95) | float(0) }}
         {% else %}
-          {{ integral_old }}  # ← NICHT aufaddieren bei Toleranz!
+          {{ integral_old | float(0) }}
         {% endif %}
       
       # 3. PI-Korrektur (P-Anteil + I-Anteil)
       power_correction_pi: >
-        {{ error * regulator_factor_float + integral_new * ki_factor_float }}
+        {% set error_float = error | float(0) %}
+        {% set integral_float = integral_new | float(0) %}
+        {% set p_part = error_float * regulator_factor_float %}
+        {% set i_part = integral_float * ki_factor_float %}
+        {{ (p_part + i_part) | float(0) }}
       
       # 4. Neuer Power-Sollwert
-      new_power_unlimited: "{{ current_active_power + power_correction_pi }}"
+      new_power_unlimited: >
+        {% set correction = power_correction_pi | float(0) %}
+        {{ (current_active_power + correction) | float(0) }}
         
       # 5. Finale Power: Logik in einem Template zusammengefasst
       final_power_calculated: >
-        {% set p_regler_power = new_power_unlimited %}
+        {% set p_regler_power = new_power_unlimited | float(0) %}
         {% if is_state(cycle_active, 'on') %}
           {# ZONE 1: Hard Limit #}
-          {{ [max_active_power_limit_int, p_regler_power] | min }}
+          {{ [max_active_power_limit_int, p_regler_power] | min | float(0) }}
         {% else %}
           {# ZONE 2: Dynamisches PV-Limit #}
-          {{ [max_zone_2_limit, p_regler_power] | min }}
+          {% set max_zone_2 = max_zone_2_limit | float(0) %}
+          {{ [max_zone_2, p_regler_power] | min | float(0) }}
         {% endif %}
-      
+        
   - choose:
       # FALL E.1: Limit für Zone 1 setzen (Aggressiv)
       - conditions:
@@ -760,3 +768,4 @@ action:
     data:
       entity_id: !input active_power_number
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
+
