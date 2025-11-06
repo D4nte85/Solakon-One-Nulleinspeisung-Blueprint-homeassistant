@@ -137,7 +137,7 @@ blueprint:
         - Options: 'on' and 'off' (exactly like this!)
         
         This stores whether the discharge cycle is active (Zone 1).
-      default: input_select.soc_entladezyklus_status
+      default: input_select.soc_discharge_cycle_status
       selector:
         entity:
           domain: input_select
@@ -693,3 +693,4 @@ action:
       new_power_unlimited: >
         {% set correction = power_correction_pi | float(0) %}
         {{ (current_active_power + correction) | float
+
