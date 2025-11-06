@@ -135,6 +135,7 @@ blueprint:
       description: >
         Helper to store integral value.
         Must be an Input Number with range -1000 to 1000, step 1.
+      default: input_number.solakon_integral
       selector:
         entity:
           filter:
@@ -632,3 +633,4 @@ action:
           # Wait for stabilization
           - delay:
               seconds: 3
+
