@@ -46,7 +46,7 @@ blueprint:
     * **Anti-Windup:** Integral value is limited to ±1000 points.
       
   domain: automation
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/experimental_battery_discharge_limit/solakon_one_nulleinspeisung.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/Solakon-ONE-Zero-Export/solakon_one_zeroexport.yaml
   input:
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
     # 🔌 GRID SENSOR (External - e.g., Shelly 3EM)
@@ -693,4 +693,5 @@ action:
       new_power_unlimited: >
         {% set correction = power_correction_pi | float(0) %}
         {{ (current_active_power + correction) | float
+
 
