@@ -46,7 +46,7 @@ blueprint:
     * **Anti-Windup:** Der Integral-Wert ist auf ±1000 Punkte begrenzt.
       
   domain: automation
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/experimental_battery_discharge_limit/solakon_one_nulleinspeisung.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/main/solakon_one_nulleinspeisung.yaml
   input:
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
     # 🔌 NETZ-SENSOR (Extern - z.B. Shelly 3EM)
@@ -768,6 +768,7 @@ action:
     data:
       entity_id: !input active_power_number
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
+
 
 
 
