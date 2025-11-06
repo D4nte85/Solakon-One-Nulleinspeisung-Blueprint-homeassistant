@@ -46,7 +46,7 @@ blueprint:
     * **Anti-Windup:** Integral value is limited to ±1000 points.
       
   domain: automation
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/experimental_battery_discharge_limit/solakon_one_nulleinspeisung.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/Solakon-ONE-Zero-Export/solakon_one_zeroexport.yaml
   input:
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
     # 🔌 GRID SENSOR (External - e.g., Shelly 3EM)
@@ -137,7 +137,7 @@ blueprint:
         - Options: 'on' and 'off' (exactly like this!)
         
         This stores whether the discharge cycle is active (Zone 1).
-      default: input_select.soc_entladezyklus_status
+      default: input_select.soc_discharge_cycle_status
       selector:
         entity:
           domain: input_select
@@ -768,3 +768,4 @@ action:
     data:
       entity_id: !input active_power_number
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
+
