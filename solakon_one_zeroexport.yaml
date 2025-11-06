@@ -46,7 +46,7 @@ blueprint:
     * **Anti-Windup:** Integral value is limited to ±1000 points.
       
   domain: automation
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/Solakon-ONE-Zero-Export/solakon_one_zeroexport.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/experimental_battery_discharge_limit/solakon_one_nulleinspeisung.yaml
   input:
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
     # 🔌 GRID SENSOR (External - e.g., Shelly 3EM)
@@ -137,7 +137,7 @@ blueprint:
         - Options: 'on' and 'off' (exactly like this!)
         
         This stores whether the discharge cycle is active (Zone 1).
-      default: input_select.soc_discharge_cycle_status
+      default: input_select.soc_entladezyklus_status
       selector:
         entity:
           domain: input_select
@@ -692,6 +692,79 @@ action:
       # 4. New power setpoint
       new_power_unlimited: >
         {% set correction = power_correction_pi | float(0) %}
-        {{ (current_active_power + correction) | float
+        {{ (current_active_power + correction) | float(0) }}
+        
+      # 5. Final Power: Logic combined in one template
+      final_power_calculated: >
+        {% set p_regler_power = new_power_unlimited | float(0) %}
+        {% if is_state(cycle_active, 'on') %}
+          {# ZONE 1: Hard Limit #}
+          {{ [max_active_power_limit_int, p_regler_power] | min | float(0) }}
+        {% else %}
+          {# ZONE 2: Dynamic PV Limit #}
+          {% set max_zone_2 = max_zone_2_limit | float(0) %}
+          {{ [max_zone_2, p_regler_power] | min | float(0) }}
+        {% endif %}
+        
+  - choose:
+      # CASE E.1: Set limit for Zone 1 (Aggressive)
+      - conditions:
+          - condition: state
+            entity_id: !input cycle_active_input_select
+            state: 'on'
+          - condition: template
+            value_template: >
+              {# Check if current value does NOT match maximum value #}
+              {{ states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
+        sequence:
+          - service: number.set_value
+            data:
+              entity_id: !input max_discharge_current_number
+              value: "{{ discharge_current_max }}"
+              
+      # CASE E.2: Set limit for Zone 2 (Battery-conserving = 0 A)
+      - conditions:
+          - condition: state
+            entity_id: !input cycle_active_input_select
+            state: 'off'
+          - condition: template
+            value_template: >
+              {# Check if current value does NOT equal 0 A #}
+              {{ states(discharge_current_entity) | float(999) | round(2) != 0 }}
+        sequence:
+          - service: number.set_value
+            data:
+              entity_id: !input max_discharge_current_number
+              value: 0
 
-
+  # 2. Timeout Reset
+  - choose: 
+        # Timeout reset required
+      - conditions:
+          - condition: template
+            value_template: "{{ states(timeout_countdown) | int(9999) < 120 }}"
+        sequence:
+          - service: number.set_value
+            data:
+              entity_id: !input remote_timeout_set_number
+              value: 10
+          - delay: '00:00:01'
+          - service: number.set_value
+            data:
+              entity_id: !input remote_timeout_set_number
+              value: 3599
+              
+  # 3. Save integral
+  - service: input_number.set_value
+    data:
+      entity_id: !input integral_helper
+      value: "{{ integral_new }}"
+      
+  # 4. Set power limit (Only when tolerance is exceeded)
+  - condition: template
+    value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
+  
+  - service: number.set_value
+    data:
+      entity_id: !input active_power_number
+      value: "{{ [0, final_power_calculated] | max | round(0) }}"
