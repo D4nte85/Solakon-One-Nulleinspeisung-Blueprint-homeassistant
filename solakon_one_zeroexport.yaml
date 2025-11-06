@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Zero Export (PI Controller with 3-Stage SOC Logic)
+  name: Solakon ONE Zero Export (PI Controller with 3-Stage SOC Logic) (202)
   description: >
     Dynamic zero export for the Solakon ONE inverter with modern PI controller and intelligent 
     three-stage battery state-of-charge logic. Features automatic discharge current control, 
@@ -629,8 +629,3 @@ action:
               entity_id: !input output_power_control
             data:
               value: "{{ new_power | round(0) }}"
-          
-          # Wait for stabilization
-          - delay:
-              seconds: 3
-
