@@ -665,7 +665,7 @@ action:
           {# ZONE 1: Min(verfügbare Kapazität, Grid) #}
           {{ [(max_active_power_limit_int - current_active_power), grid_power_float] | min | float(0) }}
         {% else %}
-          {# ZONE 2: Min(verfügbare Kapazität, Grid, PV-Kapazität) - Offset #}
+          {# ZONE 2: Min(verfügbare Kapazität, Grid - Offset, PV-Kapazität) #}
           {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
         {% endif %}
       
@@ -768,5 +768,6 @@ action:
     data:
       entity_id: !input active_power_number
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
+
 
 
