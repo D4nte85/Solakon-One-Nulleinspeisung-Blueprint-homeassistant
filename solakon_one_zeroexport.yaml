@@ -630,6 +630,7 @@ action:
       
       # Solar Power
       solar_power: !input solar_power_sensor
+      solar_power_float: "{{ states(solar_power) | float(0) }}"
       
       # Configuration
       tolerance_int: !input tolerance
@@ -644,8 +645,12 @@ action:
         
       # Max Power Limit in Zone 2 = Max(0, PV - Reserve)
       max_zone_2_limit: >
-        {% set pv_minus_reserve = states(solar_power) | float(0) - pv_charge_reserve_int %}
-        {{ [0, pv_minus_reserve] | max }}
+        {% set pv_minus_reserve = solar_power_float - pv_charge_reserve_int %}
+        {% if pv_minus_reserve > 0 %}
+          {{ pv_minus_reserve }}
+        {% else %}
+          0
+        {% endif %}
 
       # Target Offset based on zone (0 W in Zone 1, Offset_Int in Zone 2)
       target_offset: >
@@ -768,4 +773,5 @@ action:
     data:
       entity_id: !input active_power_number
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
+
 
