@@ -386,7 +386,6 @@ variables:
   timeout_countdown: "{{ states(remote_timeout_countdown) | int(0) }}"
   current_mode: "{{ states(remote_control_mode) }}"
   cycle_status: "{{ states(discharge_cycle_status) }}"
-  integral_old: "{{ states(integral_helper) | float(0) }}"
   
   # Capacity limits
   output_min: "{{ state_attr(output_power_control, 'min') | float(0) }}"
@@ -404,39 +403,66 @@ variables:
   # Available capacity calculation
   available_capacity: "{{ [output_max - current_output, 0] | max }}"
   
-  # Error calculation based on zone
-  grid_error: >
-    {% if is_zone_1_active %}
-      {{ [available_capacity, grid_power] | min }}
-    {% elif is_zone_2 and not is_night %}
-      {{ [available_capacity, grid_power - zero_point_offset, pv_power - pv_charge_reserve] | min }}
+  # Dynamic Zone 2 limit (PV power minus charging reserve)
+  max_zone_2_limit: "{{ [pv_power - pv_charge_reserve, 0] | max }}"
+  
+  # ========================================
+  # PI Controller Calculation
+  # ========================================
+  
+  # 1. Current error calculation based on zone
+  error: >
+    {% if cycle_status == 'on' %}
+      {# ZONE 1: Min(available capacity, grid power) #}
+      {{ [available_capacity, grid_power] | min | float(0) }}
     {% else %}
-      0
+      {# ZONE 2: Min(available capacity, grid - offset, PV capacity) #}
+      {{ [available_capacity, grid_power - zero_point_offset, max_zone_2_limit - current_output] | min | float(0) }}
     {% endif %}
   
-  # Integral calculation with tolerance decay
+  # 2. Integral with anti-windup and tolerance decay
+  integral_old: "{{ states(integral_helper) | float(0) }}"
   integral_new: >
-    {% if grid_error | abs > tolerance %}
-      {{ [integral_old + grid_error, 1000] | min | max(-1000) }}
+    {% set error_float = error | float(0) %}
+    {% if error_float | abs > tolerance %}
+      {# Accumulate integral within bounds #}
+      {{ [[-1000, integral_old + error_float] | max, 1000] | min | float(0) }}
     {% elif integral_old | abs > 10 %}
-      {{ integral_old * 0.95 }}
+      {# Decay integral slowly when within tolerance #}
+      {{ (integral_old * 0.95) | float(0) }}
     {% else %}
-      {{ integral_old }}
+      {# Keep small integral values stable #}
+      {{ integral_old | float(0) }}
     {% endif %}
   
-  # PI correction
-  correction: "{{ grid_error * p_factor + integral_new * i_factor }}"
-  new_power_raw: "{{ current_output + correction }}"
+  # 3. PI correction (P-part + I-part)
+  power_correction_pi: >
+    {% set error_float = error | float(0) %}
+    {% set integral_float = integral_new | float(0) %}
+    {% set p_part = error_float * p_factor %}
+    {% set i_part = integral_float * i_factor %}
+    {{ (p_part + i_part) | float(0) }}
   
-  # Zone-dependent power limiting
+  # 4. New power setpoint (unlimited)
+  new_power_unlimited: >
+    {% set correction = power_correction_pi | float(0) %}
+    {{ (current_output + correction) | float(0) }}
+  
+  # 5. Final power with zone-dependent limiting
   new_power: >
+    {% set p_controller_power = new_power_unlimited | float(0) %}
     {% if is_zone_3 %}
+      {# ZONE 3: Safety stop #}
       0
-    {% elif is_zone_1_active %}
-      {{ [new_power_raw, max_output_power, output_max] | min | max(output_min) }}
+    {% elif cycle_status == 'on' %}
+      {# ZONE 1: Hard limit for inverter protection #}
+      {{ [max_output_power, p_controller_power, output_max] | min | max(output_min) }}
     {% elif is_zone_2 and not is_night %}
-      {{ [new_power_raw, [pv_power - pv_charge_reserve, 0] | max, output_max] | min | max(output_min) }}
+      {# ZONE 2: Dynamic PV limit #}
+      {% set max_zone_2 = max_zone_2_limit | float(0) %}
+      {{ [max_zone_2, p_controller_power, output_max] | min | max(output_min) }}
     {% else %}
+      {# ZONE 2 Night: Shutdown #}
       0
     {% endif %}
   
@@ -606,4 +632,3 @@ action:
           # Wait for stabilization
           - delay:
               seconds: 3
-
