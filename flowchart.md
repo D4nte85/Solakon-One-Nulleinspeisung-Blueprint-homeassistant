@@ -1,74 +1,61 @@
 ```mermaid
 graph TD
-    %% ----------------------------------------------------
-    %% Mermaid Flowchart - Solakon ONE SOC Logic (Final V4 - English)
-    %% ----------------------------------------------------
-
-    %% 1. START and Validation
-    A0((<span style='font-size:120%'>START</span>)) --> A1[/<span style='font-size:120%'>Load Vars</span>/]
-    A1 --> A2{<span style='font-size:120%'>VALIDATION:<br>Limits & Entities OK?</span>}
-    A2 -- YES (Error) --> A3[<span style='font-size:120%'>Log Error</span>]
-    A3 --> A_END((<span style='font-size:120%'>STOP</span>))
-    A2 -- NO (Valid) --> B0
-
-    %% 2. Mode Switching and Cycle Control
-    B0{<span style='font-size:120%'>CHOOSE:<br>SOC & Cycle Status</span>}
-
-    %% CASE A: Zone 1 - Start
-    B0 -- CASE A: SOC > Start AND Cycle OFF --> B1_A[<span style='font-size:120%'>Set 'cycle_active' = 'on'</span>]
-    B1_A --> B2_A[<span style='font-size:120%'>Mode Reset Pulse Sequence</span>]
-    B2_A --> B3_A[<span style='font-size:120%'>Set 'solakon_mode' = 'INV Discharge PV Priority'</span>]
-    B3_A --> C0
-
-    %% CASE B: Zone 3 - Stop
-    B0 -- CASE B: SOC <= Stop AND Cycle ON --> B1_B[<span style='font-size:120%'>Set 'cycle_active' = 'off'</span>]
-    B1_B --> B2_B[<span style='font-size:120%'>Mode Reset Disabled</span>]
-    B2_B --> B3_B[<span style='font-size:120%'>Set 'solakon_mode' = 'Disabled'</span>]
-    B3_B --> B4_B[<span style='font-size:120%'>Set Power Limit = 0 W</span>]
-    B4_B --> C0
-
-    %% CASE C: Zone 3 - Safety
-    B0 -- CASE C: SOC < Stop AND Cycle OFF AND Mode != Disabled --> B1_C[<span style='font-size:120%'>Mode Reset Pulse Sequence</span>]
-    B1_C --> B2_C[<span style='font-size:120%'>Set 'solakon_mode' = 'Disabled'</span>]
-    B2_C --> B3_C[<span style='font-size:120%'>Set Power Limit = 0 W</span>]
-    B3_C --> C0
-
-    %% CASE D: Zone 2 - Start/Stop Logic
-    B0 -- CASE D: Stop < SOC <= Start AND Cycle OFF --> B_D0{<span style='font-size:120%'>SUB-CHOOSE: PV Condition</span>}
-
-    B_D0 -- D1: PV > PV Reserve (START) --> B1_D1[<span style='font-size:120%'>Mode Reset Pulse Sequence</span>]
-    B1_D1 --> B2_D1[<span style='font-size:120%'>Set 'solakon_mode' = 'INV Discharge PV Priority'</span>]
-    B2_D1 --> B3_D1[<span style='font-size:120%'>Set Power Limit = 0 W</span>]
-    B3_D1 --> C0
-
-    B_D0 -- D2: PV <= PV Reserve (STOPP) --> B1_D2[<span style='font-size:120%'>Mode Reset Pulse Sequence</span>]
-    B1_D2 --> B2_D2[<span style='font-size:120%'>Set 'solakon_mode' = 'Disabled'</span>]
-    B2_D2 --> B3_D2[<span style='font-size:120%'>Set Power Limit = 0 W</span>]
-    B3_D2 --> C0
-
-    %% 3. Active P-Controller and Timeout Reset
-    C0{<span style='font-size:120%'>Mode = 'INV Discharge PV Priority'?</span>}
-    C0 -- NO --> A_END
-    C0 -- YES --> C1{<span style='font-size:120%'>Timeout<br>< 120s?</span>}
-    C1 -- YES --> C2[<span style='font-size:120%'>Mode Reset Pulse Sequence</span>]
-    C2 --> C3
-    C1 -- NO --> C3
-
-    C3{<span style='font-size:120%'>CHOOSE: P-Controller Zone</span>}
-
-    %% B1: Zone 2: Battery Gentle
-    C3 -- B1: Zone 2 Battery Gentle --> C4_B1[/<span style='font-size:120%'>Define Offset/Tolerance</span>/]
-    C4_B1 --> C5_B1{<span style='font-size:120%'>Grid Power<br>outside Tolerance?</span>}
-    C5_B1 -- YES --> C6_B1[<span style='font-size:120%'>Set Power Limit Zone 2</span>]
-    C6_B1 --> A_END
-    C5_B1 -- NO --> A_END
-
-    %% B2: Zone 1: Aggressive
-    C3 -- B2: Zone 1 Aggressive --> C4_B2[/<span style='font-size:120%'>Define Offset 0 W<br>Tolerance Window</span>/]
-    C4_B2 --> C5_B2{<span style='font-size:120%'>Grid Power<br>outside Tolerance?</span>}
-    C5_B2 -- YES --> C6_B2[<span style='font-size:120%'>Set Power Limit Zone 1</span>]
-    C6_B2 --> A_END
-    C5_B2 -- NO --> A_END
-
-    %% Final Stop
-    A_END((<span style='font-size:120%'>STOP</span>))
+    A[Start: Grid Power, PV or SOC Change] --> B{Critical Entities Available?<br/>SOC Limits Correct?}
+    B -- No --> Z((STOP: Critical Error<br/>System Log Entry))
+    B -- Yes --> C{SOC > Upper Threshold<br/>AND Cycle = off?}
+    
+    %% --- ZONE 1 START (Aggressive Discharge) ---
+    C -- Yes --> D[ZONE 1 START: Aggressive Discharge<br/>Logbook Entry<br/>Integral Reset to 0<br/>Cycle: set to on<br/>Mode: Discharge PV Prio<br/>Timeout: 10s → 3599s Pulse]
+    D --> E
+    
+    C -- No --> E{SOC ≤ Lower Threshold<br/>AND Cycle = on?}
+    
+    %% --- ZONE 3 START (Safety STOP) ---
+    E -- Yes --> F[ZONE 3 START: Safety STOP<br/>Logbook Entry<br/>Integral Reset to 0<br/>Cycle: set to off<br/>Mode: Disabled<br/>Active Power: 0 W]
+    F --> END((End))
+    
+    %% --- ZONE 3 Additional Safety ---
+    E -- No --> G{SOC < Lower Threshold<br/>AND Cycle = off<br/>AND Mode ≠ Disabled?}
+    G -- Yes --> H[ZONE 3 SAFETY<br/>Mode: Disabled<br/>Active Power: 0 W]
+    H --> END
+    
+    %% --- ZONE 2 START (Battery Protection) ---
+    G -- No --> I{SOC Between Thresholds<br/>AND Cycle = off<br/>AND Mode ≠ Discharge<br/>AND Day OR Night-OFF?}
+    I -- Yes --> J[ZONE 2 START: Battery Protection<br/>Logbook Entry<br/>Integral Reset to 0<br/>Mode: Discharge PV Prio<br/>Timeout: 10s → 3599s Pulse]
+    J --> K
+    
+    %% --- NIGHT SHUTDOWN Zone 2 ---
+    I -- No --> L{Night Shutdown = on<br/>AND PV < Threshold<br/>AND Cycle = off<br/>AND Mode = Discharge?}
+    L -- Yes --> M[NIGHT SHUTDOWN Zone 2<br/>Logbook Entry<br/>Integral Reset to 0<br/>Mode: Disabled<br/>Active Power: 0 W]
+    M --> END
+    
+    %% --- PI CONTROLLER BLOCK ---
+    L -- No --> K{Mode = Discharge<br/>AND Cycle = on<br/>OR Day?}
+    
+    K -- Yes --> N[DISCHARGE CURRENT CONTROL<br/>Zone 1: 40A if ≠ 40A<br/>Zone 2: 0A if ≠ 0A]
+    N --> O[TIMEOUT REFRESH<br/>If Countdown < 120s:<br/>10s → 1s Delay → 3599s]
+    
+    O --> P[PI CONTROLLER CALCULATION<br/>1. Error Zone 1: Min avail. capacity, Grid<br/>   Error Zone 2: Min avail. capacity, Grid-Offset, PV-Capacity<br/>2. Integral: Clamp -1000, +1000 with Tolerance Decay<br/>3. Correction: error×P + integral×I<br/>4. New Power: current + Correction<br/>5. Final Power Zone 1: Min Hard Limit, new Power<br/>   Final Power Zone 2: Min PV-Reserve, new Power]
+    
+    P --> Q[SAVE INTEGRAL<br/>set input_number]
+    
+    Q --> R{Error > Tolerance?}
+    R -- Yes --> S[SET ACTIVE POWER<br/>Max 0, round final Power]
+    S --> END
+    R -- No --> END
+    
+    K -- No --> END
+    
+    %% --- STYLING ---
+    style D fill:#c9ffc9,stroke:#333,stroke-width:2px
+    style J fill:#c9ffc9,stroke:#333,stroke-width:2px
+    style F fill:#ffcccc,stroke:#333,stroke-width:2px
+    style H fill:#ffcccc,stroke:#333,stroke-width:2px
+    style M fill:#ffd699,stroke:#333,stroke-width:2px
+    style P fill:#fff7c2,stroke:#333,stroke-width:2px
+    style N fill:#d4e6f1,stroke:#333,stroke-width:2px
+    style O fill:#d4e6f1,stroke:#333,stroke-width:2px
+    style Q fill:#d4e6f1,stroke:#333,stroke-width:2px
+    style S fill:#d4e6f1,stroke:#333,stroke-width:2px
+    style END fill:#cccccc,stroke:#333,stroke-width:2px
+    style Z fill:#cccccc,stroke:#333,stroke-width:2px
