@@ -124,6 +124,7 @@ blueprint:
       description: >
         Helper to store discharge cycle state.
         Must be an Input Select with options "on" and "off".
+      default: input_select.soc_discharge_cycle_status
       selector:
         entity:
           filter:
@@ -605,3 +606,4 @@ action:
           # Wait for stabilization
           - delay:
               seconds: 3
+
