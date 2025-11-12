@@ -202,7 +202,7 @@ blueprint:
     wait_time:
       name: ⏱️ Wartezeit nach setzen des Ausgangs
       description: |
-        Zeit (in Sekunden) die nach Setzten des Ausgangs gewartet wird das alle wichtigen Sensoren (Netz und Solakon) aktualisieren können.
+        Zeit (in Sekunden) die nach Setzten des Ausgangs gewartet wird das alle wichtigen Sensoren (Netz und Solakon) aktualisieren können. (modbus-update-einstellungen!)
       default: 3
       selector:
         number:
@@ -789,4 +789,5 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
+
 
