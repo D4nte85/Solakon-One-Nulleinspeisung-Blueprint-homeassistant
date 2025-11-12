@@ -202,7 +202,9 @@ blueprint:
     wait_time:
       name: ⏱️ Wartezeit nach setzen des Ausgangs
       description: |
-        Verzögerung (in Sekunden) nach dem Setzen der Ausgangsleistung. Verhindert zu schnelle aufeinanderfolgende Anpassungen und gibt dem Wechselrichter sowie den Sensoren (Netz und Solakon) Zeit, die neuen Werte zu verarbeiten und zu aktualisieren. (modbus-update-einstellungen!)
+        Verzögerung (in Sekunden) nach dem Setzen der Ausgangsleistung.
+        Verhindert zu schnelle aufeinanderfolgende Anpassungen und gibt dem Wechselrichter sowie den Sensoren (Netz und Solakon) Zeit, die neuen Werte zu verarbeiten und zu aktualisieren.
+        ⚠️ WICHTIG: modbus-update-einstellungen beachten!
       default: 3
       selector:
         number:
@@ -789,6 +791,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
