@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V203)
+  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V204)
   description: |
     **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonenlogik**
 
@@ -199,6 +199,17 @@ blueprint:
           max: 200
           unit_of_measurement: W
     
+    wait_time:
+      name: ⏱️ Wartezeit nach setzen des Ausgangs
+      description: |
+        Zeit (in Sekunden) die nach Setzten des Ausgangs gewartet wird das alle wichtigen Sensoren (Netz und Solakon) aktualisieren können.
+      default: 3
+      selector:
+        number:
+          min: 0
+          max: 30
+          step: 1
+          unit_of_measurement: s
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
     # 🔋 SOC-ZONEN-PARAMETER
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -663,6 +674,9 @@ action:
       # Toleranzprüfung basiert auf tatsächlichem Grid-Fehler (nicht begrenzt)
       grid_error_for_tolerance: "{{ (grid_power_float - target_offset) | abs }}"
       
+      # Wartezeit
+      wait_time_int: !input wait_time
+      
      # PI-Regler Berechnung
       # 1. Aktueller Fehler 
       error: >
@@ -773,8 +787,6 @@ action:
     data:
       entity_id: !input active_power_number
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
-  - delay: '00:00:03'
-
-
-
+  - delay:
+      seconds: '{{wait_time_int}}'
 
