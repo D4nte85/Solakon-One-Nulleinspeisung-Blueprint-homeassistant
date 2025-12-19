@@ -360,27 +360,27 @@ variables:
   # Parameter
   discharge_current_max: !input default_discharge_current
 
-trigger:
+triggers:
   # -------------------------------------------------------------------------------------------------
   # 1. Leistungsänderungen (Ohne Verzögerung für schnelle PI-Regelung)
   # -------------------------------------------------------------------------------------------------
-  - platform: state
+  - trigger: state
     entity_id: !input grid_power_sensor
     id: grid_power_change
 
-  - platform: state
+  - trigger: state
     entity_id: !input solar_power_sensor
     id: solar_power_change
 
   # -------------------------------------------------------------------------------------------------
   # 2. SOC-Schwellwert-Erreichung (Steuert Zonen-Wechsel)
   # -------------------------------------------------------------------------------------------------
-  - platform: numeric_state
+  - trigger: numeric_state
     entity_id: !input soc_sensor
     above: !input soc_fast_limit
     id: soc_high
 
-  - platform: numeric_state
+  - trigger: numeric_state
     entity_id: !input soc_sensor
     below: !input soc_conservation_limit
     id: soc_low
@@ -388,7 +388,7 @@ trigger:
   # -------------------------------------------------------------------------------------------------
   # 3. Modus-Wechsel (Reagiert auf manuelle/externe Änderung)
   # -------------------------------------------------------------------------------------------------
-  - platform: state
+  - trigger: state
     entity_id: !input mode_select
     id: mode_change
 
@@ -791,6 +791,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
