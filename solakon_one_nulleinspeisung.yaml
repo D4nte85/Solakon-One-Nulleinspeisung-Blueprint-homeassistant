@@ -462,7 +462,7 @@ action:
                   option: 'on'
               # 2. Modus-Wechsel zu 'INV Discharge PV Priority' (mit Puls-Sequenz zur Sicherheit)
               - choose:
-                  - conditions: "{{ states(solakon_mode) != 'INV Discharge (PV Priority)' }}"
+                  - conditions: "{{ states(solakon_mode) != '1' }}"
                     sequence:
                       - service: number.set_value
                         data:
@@ -476,7 +476,7 @@ action:
                       - service: select.select_option
                         data:
                           entity_id: !input mode_select
-                          option: 'INV Discharge (PV Priority)'
+                          option: '1'
           
           # FALL B: ZONE 3 - Sicherheits-STOPP (SOC <= Untere Schwelle UND Zyklus ON)
           - conditions:
@@ -504,12 +504,12 @@ action:
                   option: 'off'
               # 2. Modus-Wechsel zu 'Disabled'
               - choose:
-                  - conditions: "{{ states(solakon_mode) != 'Disabled' }}"
+                  - conditions: "{{ states(solakon_mode) != '0' }}"
                     sequence:
                       - service: select.select_option
                         data:
                           entity_id: !input mode_select
-                          option: 'Disabled'
+                          option: '0'
               # 3. Power Limit auf 0 W setzen (Soft Stopp)
               - service: number.set_value
                 data:
@@ -524,16 +524,16 @@ action:
                 entity_id: !input cycle_active_input_select
                 state: 'off'
               - condition: template
-                value_template: "{{ states(solakon_mode) != 'INV Discharge (PV Priority)' }}"
+                value_template: "{{ states(solakon_mode) != '1' }}"
             sequence:
               # Modus auf 'Disabled' setzen
               - choose:
-                  - conditions: "{{ states(solakon_mode) != 'Disabled' }}"
+                  - conditions: "{{ states(solakon_mode) != '0' }}"
                     sequence:
                       - service: select.select_option
                         data:
                           entity_id: !input mode_select
-                          option: 'Disabled'
+                          option: '0'
               # Power Limit auf 0 W setzen
               - service: number.set_value
                 data:
@@ -548,7 +548,7 @@ action:
                 entity_id: !input cycle_active_input_select
                 state: 'off'
               - condition: template
-                value_template: "{{ states(solakon_mode) != 'INV Discharge (PV Priority)' }}"
+                value_template: "{{ states(solakon_mode) != '1' }}"
               # Nachtcheck: Nur starten wenn NICHT Nacht ODER Funktion deaktiviert
               - condition: template
                 value_template: >
@@ -568,7 +568,7 @@ action:
                   value: 0
               # Modus-Wechsel zu 'INV Discharge PV Priority'
               - choose:
-                  - conditions: "{{ states(solakon_mode) != 'INV Discharge (PV Priority)' }}"
+                  - conditions: "{{ states(solakon_mode) != '1' }}"
                     sequence:
                       - service: number.set_value
                         data:
@@ -582,7 +582,7 @@ action:
                       - service: select.select_option
                         data:
                           entity_id: !input mode_select
-                          option: 'INV Discharge (PV Priority)'
+                          option: '1'
           
           - conditions:
               # Nachtabschaltung aktiviert
@@ -597,7 +597,7 @@ action:
                 state: 'off'
               # Modus ist aktuell aktiv
               - condition: template
-                value_template: "{{ states(solakon_mode) == 'INV Discharge (PV Priority)' }}"
+                value_template: "{{ states(solakon_mode) == '1' }}"
             sequence:
               # Logging
               - service: logbook.log
@@ -614,7 +614,7 @@ action:
               - service: select.select_option
                 data:
                   entity_id: !input mode_select
-                  option: 'Disabled'
+                  option: '0'
               # Power Limit auf 0 W
               - service: number.set_value
                 data:
@@ -627,7 +627,7 @@ action:
   # -------------------------------------------------------------------------------------------------
   - condition: template
     value_template: >
-      {{ states(solakon_mode) == 'INV Discharge (PV Priority)' and
+      {{ states(solakon_mode) == '1' and
          (is_state(cycle_active, 'on') or 
           not night_shutdown_enabled_bool or
           (states(solar_power_for_night_check) | float(0)) >= night_pv_threshold) }}
@@ -791,6 +791,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
