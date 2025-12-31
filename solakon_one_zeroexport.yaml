@@ -347,27 +347,27 @@ variables:
   # Parameters
   discharge_current_max: !input default_discharge_current
 
-trigger:
+triggers:
   # -------------------------------------------------------------------------------------------------
   # 1. Power Changes (No delay for fast PI control)
   # -------------------------------------------------------------------------------------------------
-  - platform: state
+  - trigger: state
     entity_id: !input grid_power_sensor
     id: grid_power_change
 
-  - platform: state
+  - trigger: state
     entity_id: !input solar_power_sensor
     id: solar_power_change
 
   # -------------------------------------------------------------------------------------------------
   # 2. SOC Threshold Reached (Controls zone changes)
   # -------------------------------------------------------------------------------------------------
-  - platform: numeric_state
+  - trigger: numeric_state
     entity_id: !input soc_sensor
     above: !input soc_fast_limit
     id: soc_high
 
-  - platform: numeric_state
+  - trigger: numeric_state
     entity_id: !input soc_sensor
     below: !input soc_conservation_limit
     id: soc_low
@@ -375,7 +375,7 @@ trigger:
   # -------------------------------------------------------------------------------------------------
   # 3. Mode Change (Reacts to manual/external change)
   # -------------------------------------------------------------------------------------------------
-  - platform: state
+  - trigger: state
     entity_id: !input mode_select
     id: mode_change
 
@@ -774,5 +774,6 @@ action:
       entity_id: !input active_power_number
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay: '00:00:03'
+
 
 
