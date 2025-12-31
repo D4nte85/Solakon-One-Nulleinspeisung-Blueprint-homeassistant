@@ -447,7 +447,7 @@ action:
                 data:
                   entity_id: !input cycle_active_input_select
                   option: 'on'
-              # 2. Mode change to 'INV Discharge PV Priority' (with pulse sequence for safety)
+              # 2. Mode change to 'Inverter export (PV priority)' (with pulse sequence for safety)
               - choose:
                   - conditions: "{{ states(solakon_mode) != 'INV Discharge (PV Priority)' }}"
                     sequence:
@@ -553,7 +553,7 @@ action:
                 data:
                   entity_id: !input integral_helper
                   value: 0
-              # Mode change to 'INV Discharge PV Priority'
+              # Mode change to 'Inverter export (PV priority)'
               - choose:
                   - conditions: "{{ states(solakon_mode) != 'INV Discharge (PV Priority)' }}"
                     sequence:
@@ -774,6 +774,7 @@ action:
       entity_id: !input active_power_number
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay: '00:00:03'
+
 
 
 
