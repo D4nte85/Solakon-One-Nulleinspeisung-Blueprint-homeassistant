@@ -10,6 +10,11 @@ Installieren Sie den Blueprint direkt über diesen Button in Ihrer Home Assistan
 
 ---
 
+**WICHTIG:** Die Implementierung der Fernsteuerung der Solakon Integration führt dazu das es kein "disabled" gibt als Fernsteuerbefehl, dies schaltet die Fernsteuerung an sich ab, d.h.: die Standart einstellungen des Solakon ONE / bzw aus der APP greifen zu diesem Zeitpunkt.
+Für eine wie im folgenden gewollte Funktion sollte als Standart ein 0W für 24std Zeitplan erstellt und aktiviert werden.
+
+---
+
 ## 🛠️ Vorbereitung: Erstellung der erforderlichen Helper
 
 Der Blueprint benötigt **zwei Helper**, die Sie vor der Installation erstellen müssen:
