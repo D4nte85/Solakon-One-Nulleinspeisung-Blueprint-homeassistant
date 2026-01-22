@@ -69,7 +69,7 @@ blueprint:
     solar_power_sensor:
       name: ☀️ Solakon ONE - Solarleistung (PV-Erzeugung)
       description: Die aktuelle PV-Gesamterzeugung in Watt.
-      default: sensor.solakon_one_total_pv_power
+      default: sensor.solakon_one_pv_leistung
       selector:
         entity:
           domain: sensor
@@ -78,7 +78,7 @@ blueprint:
     soc_sensor:
       name: 🔋 Solakon ONE - Batterieladestand (SOC)
       description: Der aktuelle Batterieladestand in %.
-      default: sensor.solakon_one_battery_soc
+      default: sensor.solakon_one_batterie_ladestand
       selector:
         entity:
           domain: sensor
@@ -87,7 +87,7 @@ blueprint:
     remote_timeout_countdown_sensor:
       name: ⏱️ Solakon ONE - Remote Timeout Countdown
       description: Sensor, der den verbleibenden Timeout-Countdown anzeigt.
-      default: sensor.solakon_one_remote_timeout_countdown
+      default: sensor.solakon_one_fernsteuerung_zeituberschreitung
       selector:
         entity:
           domain: sensor
@@ -95,7 +95,7 @@ blueprint:
     active_power_number:
       name: ⚙️ Solakon ONE - Ausgangsleistungsregler
       description: Die Entität zum Setzen des Leistungs-Sollwerts (Remote Active Power).
-      default: number.solakon_one_remote_active_power
+      default: number.solakon_one_fernsteuerung_leistung
       selector:
         entity:
           domain: number
@@ -103,7 +103,7 @@ blueprint:
     max_discharge_current_number:
       name: 🔋 Solakon ONE - Max. Entladestrom
       description: Die Entität zur Steuerung des maximalen Entladestroms (A).
-      default: number.solakon_one_battery_max_discharge_current
+      default: nnumber.solakon_one_maximaler_entladestrom
       selector:
         entity:
           domain: number
@@ -111,7 +111,7 @@ blueprint:
     remote_timeout_set_number:
       name: ⏲️ Solakon ONE - Modus-Reset-Timer
       description: Dient zum Setzen/Zurücksetzen des Remote-Timeouts (max. 3599 s).
-      default: number.solakon_one_remote_timeout_set
+      default: number.solakon_one_fernsteuerung_zeituberschreitung
       selector:
         entity:
           domain: number
@@ -119,7 +119,7 @@ blueprint:
     mode_select:
       name: 🔄 Solakon ONE - Betriebsmodus-Auswahl
       description: Die Entität zum Umschalten des Betriebsmodus (Remote Control Mode).
-      default: select.solakon_one_remote_control_mode
+      default: select.solakon_one_modus_fernsteuern
       selector:
         entity:
           domain: select
@@ -791,6 +791,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
