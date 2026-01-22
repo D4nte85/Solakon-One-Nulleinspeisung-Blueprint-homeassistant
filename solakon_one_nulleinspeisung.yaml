@@ -103,7 +103,7 @@ blueprint:
     max_discharge_current_number:
       name: 🔋 Solakon ONE - Max. Entladestrom
       description: Die Entität zur Steuerung des maximalen Entladestroms (A).
-      default: nnumber.solakon_one_maximaler_entladestrom
+      default: number.solakon_one_maximaler_entladestrom
       selector:
         entity:
           domain: number
@@ -791,6 +791,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
