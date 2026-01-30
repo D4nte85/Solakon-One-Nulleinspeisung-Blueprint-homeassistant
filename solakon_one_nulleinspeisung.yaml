@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V205)
+  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V206)
   description: |
     **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonenlogik**
 
@@ -256,13 +256,26 @@ blueprint:
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
     # ⚙️ ZONE 2 - PARAMETER (Batterieschonender Modus)
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    
-    offset:
+  
+    offset_1:
+      name: ⚙️ Zone 1 - Nullpunkt-Offset (Regelziel)
+      description: |
+        Zielwert für Netzleistung in Zone 1 (z.B. 30 W).
+        Positiver Wert = leichter Netzbezug erwünscht.
+        0 W = Exakte Nulleinspeisung.
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: W
+   
+    offset_2:
       name: ⚙️ Zone 2 - Nullpunkt-Offset (Regelziel)
       description: |
         Zielwert für Netzleistung in Zone 2 (z.B. 30 W).
-        Positiver Wert = leichter Netzbezug erwünscht → Batterie wird geladen.
-        0 W = Exakte Nulleinspeisung (wie Zone 1).
+        Positiver Wert = leichter Netzbezug erwünscht.
+        0 W = Exakte Nulleinspeisung.
       default: 30
       selector:
         number:
@@ -649,7 +662,8 @@ action:
       tolerance_int: !input tolerance
       regulator_factor_float: !input regulator_factor
       ki_factor_float: !input ki_factor
-      offset_int: !input offset
+      offset_1_int: !input offset_1
+      offset_2_int: !input offset_2
       max_active_power_limit_int: !input max_active_power_limit
       pv_charge_reserve_int: !input pv_charge_reserve
       
@@ -665,12 +679,12 @@ action:
           0
         {% endif %}
 
-      # Target Offset basiert auf Zone (0 W in Zone 1, Offset_Int in Zone 2)
+      # Target Offset basiert auf Zone (offset_1_int in Zone 1, offset_2_int in Zone 2)
       target_offset: >
         {% if is_state(cycle_active, 'on') %}
-          0
+          {{ offset_1_int}}
         {% else %}
-          {{ offset_int }}
+          {{ offset_2_int }}
         {% endif %}
       
       # Toleranzprüfung basiert auf tatsächlichem Grid-Fehler (nicht begrenzt)
@@ -684,10 +698,10 @@ action:
       error: >
         {% if is_state(cycle_active, 'on') %}
           {# ZONE 1: Min(verfügbare Kapazität, Grid) #}
-          {{ [(max_active_power_limit_int - current_active_power), grid_power_float] | min | float(0) }}
+          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_1_int)] | min | float(0) }}
         {% else %}
           {# ZONE 2: Min(verfügbare Kapazität, Grid - Offset, PV-Kapazität) #}
-          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
+          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_2_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
         {% endif %}
       
       # 2. Integral mit Anti-Windup
@@ -791,12 +805,3 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
-
-
-
-
-
-
-
-
-
