@@ -4,6 +4,7 @@ blueprint:
     **Dynamische Nulleinspeisung mit SOC-Zonenlogik**
       Dieser Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung** für den Solakon ONE Wechselrichter. Er nutzt einen **PI-Regler (Proportional-Integral-Regler)** zur präzisen Steuerung der AC-Ausgangsleistung und eine **dreistufige State-of-Charge (SOC)-Logik** zur effizienten Verwaltung des Batteriespeichers.
       Ziel dieses Blueprints ist es PV-Energie direkt auszugeben ohne den Umweg über die Batterie, dies verhindert das "flackern" das die App mit ihrer (lade ein Prozent -> entlade ein Prozent -> repeat) Funktionsweise verursacht und soll die Batterie schonen.
+   
     ---
     
     ### 🧠 PI-Regler & Steuerlogik
@@ -11,7 +12,9 @@ blueprint:
     * **Messprinzip:** Die Regelung basiert auf dem **Shelly/Netzleistungssensor**. **WICHTIG:** Positive Werte = Bezug, NEGATIVE WERTE = Einspeisung.
     * **P-Anteil (Proportional):** Reagiert auf die aktuelle Abweichung mit konfigurierbarer Aggressivität (Regelungs-Faktor).
     * **I-Anteil (Integral):** Summiert Abweichungen über die Zeit auf und eliminiert bleibende Regelabweichungen. Wird bei Zonenwechseln zurückgesetzt (Anti-Windup).
+   
     ---
+    
     ### 🔋 Dreistufige SOC-Zonenlogik
     Die Logik unterteilt den Batterieladestand (SOC) in drei Zonen:
 
@@ -825,6 +828,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
