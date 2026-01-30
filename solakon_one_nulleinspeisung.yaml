@@ -355,8 +355,8 @@ blueprint:
           ⚠️ Zone 1 (aggressive Entladung) läuft auch nachts weiter!
           Sinnvoll für Batterieschonung bei 0 PV.
        default: false
-        selector:
-          boolean:
+       selector:
+         boolean:
     
       night_shutdown_pv_threshold:
         name: 🌙 PV-Schwelle für "Nacht"
