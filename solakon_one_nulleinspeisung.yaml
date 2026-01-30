@@ -6,7 +6,7 @@ blueprint:
     Er nutzt einen **PI-Regler (Proportional-Integral-Regler)** zur präzisen Steuerung der AC-Ausgangsleistung und eine **dreistufige State-of-Charge (SOC)-Logik** zur effizienten Verwaltung des Batteriespeichers.
     Ziel dieses Blueprints ist es PV-Energie direkt auszugeben ohne den Umweg über die Batterie,
     dies verhindert das "flackern" das die App mit ihrer (lade ein Prozent -> entlade ein Prozent -> repeat) Funktionsweise verursacht und soll die Batterie schonen.
-   
+    
     ---
     
     ### 🧠 PI-Regler & Steuerlogik
@@ -14,25 +14,25 @@ blueprint:
     * **Messprinzip:** Die Regelung basiert auf dem **Shelly/Netzleistungssensor**. **WICHTIG:** Positive Werte = Bezug, NEGATIVE WERTE = Einspeisung.
     * **P-Anteil (Proportional):** Reagiert auf die aktuelle Abweichung mit konfigurierbarer Aggressivität (Regelungs-Faktor).
     * **I-Anteil (Integral):** Summiert Abweichungen über die Zeit auf und eliminiert bleibende Regelabweichungen. Wird bei Zonenwechseln zurückgesetzt (Anti-Windup).
-   
+    
     ---
     
     ### 🔋 Dreistufige SOC-Zonenlogik
     Die Logik unterteilt den Batterieladestand (SOC) in drei Zonen:
-
+    
     #### 1. Zone: Aggressive Regelung (Entladezyklus / Hoher SOC)
     * **Bedingung:** SOC > **Oberer Schwellenwert** (`soc_fast_limit`) **ODER** Entladezyklus aktiv.
     * **Aktion:** **Max. Entladestrom** wird auf den Standardwert (z.B. 40 A) gesetzt.
     * **Regelung:** PI-Regler mit **Nullpunkt-Offset** (z.B. 30 W) zur Verschiebung des Regelziels hin zu leichtem **Netzbezug** oder exacter Nulleinspeisung.
     * **Verhalten:** Einmal aktiviert, läuft Zone 1 bis SOC ≤ 20% fällt (kein Yo-Yo-Effekt).
-
+    
     #### 2. Zone: Batterieschonende Regelung (Zwischen-SOC)
     * **Bedingung:** SOC zwischen Unterer (`soc_conservation_limit`) und Oberer Schwelle, UND Entladezyklus inaktiv.
     * **Aktion:** **Max. Entladestrom** wird auf **0 A** gesetzt, kein Einfluss auf Batterieheizung, begrenzt die Ausgangsleistung der Solakon sicherer auf die PV-Leistung.
     * **Regelung:** PI-Regler mit **Nullpunkt-Offset** (z.B. 30 W) zur Verschiebung des Regelziels hin zu leichtem **Netzbezug** oder exacter Nulleinspeisung.
     * **Dynamische Obergrenze:** Entladeleistung wird durch **Max(0, PV - Reserve)** gedeckelt.
     * **Nachtabschaltung:** Optional kann Zone 2 bei PV < Schwelle deaktiviert werden (Zone 1 bleibt aktiv).
-
+    
     #### 3. Zone: Sicherheits-Stopp (Niedriger SOC)
     * **Bedingung:** SOC fällt auf oder unter den **Unteren Schwellenwert**.
     * **Aktion:** Sofortiges Umschalten auf **"Disabled"** und Setzen des **AC-Output-Limits auf 0 W**.
@@ -830,6 +830,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
