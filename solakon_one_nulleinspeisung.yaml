@@ -55,7 +55,7 @@ blueprint:
       netz_entitäten:
         name: "🔌 NETZ-SENSOR (Extern - z.B. Shelly 3EM):"
         description: "Hier findest du den notwendigen Netzverbrauchssensor."
-        collapsed: false 
+        collapsed: true 
         input:    
           grid_power_sensor:
             name: 🔌 Shelly/Netz-Leistungssensor (ERFORDERLICH)
@@ -216,19 +216,19 @@ blueprint:
                 max: 200
                 unit_of_measurement: W
         
-      wait_time:
-        name: ⏱️ Wartezeit nach setzen des Ausgangs
-        description: |
-          Verzögerung (in Sekunden) nach dem Setzen der Ausgangsleistung
-          Verhindert zu schnelle aufeinanderfolgende Anpassungen und gibt dem Wechselrichter sowie den Sensoren (Netz und Solakon) Zeit, die neuen Werte zu verarbeiten und zu aktualisieren.
-          ⚠️ WICHTIG: modbus-update-einstellungen beachten!
-        default: 3
-        selector:
-          number:
-            min: 0
-            max: 30
-            step: 1
-            unit_of_measurement: s
+          wait_time:
+            name: ⏱️ Wartezeit nach setzen des Ausgangs
+            description: |
+              Verzögerung (in Sekunden) nach dem Setzen der Ausgangsleistung
+              Verhindert zu schnelle aufeinanderfolgende Anpassungen und gibt dem Wechselrichter sowie den Sensoren (Netz und Solakon) Zeit, die neuen Werte zu verarbeiten und zu aktualisieren.
+              ⚠️ WICHTIG: modbus-update-einstellungen beachten!
+            default: 3
+            selector:
+              number:
+                min: 0
+                max: 30
+                step: 1
+                unit_of_measurement: s
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🔋 SOC-ZONEN-PARAMETER
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
