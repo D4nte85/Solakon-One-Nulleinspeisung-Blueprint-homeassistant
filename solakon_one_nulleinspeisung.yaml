@@ -323,7 +323,7 @@ blueprint:
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
     # 🔒 SICHERHEITS-PARAMETER
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
-  zone_parameter:
+  safety_parameter:
     name: "🔒 SICHERHEITS-PARAMETER:"
     description: "Hier findest du den Parameter für die max Ausgangsleistung."
     collapsed: true 
@@ -343,7 +343,7 @@ blueprint:
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
     # 🌙 NACHTABSCHALTUNG (Optional)
     # ═══════════════════════════════════════════════════════════════════════════════════════════════
-  zone_parameter:
+  night_parameter:
     name: "🌙 NACHTABSCHALTUNG (Optional):"
     description: "Hier findest du die Parameter für die optionale Nachtabschaltung (atm wenig effektive Änderung/Platzhalter für mögliches zukünftiges Abschalten des Inverters)."
     collapsed: true 
