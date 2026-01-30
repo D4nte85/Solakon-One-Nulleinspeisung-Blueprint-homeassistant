@@ -20,21 +20,21 @@ blueprint:
     Die Logik unterteilt den Batterieladestand (SOC) in drei Zonen:
     
     #### 1. Zone: Aggressive Regelung (Entladezyklus / Hoher SOC)
-    * **Bedingung:** SOC > **Oberer Schwellenwert** (`soc_fast_limit`) **ODER** Entladezyklus aktiv.
-    * **Aktion:** **Max. Entladestrom** wird auf den Standardwert (z.B. 40 A) gesetzt.
-    * **Regelung:** PI-Regler mit **Nullpunkt-Offset** (z.B. 30 W) zur Verschiebung des Regelziels hin zu leichtem **Netzbezug** oder exacter Nulleinspeisung.
+    * **Bedingung:** SOC > Oberer Schwellenwert (`soc_fast_limit`) ODER Entladezyklus aktiv.
+    * **Aktion:** Max. Entladestrom wird auf den Standardwert (z.B. 40 A) gesetzt.
+    * **Regelung:** PI-Regler mit Nullpunkt-Offset (z.B. 30 W) zur Verschiebung des Regelziels hin zu leichtem Netzbezug oder exacter Nulleinspeisung.
     * **Verhalten:** Einmal aktiviert, läuft Zone 1 bis SOC ≤ 20% fällt (kein Yo-Yo-Effekt).
     
     #### 2. Zone: Batterieschonende Regelung (Zwischen-SOC)
     * **Bedingung:** SOC zwischen Unterer (`soc_conservation_limit`) und Oberer Schwelle, UND Entladezyklus inaktiv.
-    * **Aktion:** **Max. Entladestrom** wird auf **0 A** gesetzt, kein Einfluss auf Batterieheizung, begrenzt die Ausgangsleistung der Solakon sicherer auf die PV-Leistung.
-    * **Regelung:** PI-Regler mit **Nullpunkt-Offset** (z.B. 30 W) zur Verschiebung des Regelziels hin zu leichtem **Netzbezug** oder exacter Nulleinspeisung.
-    * **Dynamische Obergrenze:** Entladeleistung wird durch **Max(0, PV - Reserve)** gedeckelt.
+    * **Aktion:** Max. Entladestrom wird auf 0 A gesetzt, kein Einfluss auf Batterieheizung, begrenzt die Ausgangsleistung der Solakon sicherer auf die PV-Leistung.
+    * **Regelung:** PI-Regler mit Nullpunkt-Offset (z.B. 30 W) zur Verschiebung des Regelziels hin zu leichtem Netzbezug oder exacter Nulleinspeisung.
+    * **Dynamische Obergrenze:** Entladeleistung wird durch Max(0, PV - Reserve) gedeckelt.
     * **Nachtabschaltung:** Optional kann Zone 2 bei PV < Schwelle deaktiviert werden (Zone 1 bleibt aktiv).
     
     #### 3. Zone: Sicherheits-Stopp (Niedriger SOC)
-    * **Bedingung:** SOC fällt auf oder unter den **Unteren Schwellenwert**.
-    * **Aktion:** Sofortiges Umschalten auf **"Disabled"** und Setzen des **AC-Output-Limits auf 0 W**.
+    * **Bedingung:** SOC fällt auf oder unter den Unteren Schwellenwert.
+    * **Aktion:** Sofortiges Umschalten auf "Disabled" und Setzen des AC-Output-Limits auf 0 W.
     
   domain: automation
   source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/experimental/solakon_one_nulleinspeisung.yaml
@@ -829,6 +829,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
