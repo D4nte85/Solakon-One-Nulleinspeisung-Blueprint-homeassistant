@@ -37,7 +37,7 @@ blueprint:
     * **Aktion:** Sofortiges Umschalten auf "Disabled" und Setzen des AC-Output-Limits auf 0 W.
     
   domain: automation
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/experimental/solakon_one_nulleinspeisung.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/main/solakon_one_nulleinspeisung.yaml
   input:
       
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -829,6 +829,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
