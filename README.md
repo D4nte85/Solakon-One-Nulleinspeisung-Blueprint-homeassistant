@@ -4,18 +4,18 @@ Dieses Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung*
 
 Ziel dieses Blueprints ist es PV-Energie direkt auszugeben ohne den Umweg über die Batterie, dies verhindert das "flackern" das die App mit ihrer (lade ein Prozent -> entlade ein Prozent -> repeat) Funktionsweise verursacht und soll die Batterie schonen.
 
-## 🚀 Installation
-
-Installieren Sie den Blueprint direkt über diesen Button in Ihrer Home Assistant Instanz:
-
-[![Open your Home Assistant instance and show the blueprint import dialog with a pre-filled URL.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2Fmain%2Fsolakon_one_nulleinspeisung.yaml)
-
 ---
 
 **WICHTIG:** Die Implementierung der Fernsteuerung der Solakon Integration führt dazu das es kein "disabled" gibt als Fernsteuerbefehl, dies schaltet die Fernsteuerung an sich ab, d.h.: die Standart einstellungen des Solakon ONE / bzw aus der APP greifen zu diesem Zeitpunkt.
 Für eine wie im folgenden gewollte Funktion sollte als Standart ein 0W für 24std Zeitplan erstellt und aktiviert werden, oder in der neuesten Version der APP die "Standart-Ausgangsleistung" auf 0W gestellt werden, diese Methoden sind äquivalent.
 
 ---
+
+## 🚀 Installation
+
+Installieren Sie den Blueprint direkt über diesen Button in Ihrer Home Assistant Instanz:
+
+[![Open your Home Assistant instance and show the blueprint import dialog with a pre-filled URL.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2Fmain%2Fsolakon_one_nulleinspeisung.yaml)
 
 ## 🛠️ Vorbereitung: Erstellung der erforderlichen Helper
 
