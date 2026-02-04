@@ -1,329 +1,366 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V205)
+  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V206)
   description: |
-    **Detaillierte Funktionsbeschreibung: Dynamische Nulleinspeisung mit SOC-Zonenlogik**
-
-    Dieser Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung** für den Solakon ONE Wechselrichter. Er nutzt einen **PI-Regler (Proportional-Integral-Regler)** zur präzisen Steuerung der AC-Ausgangsleistung und eine **dreistufige State-of-Charge (SOC)-Logik** zur effizienten Verwaltung des Batteriespeichers.
-
+    ### Dynamische Nulleinspeisung mit SOC-Zonenlogik
+      Dieser Home Assistant Blueprint implementiert eine dynamische Nulleinspeisung für den Solakon ONE Wechselrichter.
+      Er nutzt einen PI-Regler (Proportional-Integral-Regler) zur präzisen Steuerung der AC-Ausgangsleistung und eine dreistufige State-of-Charge (SOC)-Logik zur effizienten Verwaltung des Batteriespeichers.
+      Ziel dieses Blueprints ist es PV-Energie direkt auszugeben ohne den Umweg über die Batterie, dies verhindert das "flackern" das die App mit ihrer (lade ein Prozent -> entlade ein Prozent -> repeat) Funktionsweise verursacht und soll die Batterie schonen.
+    
     ---
+    
     ### 🧠 PI-Regler & Steuerlogik
-    Der Kern des Blueprints ist ein **PI-Regler (Proportional-Integral-Regler)**, der das **AC-Output-Limit** (Entladeleistung) dynamisch anpasst.
-    
-    * **Messprinzip:** Die Regelung basiert auf dem **Shelly/Netzleistungssensor**. **WICHTIG:** Positive Werte = Bezug, NEGATIVE WERTE = Einspeisung.
-    
+    Der Kern des Blueprints ist ein PI-Regler (Proportional-Integral-Regler), der das AC-Output-Limit (Entladeleistung) dynamisch anpasst.
+    * **Messprinzip:** Die Regelung basiert auf dem Shelly/Netzleistungssensor. **WICHTIG:** Positive Werte = Bezug, NEGATIVE WERTE = Einspeisung.
     * **P-Anteil (Proportional):** Reagiert auf die aktuelle Abweichung mit konfigurierbarer Aggressivität (Regelungs-Faktor).
-    
     * **I-Anteil (Integral):** Summiert Abweichungen über die Zeit auf und eliminiert bleibende Regelabweichungen. Wird bei Zonenwechseln zurückgesetzt (Anti-Windup).
     
-    * **Leistungsbegrenzung:** Gesichert durch ein **oberes Hard Limit** und ein **hartkodiertes unteres Limit von 0 W**.
-
     ---
+    
     ### 🔋 Dreistufige SOC-Zonenlogik
     Die Logik unterteilt den Batterieladestand (SOC) in drei Zonen:
-
+    
     #### 1. Zone: Aggressive Regelung (Entladezyklus / Hoher SOC)
-    * **Bedingung:** SOC > **Oberer Schwellenwert** (`soc_fast_limit`) **ODER** Entladezyklus aktiv.
-    * **Aktion:** **Max. Entladestrom** wird auf den Standardwert (z.B. 40 A) gesetzt.
-    * **Regelung:** PI-Regler mit **Nullpunkt-Offset von 0 W** zur exakten Nulleinspeisung.
+    * **Bedingung:** SOC > Oberer Schwellenwert (`soc_fast_limit`) ODER Entladezyklus aktiv.
+    * **Aktion:** Max. Entladestrom wird auf den Standardwert (z.B. 40 A) gesetzt.
+    * **Regelung:** PI-Regler mit Nullpunkt-Offset (z.B. 30 W) zur Verschiebung des Regelziels hin zu leichtem Netzbezug oder exacter Nulleinspeisung.
     * **Verhalten:** Einmal aktiviert, läuft Zone 1 bis SOC ≤ 20% fällt (kein Yo-Yo-Effekt).
-
+    
     #### 2. Zone: Batterieschonende Regelung (Zwischen-SOC)
     * **Bedingung:** SOC zwischen Unterer (`soc_conservation_limit`) und Oberer Schwelle, UND Entladezyklus inaktiv.
-    * **Aktion:** **Max. Entladestrom** wird auf **0 A** gesetzt (Entnahme nur über AC-Limit).
-    * **Regelung:** PI-Regler mit **Nullpunkt-Offset** (z.B. 30 W) zur Verschiebung des Regelziels hin zu leichtem **Netzbezug** (Laden).
-    * **Dynamische Obergrenze:** Entladeleistung wird durch **Max(0, PV - Reserve)** gedeckelt.
+    * **Aktion:** Max. Entladestrom wird auf 0 A gesetzt, kein Einfluss auf Batterieheizung, begrenzt die Ausgangsleistung der Solakon sicherer auf die PV-Leistung.
+    * **Regelung:** PI-Regler mit Nullpunkt-Offset (z.B. 30 W) zur Verschiebung des Regelziels hin zu leichtem Netzbezug oder exacter Nulleinspeisung.
+    * **Dynamische Obergrenze:** Entladeleistung wird durch Max(0, PV - Reserve) gedeckelt.
     * **Nachtabschaltung:** Optional kann Zone 2 bei PV < Schwelle deaktiviert werden (Zone 1 bleibt aktiv).
-
+    
     #### 3. Zone: Sicherheits-Stopp (Niedriger SOC)
-    * **Bedingung:** SOC fällt auf oder unter den **Unteren Schwellenwert**.
-    * **Aktion:** Sofortiges Umschalten auf **"Disabled"** und Setzen des **AC-Output-Limits auf 0 W**.
-
-    ---
-    ### ⚙️ Zusätzliche Steuermechanismen
-    * **Zwei-Stufen-Moduswechsel:** Eine Puls-Sequenz (10s Puls, dann 3599s) wird verwendet, um die Modus-Kommandos zu sichern.
-    * **Timeout-Refresh:** Der Remote Timeout wird automatisch auf 3599s zurückgesetzt, wenn der Countdown unter 120s fällt.
-    * **Integral-Reset:** Bei jedem Zonenwechsel wird der I-Anteil auf 0 zurückgesetzt, um Windup zu verhindern.
-    * **Anti-Windup:** Der Integral-Wert ist auf ±1000 Punkte begrenzt.
-      
+    * **Bedingung:** SOC fällt auf oder unter den Unteren Schwellenwert.
+    * **Aktion:** Sofortiges Umschalten auf "Disabled" und Setzen des AC-Output-Limits auf 0 W.
+    
   domain: automation
   source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/main/solakon_one_nulleinspeisung.yaml
   input:
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    # 🔌 NETZ-SENSOR (Extern - z.B. Shelly 3EM)
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    
-    grid_power_sensor:
-      name: 🔌 Shelly/Netz-Leistungssensor (ERFORDERLICH)
-      description: |
-        Sensor für die aktuelle Netzleistung (z.B. Shelly 3EM).
-        ⚠️ WICHTIG: Positive Werte = Bezug, NEGATIVE WERTE = Einspeisung.
-      selector:
-        entity:
-          domain: sensor
-          device_class: power
-    
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    # ⚡ SOLAKON ONE - ENTITÄTEN
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    
-    solar_power_sensor:
-      name: ☀️ Solakon ONE - Solarleistung (PV-Erzeugung)
-      description: Die aktuelle PV-Gesamterzeugung in Watt.
-      default: sensor.solakon_one_pv_leistung
-      selector:
-        entity:
-          domain: sensor
-          device_class: power
-    
-    soc_sensor:
-      name: 🔋 Solakon ONE - Batterieladestand (SOC)
-      description: Der aktuelle Batterieladestand in %.
-      default: sensor.solakon_one_batterie_ladestand
-      selector:
-        entity:
-          domain: sensor
-          device_class: battery
-    
-    remote_timeout_countdown_sensor:
-      name: ⏱️ Solakon ONE - Remote Timeout Countdown
-      description: Sensor, der den verbleibenden Timeout-Countdown anzeigt.
-      default: sensor.solakon_one_fernsteuerung_zeituberschreitung
-      selector:
-        entity:
-          domain: sensor
-    
-    active_power_number:
-      name: ⚙️ Solakon ONE - Ausgangsleistungsregler
-      description: Die Entität zum Setzen des Leistungs-Sollwerts (Remote Active Power).
-      default: number.solakon_one_fernsteuerung_leistung
-      selector:
-        entity:
-          domain: number
-    
-    max_discharge_current_number:
-      name: 🔋 Solakon ONE - Max. Entladestrom
-      description: Die Entität zur Steuerung des maximalen Entladestroms (A).
-      default: number.solakon_one_maximaler_entladestrom
-      selector:
-        entity:
-          domain: number
-    
-    remote_timeout_set_number:
-      name: ⏲️ Solakon ONE - Modus-Reset-Timer
-      description: Dient zum Setzen/Zurücksetzen des Remote-Timeouts (max. 3599 s).
-      default: number.solakon_one_fernsteuerung_zeituberschreitung
-      selector:
-        entity:
-          domain: number
-    
-    mode_select:
-      name: 🔄 Solakon ONE - Betriebsmodus-Auswahl
-      description: Die Entität zum Umschalten des Betriebsmodus (Remote Control Mode).
-      default: select.solakon_one_modus_fernsteuern
-      selector:
-        entity:
-          domain: select
-    
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    # 🛠️ HOME ASSISTANT HELPER (ERFORDERLICH!)
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    
-    cycle_active_input_select:
-      name: 🛠️ Entladezyklus-Zustandsspeicher (input_select - ERFORDERLICH!)
-      description: |
-        ⚠️ WICHTIG: Erstellen Sie einen Input Select Helfer mit den Optionen 'on' und 'off'.
-        Settings → Devices & Services → Helpers → Create Helper → Dropdown
-        - Name: z.B. 'SOC Entladezyklus Status'
-        - Options: 'on' und 'off' (exakt so!)
+      
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 🔌 NETZ-SENSOR (Extern - z.B. Shelly 3EM)
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      netz_entitäten:
+        name: "🔌 NETZ-SENSOR (Extern - z.B. Shelly 3EM):"
+        description: "Hier findest du den notwendigen Netzverbrauchssensor."
+        collapsed: true 
+        input:    
+          grid_power_sensor:
+            name: 🔌 Shelly/Netz-Leistungssensor (ERFORDERLICH)
+            description: |
+              Sensor für die aktuelle Netzleistung (z.B. Shelly 3EM).
+              ⚠️ WICHTIG: Positive Werte = Bezug, NEGATIVE WERTE = Einspeisung.
+            selector:
+              entity:
+                domain: sensor
+                device_class: power
         
-        Dieser speichert, ob der Entladezyklus aktiv ist (Zone 1).
-      default: input_select.soc_entladezyklus_status
-      selector:
-        entity:
-          domain: input_select
-    
-    integral_helper:
-      name: 🛠️ Integral-Speicher (input_number - ERFORDERLICH!)
-      description: |
-        ⚠️ WICHTIG: Erstellen Sie einen input_number Helper für den PI-Regler:
-        Settings → Devices & Services → Helpers → Create Helper → Number
-        - Name: z.B. 'Solakon Integral'
-        - Min: -1000
-        - Max: 1000
-        - Step: 1
-        - Initial: 0
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # ⚡ SOLAKON ONE - ENTITÄTEN
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      solakon_entitäten:
+        name: "⚡ SOLAKON ONE - ENTITÄTEN:"
+        description: "Hier findest du die notwendigen Solakon One Entitäten mit ausgewählten Standarts."
+        collapsed: true 
+        input:    
+          solar_power_sensor:
+            name: ☀️ Solakon ONE - Solarleistung (PV-Erzeugung)
+            description: Die aktuelle PV-Gesamterzeugung in Watt.
+            default: sensor.solakon_one_pv_leistung
+            selector:
+              entity:
+                domain: sensor
+                device_class: power
         
-        Dieser speichert den I-Anteil des PI-Reglers.
-      default: input_number.solakon_integral
-      selector:
-        entity:
-          domain: input_number
-    
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    # 🎚️ REGELUNGS-PARAMETER
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    
-    regulator_factor:
-      name: 🎛️ P-Faktor (Proportional-Verstärkung)
-      description: |
-        P-Anteil des PI-Reglers: Reagiert auf aktuelle Abweichung (z.B. 1.5).
-        Höher = schnellere, aggressivere Reaktion | Niedriger = sanftere Reaktion
-      default: 1.5
-      selector:
-        number:
-          min: 0.1
-          max: 5
-          step: 0.1
-    
-    ki_factor:
-      name: 🎛️ I-Faktor (Integral-Verstärkung)
-      description: |
-        I-Anteil des PI-Reglers: Eliminiert bleibende Abweichungen (z.B. 0.05).
-        Höher = schnellere Korrektur, aber instabiler | Niedriger = langsamer, stabiler
-      default: 0.05
-      selector:
-        number:
-          min: 0.01
-          max: 0.2
-          step: 0.01
-    
-    tolerance:
-      name: 📏 Toleranzbereich (Totband)
-      description: |
-        Bereich in Watt um den Nullpunkt, in dem KEINE Korrektur stattfindet (z.B. ±25 W).
-        Verhindert permanente Mini-Korrekturen bei stabiler Regelung.
-      default: 25
-      selector:
-        number:
-          min: 0
-          max: 200
-          unit_of_measurement: W
-    
-    wait_time:
-      name: ⏱️ Wartezeit nach setzen des Ausgangs
-      description: |
-        Verzögerung (in Sekunden) nach dem Setzen der Ausgangsleistung.
-        Verhindert zu schnelle aufeinanderfolgende Anpassungen und gibt dem Wechselrichter sowie den Sensoren (Netz und Solakon) Zeit, die neuen Werte zu verarbeiten und zu aktualisieren.
-        ⚠️ WICHTIG: modbus-update-einstellungen beachten!
-      default: 3
-      selector:
-        number:
-          min: 0
-          max: 30
-          step: 1
-          unit_of_measurement: s
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    # 🔋 SOC-ZONEN-PARAMETER
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    
-    soc_fast_limit:
-      name: 🔋 SOC-Schwelle "Zone 1 Start" (Aggressive Entladung)
-      description: |
-        Obere Schwelle (z.B. 50 %).
-        Überschreiten aktiviert Zone 1 (aggressive Entladung mit 40A).
-        Zone 1 läuft dann bis SOC ≤ 20% fällt (kein Yo-Yo-Effekt).
-      default: 50
-      selector:
-        number:
-          min: 1
-          max: 99
-          unit_of_measurement: "%"
-    
-    soc_conservation_limit:
-      name: 🔋 SOC-Schwelle "Zone 3 Stopp" (Sicherheits-Grenze)
-      description: |
-        Untere Schwelle (z.B. 20 %).
-        Unterschreiten stoppt die Entladung komplett (Zone 3 = Disabled).
-      default: 20
-      selector:
-        number:
-          min: 1
-          max: 49
-          unit_of_measurement: "%"
-    
-    default_discharge_current:
-      name: 🔋 Max. Entladestrom in Zone 1 (Ampere)
-      description: |
-        Maximaler Entladestrom in Zone 1 (aggressive Entladung, z.B. 40 A).
-        In Zone 2 wird automatisch 0 A gesetzt (batterieschonend).
-      default: 40
-      selector:
-        number:
-          min: 0
-          max: 40
-          unit_of_measurement: A
-    
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    # ⚙️ ZONE 2 - PARAMETER (Batterieschonender Modus)
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    
-    offset:
-      name: ⚙️ Zone 2 - Nullpunkt-Offset (Regelziel)
-      description: |
-        Zielwert für Netzleistung in Zone 2 (z.B. 30 W).
-        Positiver Wert = leichter Netzbezug erwünscht → Batterie wird geladen.
-        0 W = Exakte Nulleinspeisung (wie Zone 1).
-      default: 30
-      selector:
-        number:
-          min: 0
-          max: 100
-          unit_of_measurement: W
-    
-    pv_charge_reserve:
-      name: ⚙️ Zone 2 - PV-Ladereserve
-      description: |
-        PV-Leistung, die in Zone 2 für Ladung reserviert wird (z.B. 50 W).
-        Dynamische Obergrenze: Max. Entladung = PV - Reserve.
-        Stellt sicher, dass Batterie auch bei Trickle-Charge geladen wird.
-      default: 50
-      selector:
-        number:
-          min: 0
-          max: 1000
-          unit_of_measurement: W
-    
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    # 🔒 SICHERHEITS-PARAMETER
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    
-    max_active_power_limit:
-      name: 🔒 Maximale Ausgangsleistung (Hard Limit)
-      description: |
-        Absolute Obergrenze der AC-Ausgangsleistung (z.B. 800 W).
-        Schützt vor Überlastung des Wechselrichters.
-      default: 800
-      selector:
-        number:
-          min: 0
-          max: 1200
-          unit_of_measurement: W
-    
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    # 🌙 NACHTABSCHALTUNG (Optional)
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    
-    night_shutdown_enabled:
-      name: 🌙 Nachtabschaltung aktivieren
-      description: |
-        Deaktiviert Zone 2 nachts automatisch (bei PV < Schwelle).
-        ⚠️ Zone 1 (aggressive Entladung) läuft auch nachts weiter!
-        Sinnvoll für Batterieschonung bei 0 PV.
-      default: false
-      selector:
-        boolean:
-    
-    night_shutdown_pv_threshold:
-      name: 🌙 PV-Schwelle für "Nacht"
-      description: |
-        Unterhalb dieser PV-Leistung gilt es als Nacht (z.B. 10 W).
-        Nur relevant wenn Nachtabschaltung aktiviert ist.
-      default: 10
-      selector:
-        number:
-          min: 0
-          max: 100
-          unit_of_measurement: W
+          soc_sensor:
+            name: 🔋 Solakon ONE - Batterieladestand (SOC)
+            description: Der aktuelle Batterieladestand in %.
+            default: sensor.solakon_one_batterie_ladestand
+            selector:
+              entity:
+                domain: sensor
+                device_class: battery
+        
+          remote_timeout_countdown_sensor:
+            name: ⏱️ Solakon ONE - Remote Timeout Countdown
+            description: Sensor, der den verbleibenden Timeout-Countdown anzeigt.
+            default: sensor.solakon_one_fernsteuerung_zeituberschreitung
+            selector:
+              entity:
+                domain: sensor
+        
+          active_power_number:
+            name: ⚙️ Solakon ONE - Ausgangsleistungsregler
+            description: Die Entität zum Setzen des Leistungs-Sollwerts (Remote Active Power).
+            default: number.solakon_one_fernsteuerung_leistung
+            selector:
+              entity:
+                domain: number
+        
+          max_discharge_current_number:
+            name: 🔋 Solakon ONE - Max. Entladestrom
+            description: Die Entität zur Steuerung des maximalen Entladestroms (A).
+            default: number.solakon_one_maximaler_entladestrom
+            selector:
+              entity:
+                domain: number
+        
+          remote_timeout_set_number:
+            name: ⏲️ Solakon ONE - Modus-Reset-Timer
+            description: Dient zum Setzen/Zurücksetzen des Remote-Timeouts (max. 3599 s).
+            default: number.solakon_one_fernsteuerung_zeituberschreitung
+            selector:
+              entity:
+                domain: number
+        
+          mode_select:
+            name: 🔄 Solakon ONE - Betriebsmodus-Auswahl
+            description: Die Entität zum Umschalten des Betriebsmodus (Remote Control Mode).
+            default: select.solakon_one_modus_fernsteuern
+            selector:
+              entity:
+                domain: select
+        
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 🛠️ HOME ASSISTANT HELPER (ERFORDERLICH!)
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      homeassistant_helper:
+        name: "🛠️ HOME ASSISTANT HELPER (ERFORDERLICH!):"
+        description: "Hier findest du die notwendigen Helfer die du anlegen MUSST damit dieser Blueprint richtig funktioniert."
+        collapsed: true 
+        input:     
+          cycle_active_input_select:
+            name: 🛠️ Entladezyklus-Zustandsspeicher (input_select - ERFORDERLICH!)
+            description: |
+              ⚠️ WICHTIG: Erstellen Sie einen Input Select Helfer mit den Optionen 'on' und 'off'.
+              Settings → Devices & Services → Helpers → Create Helper → Dropdown
+              - Name: z.B. 'SOC Entladezyklus Status'
+              - Options: 'on' und 'off' (exakt so!)
+            
+              Dieser speichert, ob der Entladezyklus aktiv ist (Zone 1).
+            default: input_select.soc_entladezyklus_status
+            selector:
+              entity:
+                domain: input_select
+        
+          integral_helper:
+            name: 🛠️ Integral-Speicher (input_number - ERFORDERLICH!)
+            description: |
+              ⚠️ WICHTIG: Erstellen Sie einen input_number Helper für den PI-Regler:
+              Settings → Devices & Services → Helpers → Create Helper → Number
+              - Name: z.B. 'Solakon Integral'
+              - Min: -1000
+              - Max: 1000
+              - Step: 1
+              - Initial: 0
+            
+              Dieser speichert den I-Anteil des PI-Reglers.
+            default: input_number.solakon_integral
+            selector:
+              entity:
+                domain: input_number
+        
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 🎚️ REGELUNGS-PARAMETER
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      PI_parameter:
+        name: "🎚️ REGELUNGS-PARAMETER (PI):"
+        description: "Hier findest du die Parameter für die PI-regelung, diese solltest du nicht anfassen müssen, aber du kannst."
+        collapsed: true 
+        input:    
+          regulator_factor:
+            name: 🎛️ P-Faktor (Proportional-Verstärkung)
+            description: |
+              P-Anteil des PI-Reglers: Reagiert auf aktuelle Abweichung (z.B. 1.5).
+              Höher = schnellere, aggressivere Reaktion | Niedriger = sanftere Reaktion
+            default: 1.5
+            selector:
+              number:
+                min: 0.1
+                max: 5
+                step: 0.1
+        
+          ki_factor:
+            name: 🎛️ I-Faktor (Integral-Verstärkung)
+            description: |
+              I-Anteil des PI-Reglers: Eliminiert bleibende Abweichungen (z.B. 0.05).
+              Höher = schnellere Korrektur, aber instabiler | Niedriger = langsamer, stabiler
+            default: 0.05
+            selector:
+              number:
+                min: 0.01
+                max: 0.2
+                step: 0.01
+     
+          tolerance:
+            name: 📏 Toleranzbereich (Totband)
+            description: |
+              Bereich in Watt um den Nullpunkt, in dem KEINE Korrektur stattfindet (z.B. ±25 W).
+              Verhindert permanente Mini-Korrekturen bei stabiler Regelung.
+            default: 25
+            selector:
+              number:
+                min: 0
+                max: 200
+                unit_of_measurement: W
+        
+          wait_time:
+            name: ⏱️ Wartezeit nach setzen des Ausgangs
+            description: |
+              Verzögerung (in Sekunden) nach dem Setzen der Ausgangsleistung
+              Verhindert zu schnelle aufeinanderfolgende Anpassungen und gibt dem Wechselrichter sowie den Sensoren (Netz und Solakon) Zeit, die neuen Werte zu verarbeiten und zu aktualisieren.
+              ⚠️ WICHTIG: modbus-update-einstellungen beachten!
+            default: 3
+            selector:
+              number:
+                min: 0
+                max: 30
+                step: 1
+                unit_of_measurement: s
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 🔋 SOC-ZONEN-PARAMETER
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      soc_parameter:
+        name: "🔋 SOC-ZONEN-PARAMETER:"
+        description: "Hier findest du die Parameter für die SOC-Zonensteuerung."
+        collapsed: true 
+        input:    
+          soc_fast_limit:
+            name: 🔋 SOC-Schwelle "Zone 1 Start" (Aggressive Entladung)
+            description: |
+              Obere Schwelle (z.B. 50 %).
+              Überschreiten aktiviert Zone 1 (aggressive Entladung mit 40A).
+              Zone 1 läuft dann bis SOC ≤ 20% fällt (kein Yo-Yo-Effekt).
+            default: 50
+            selector:
+              number:
+                min: 1
+                max: 99
+                unit_of_measurement: "%"
+        
+          soc_conservation_limit:
+            name: 🔋 SOC-Schwelle "Zone 3 Stopp" (Sicherheits-Grenze)
+            description: |
+              Untere Schwelle (z.B. 20 %).
+              Unterschreiten stoppt die Entladung komplett (Zone 3 = Disabled).
+            default: 20
+            selector:
+              number:
+                min: 1
+                max: 49
+                unit_of_measurement: "%"
+        
+          default_discharge_current:
+            name: 🔋 Max. Entladestrom in Zone 1 (Ampere)
+            description: |
+              Maximaler Entladestrom in Zone 1 (aggressive Entladung, z.B. 40 A).
+              In Zone 2 wird automatisch 0 A gesetzt (batterieschonend).
+            default: 40
+            selector:
+              number:
+                min: 0
+                max: 40
+                unit_of_measurement: A
+        
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # ⚙️ ZONE 1/2 - PARAMETER/OFFSETS
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      zone_parameter:
+        name: "⚙️ ZONE 1/2 - PARAMETER/OFFSETS:"
+        description: "Hier findest du die Parameter für die SOC-Zonensteuerung."
+        collapsed: true 
+        input:   
+          offset_1:
+            name: ⚙️ Zone 1 - Nullpunkt-Offset (Regelziel)
+            description: |
+              Zielwert für Netzleistung in Zone 1 (z.B. 30 W).
+              Positiver Wert = leichter Netzbezug erwünscht.
+              0 W = Exakte Nulleinspeisung.
+            default: 30
+            selector:
+              number:
+                min: 0
+                max: 100
+                unit_of_measurement: W
+       
+          offset_2:
+            name: ⚙️ Zone 2 - Nullpunkt-Offset (Regelziel)
+            description: |
+              Zielwert für Netzleistung in Zone 2 (z.B. 30 W).
+              Positiver Wert = leichter Netzbezug erwünscht.
+              0 W = Exakte Nulleinspeisung.
+            default: 30
+            selector:
+              number:
+                min: 0
+                max: 100
+                unit_of_measurement: W
+        
+          pv_charge_reserve:
+            name: ⚙️ Zone 2 - PV-Ladereserve
+            description: |
+              PV-Leistung, die in Zone 2 für Ladung reserviert wird (z.B. 50 W).
+              Dynamische Obergrenze: Max. Entladung = PV - Reserve.
+              Stellt sicher, dass Batterie auch bei Trickle-Charge geladen wird.
+            default: 50
+            selector:
+              number:
+                min: 0
+                max: 1000
+                unit_of_measurement: W
+        
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 🔒 SICHERHEITS-PARAMETER
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      safety_parameter:
+        name: "🔒 SICHERHEITS-PARAMETER:"
+        description: "Hier findest du den Parameter für die max Ausgangsleistung."
+        collapsed: true 
+        input:     
+          max_active_power_limit:
+            name: 🔒 Maximale Ausgangsleistung (Hard Limit)
+            description: |
+              Absolute Obergrenze der AC-Ausgangsleistung (z.B. 800 W).
+              Schützt vor Überlastung des Wechselrichters.
+            default: 800
+            selector:
+              number:
+                min: 0
+                max: 1200
+                unit_of_measurement: W
+        
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 🌙 NACHTABSCHALTUNG (Optional)
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      night_parameter:
+        name: "🌙 NACHTABSCHALTUNG (Optional):"
+        description: "Hier findest du die Parameter für die optionale Nachtabschaltung (atm wenig effektive Änderung/Platzhalter für mögliches zukünftiges Abschalten des Inverters)."
+        collapsed: true 
+        input:    
+          night_shutdown_enabled:
+            name: 🌙 Nachtabschaltung aktivieren
+            description: |
+              Deaktiviert Zone 2 nachts automatisch (bei PV < Schwelle).
+              ⚠️ Zone 1 (aggressive Entladung) läuft auch nachts weiter!
+              Sinnvoll für Batterieschonung bei 0 PV.
+            default: false
+            selector:
+              boolean:
+        
+          night_shutdown_pv_threshold:
+            name: 🌙 PV-Schwelle für "Nacht"
+            description: |
+              Unterhalb dieser PV-Leistung gilt es als Nacht (z.B. 10 W).
+              Nur relevant wenn Nachtabschaltung aktiviert ist.
+            default: 10
+            selector:
+              number:
+                min: 0
+                max: 100
+                unit_of_measurement: W
     
 mode: queued
 max_exceeded: silent
@@ -649,7 +686,8 @@ action:
       tolerance_int: !input tolerance
       regulator_factor_float: !input regulator_factor
       ki_factor_float: !input ki_factor
-      offset_int: !input offset
+      offset_1_int: !input offset_1
+      offset_2_int: !input offset_2
       max_active_power_limit_int: !input max_active_power_limit
       pv_charge_reserve_int: !input pv_charge_reserve
       
@@ -665,12 +703,12 @@ action:
           0
         {% endif %}
 
-      # Target Offset basiert auf Zone (0 W in Zone 1, Offset_Int in Zone 2)
+      # Target Offset basiert auf Zone (offset_1_int in Zone 1, offset_2_int in Zone 2)
       target_offset: >
         {% if is_state(cycle_active, 'on') %}
-          0
+          {{ offset_1_int}}
         {% else %}
-          {{ offset_int }}
+          {{ offset_2_int }}
         {% endif %}
       
       # Toleranzprüfung basiert auf tatsächlichem Grid-Fehler (nicht begrenzt)
@@ -684,10 +722,10 @@ action:
       error: >
         {% if is_state(cycle_active, 'on') %}
           {# ZONE 1: Min(verfügbare Kapazität, Grid) #}
-          {{ [(max_active_power_limit_int - current_active_power), grid_power_float] | min | float(0) }}
+          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_1_int)] | min | float(0) }}
         {% else %}
           {# ZONE 2: Min(verfügbare Kapazität, Grid - Offset, PV-Kapazität) #}
-          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
+          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_2_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
         {% endif %}
       
       # 2. Integral mit Anti-Windup
@@ -791,6 +829,9 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
+
+
+
 
 
 

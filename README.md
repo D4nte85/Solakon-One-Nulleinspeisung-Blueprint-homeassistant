@@ -2,6 +2,8 @@
 
 Dieses Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung** für den Solakon ONE Wechselrichter, basierend auf einem **PI-Regler (Proportional-Integral-Regler)** und einer intelligenten **dreistufigen Batterieladestands-Logik (SOC)**.
 
+Ziel dieses Blueprints ist es PV-Energie direkt auszugeben ohne den Umweg über die Batterie, dies verhindert das "flackern" das die App mit ihrer (lade ein Prozent -> entlade ein Prozent -> repeat) Funktionsweise verursacht und soll die Batterie schonen.
+
 ## 🚀 Installation
 
 Installieren Sie den Blueprint direkt über diesen Button in Ihrer Home Assistant Instanz:
@@ -68,7 +70,7 @@ Der Blueprint nutzt einen modernen **PI-Regler** statt eines einfachen P-Reglers
   - Keine Verzögerung - sofortige Reaktion auf Sensor-Änderungen
 
 * **Fehlerberechnung mit dynamischer Begrenzung:**
-  - **Zone 1:** Fehler = Min(verfügbare Kapazität, Grid Power)
+  - **Zone 1:** Fehler = Min(verfügbare Kapazität, Grid Power - Offset)
   - **Zone 2:** Fehler = Min(verfügbare Kapazität, Grid Power - Offset, PV-Kapazität)
   - Verhindert Integral-Windup durch intelligente Begrenzung
 
@@ -85,8 +87,8 @@ Die Regelung wird anhand des aktuellen SOC in drei Betriebsmodi unterteilt:
 
 | Zone | SOC-Bereich | Modus | Max. Entladestrom | Regelziel | Besonderheiten |
 |:-----|:-----------|:------|:-----------------|:---------|:--------------|
-| **1. Aggressive Entladung** | SOC > 50% | `INV Discharge (PV Priority)` | 40 A | 0 W (exakte Nulleinspeisung) | Läuft **durchgehend bis SOC ≤ 20%** (kein Yo-Yo-Effekt). Auch nachts aktiv. Hard Limit 800W. |
-| **2. Batterieschonend** | 20% < SOC ≤ 50% | `INV Discharge (PV Priority)` | **0 A** (nur AC-Limit) | 30 W (leichter Netzbezug = Laden) | Dynamisches Limit: **Max(0, PV - Reserve)**. Optional: Nachtabschaltung möglich. |
+| **1. Aggressive Entladung** | SOC > 50% | `INV Discharge (PV Priority)` | 40 A | 0W + Offset 1 | Läuft **durchgehend bis SOC ≤ 20%** (kein Yo-Yo-Effekt). Auch nachts aktiv. Hard Limit 800W. |
+| **2. Batterieschonend** | 20% < SOC ≤ 50% | `INV Discharge (PV Priority)` | **0 A** (nur AC-Limit) | 0W + Offset 2 | Dynamisches Limit: **Max(0, PV - Reserve)**. Optional: Nachtabschaltung möglich. |
 | **3. Sicherheitsstopp** | SOC ≤ 20% | `Disabled` | 0 A | - | Ausgang = 0 W. Vollständiger Schutz der Batterie. |
 
 **Wichtig:** 
@@ -177,8 +179,9 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
-| **Nullpunkt-Offset** | 30 W | 0 | 100 W | Regelziel in Zone 2. Positiv = leichter Netzbezug (Batterie wird geladen). 0W = exakte Nulleinspeisung. |
-| **PV-Ladereserve** | 50 W | 0 | 1000 W | Reservierte PV-Leistung für Ladung. Dynamisches Limit: Max(0, PV - Reserve). |
+| **Nullpunkt-Offset-1** | 30 W | 0 | 100 W | Regelziel in Zone 1. Positiv = leichter Netzbezug. 0W = exakte Nulleinspeisung. |
+| **Nullpunkt-Offset-2** | 30 W | 0 | 100 W | Regelziel in Zone 2. Positiv = leichter Netzbezug. 0W = exakte Nulleinspeisung. |
+| **PV-Ladereserve** | 50 W | 0 | 1000 W | Reservierte PV-Leistung für Ladung. Dynamisches Limit: Max(0, PV - Reserve). Nur Zone 2. |
 
 **Erklärung PV-Ladereserve:**
 - Bei 300W PV-Erzeugung und 50W Reserve → Max. Ausgang in Zone 2: 250W
