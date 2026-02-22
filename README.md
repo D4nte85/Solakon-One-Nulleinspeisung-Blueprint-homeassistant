@@ -1,4 +1,4 @@
-# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V206
+# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V207
 
 Dieser Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung** für den Solakon ONE Wechselrichter, basierend auf einem **PI-Regler (Proportional-Integral-Regler)** und einer intelligenten **dreistufigen Batterieladestands-Logik (SOC)**.
 
@@ -42,6 +42,21 @@ Der Blueprint benötigt **zwei Helper**, die Sie vor der Installation erstellen 
    * Step: `1`
    * Initialwert: `0`
 5. Speichern (Entity ID: z.B. `input_number.solakon_integral`)
+
+### 3. Input Number Helper für Dynamischen Offset (Optional)
+
+Wenn Sie den Nullpunkt-Offset zur Laufzeit per Automatisierung anpassen möchten, erstellen Sie einen oder zwei zusätzliche Helper:
+
+1. Gehen Sie zu **Einstellungen** → **Geräte & Dienste** → **Helfer**
+2. Klicken Sie auf **Helfer erstellen** → **Number**
+3. Name: z.B. `Solakon Offset Zone 1`
+4. **Einstellungen:**
+   * Minimum: `0`
+   * Maximum: `500`
+   * Step: `1`
+   * Initialwert: `30` (oder Ihr gewünschter Standard-Offset)
+5. Speichern (Entity ID: z.B. `input_number.solakon_offset_zone1`)
+6. Optional: Wiederholen für Zone 2 (`input_number.solakon_offset_zone2`)
 
 ---
 
@@ -175,13 +190,56 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 
 ---
 
-### ⚙️ Zone 2 - Parameter (Batterieschonender Modus)
+### ⚙️ Zone 1/2 - Parameter
 
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
-| **Nullpunkt-Offset-1** | 30 W | 0 | 100 W | Regelziel in Zone 1. Positiv = leichter Netzbezug. 0W = exakte Nulleinspeisung. |
-| **Nullpunkt-Offset-2** | 30 W | 0 | 100 W | Regelziel in Zone 2. Positiv = leichter Netzbezug. 0W = exakte Nulleinspeisung. |
+| **Nullpunkt-Offset-1 (Statisch)** | 30 W | 0 | 100 W | Statischer Fallback-Wert für Zone 1. Wird nur verwendet, wenn keine dynamische Offset-Entität konfiguriert ist. |
+| **Nullpunkt-Offset-1 (Dynamisch)** | *(leer)* | - | - | Optionale `input_number` Entität. Wenn konfiguriert, wird deren Wert anstelle des statischen Offsets verwendet. |
+| **Nullpunkt-Offset-2 (Statisch)** | 30 W | 0 | 100 W | Statischer Fallback-Wert für Zone 2. Wird nur verwendet, wenn keine dynamische Offset-Entität konfiguriert ist. |
+| **Nullpunkt-Offset-2 (Dynamisch)** | *(leer)* | - | - | Optionale `input_number` Entität. Wenn konfiguriert, wird deren Wert anstelle des statischen Offsets verwendet. |
 | **PV-Ladereserve** | 50 W | 0 | 1000 W | Reservierte PV-Leistung für Ladung. Dynamisches Limit: Max(0, PV - Reserve). Nur Zone 2. |
+
+**Dynamischer Offset – Anwendungsbeispiel:**
+
+Der dynamische Offset ermöglicht es, den Nullpunkt-Offset **zur Laufzeit per Automatisierung anzupassen**, ohne den Blueprint zu ändern. Erstellen Sie dazu einen `input_number` Helper (z.B. `input_number.solakon_offset_zone1`) und wählen Sie diesen im Blueprint aus.
+
+**Typischer Anwendungsfall – OLED-Fernseher:**
+Moderne OLED-TVs haben einen stark schwankenden Stromverbrauch (50–300 W). Der Standard-Offset von 30 W reicht oft nicht aus, um Einspeisungsspitzen zu vermeiden. Mit einer einfachen Automatisierung kann der Offset dynamisch angehoben werden:
+
+```yaml
+# Beispiel-Automatisierung: Offset erhöhen wenn TV läuft
+automation:
+  - alias: "Solakon Offset TV anpassen"
+    trigger:
+      - platform: state
+        entity_id: media_player.wohnzimmer_tv
+        to: "on"
+    action:
+      - service: input_number.set_value
+        target:
+          entity_id:
+            - input_number.solakon_offset_zone1
+            - input_number.solakon_offset_zone2
+        data:
+          value: 300  # Höherer Offset bei aktivem TV
+
+  - alias: "Solakon Offset TV zurücksetzen"
+    trigger:
+      - platform: state
+        entity_id: media_player.wohnzimmer_tv
+        to: "off"
+    action:
+      - service: input_number.set_value
+        target:
+          entity_id:
+            - input_number.solakon_offset_zone1
+            - input_number.solakon_offset_zone2
+        data:
+          value: 30  # Standard-Offset wiederherstellen
+```
+
+> ⚠️ **Abwärtskompatibel:** Wenn keine dynamische Entität ausgewählt wird, funktioniert alles wie bisher mit dem statischen Wert.
 
 **Erklärung PV-Ladereserve:**
 - Bei 300W PV-Erzeugung und 50W Reserve → Max. Ausgang in Zone 2: 250W

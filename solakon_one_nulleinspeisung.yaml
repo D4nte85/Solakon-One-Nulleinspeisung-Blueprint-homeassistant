@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V206)
+  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V207)
   description: |
     ### Dynamische Nulleinspeisung mit SOC-Zonenlogik
       Dieser Home Assistant Blueprint implementiert eine dynamische Nulleinspeisung für den Solakon ONE Wechselrichter.
@@ -270,13 +270,14 @@ blueprint:
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
       zone_parameter:
         name: "⚙️ ZONE 1/2 - PARAMETER/OFFSETS:"
-        description: "Hier findest du die Parameter für die SOC-Zonensteuerung."
-        collapsed: true 
+        description: "Hier findest du die Parameter für die SOC-Zonensteuerung. Der Offset kann statisch oder dynamisch (über eine input_number Entität) konfiguriert werden."
+        collapsed: true
         input:   
           offset_1:
-            name: ⚙️ Zone 1 - Nullpunkt-Offset (Regelziel)
+            name: ⚙️ Zone 1 - Nullpunkt-Offset Statisch (Fallback)
             description: |
-              Zielwert für Netzleistung in Zone 1 (z.B. 30 W).
+              Statischer Zielwert für Netzleistung in Zone 1 (z.B. 30 W).
+              Wird verwendet, wenn KEINE dynamische Offset-Entität konfiguriert ist.
               Positiver Wert = leichter Netzbezug erwünscht.
               0 W = Exakte Nulleinspeisung.
             default: 30
@@ -285,11 +286,25 @@ blueprint:
                 min: 0
                 max: 100
                 unit_of_measurement: W
-       
+
+          offset_1_entity:
+            name: ⚙️ Zone 1 - Dynamischer Nullpunkt-Offset (Optional)
+            description: |
+              Optionale input_number Entität für den dynamischen Offset in Zone 1.
+              Wenn konfiguriert, wird der Wert dieser Entität anstelle des statischen Offsets verwendet.
+              So kann der Offset z.B. per Automatisierung angepasst werden
+              (z.B. Offset erhöhen wenn der Fernseher läuft).
+              ⚠️ Wenn leer gelassen, wird der statische Wert oben verwendet.
+            default: {}
+            selector:
+              entity:
+                domain: input_number
+
           offset_2:
-            name: ⚙️ Zone 2 - Nullpunkt-Offset (Regelziel)
+            name: ⚙️ Zone 2 - Nullpunkt-Offset Statisch (Fallback)
             description: |
-              Zielwert für Netzleistung in Zone 2 (z.B. 30 W).
+              Statischer Zielwert für Netzleistung in Zone 2 (z.B. 30 W).
+              Wird verwendet, wenn KEINE dynamische Offset-Entität konfiguriert ist.
               Positiver Wert = leichter Netzbezug erwünscht.
               0 W = Exakte Nulleinspeisung.
             default: 30
@@ -298,7 +313,20 @@ blueprint:
                 min: 0
                 max: 100
                 unit_of_measurement: W
-        
+
+          offset_2_entity:
+            name: ⚙️ Zone 2 - Dynamischer Nullpunkt-Offset (Optional)
+            description: |
+              Optionale input_number Entität für den dynamischen Offset in Zone 2.
+              Wenn konfiguriert, wird der Wert dieser Entität anstelle des statischen Offsets verwendet.
+              So kann der Offset z.B. per Automatisierung angepasst werden
+              (z.B. Offset erhöhen wenn der Fernseher läuft).
+              ⚠️ Wenn leer gelassen, wird der statische Wert oben verwendet.
+            default: {}
+            selector:
+              entity:
+                domain: input_number
+
           pv_charge_reserve:
             name: ⚙️ Zone 2 - PV-Ladereserve
             description: |
@@ -686,8 +714,24 @@ action:
       tolerance_int: !input tolerance
       regulator_factor_float: !input regulator_factor
       ki_factor_float: !input ki_factor
-      offset_1_int: !input offset_1
-      offset_2_int: !input offset_2
+      offset_1_static: !input offset_1
+      offset_1_entity_id: !input offset_1_entity
+      offset_2_static: !input offset_2
+      offset_2_entity_id: !input offset_2_entity
+
+      # Dynamischer Offset: Entity-Wert wenn konfiguriert, sonst statischer Fallback
+      offset_1_int: >
+        {% if offset_1_entity_id is string and offset_1_entity_id | length > 0 and states(offset_1_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+          {{ states(offset_1_entity_id) | float(offset_1_static) }}
+        {% else %}
+          {{ offset_1_static }}
+        {% endif %}
+      offset_2_int: >
+        {% if offset_2_entity_id is string and offset_2_entity_id | length > 0 and states(offset_2_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+          {{ states(offset_2_entity_id) | float(offset_2_static) }}
+        {% else %}
+          {{ offset_2_static }}
+        {% endif %}
       max_active_power_limit_int: !input max_active_power_limit
       pv_charge_reserve_int: !input pv_charge_reserve
       
@@ -706,7 +750,7 @@ action:
       # Target Offset basiert auf Zone (offset_1_int in Zone 1, offset_2_int in Zone 2)
       target_offset: >
         {% if is_state(cycle_active, 'on') %}
-          {{ offset_1_int}}
+          {{ offset_1_int }}
         {% else %}
           {{ offset_2_int }}
         {% endif %}
