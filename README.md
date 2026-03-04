@@ -101,7 +101,7 @@ Die Regelung wird anhand des aktuellen SOC in bis zu vier Betriebsmodi unterteil
 
 | Zone | SOC-Bereich / Bedingung | Modus | Max. Entladestrom | Regelziel | Besonderheiten |
 |:-----|:------------------------|:------|:-----------------|:---------|:--------------|
-| **0. Überschuss-Einspeisung** | SOC ≥ Export-Schwelle UND PV > Haus + 50W | `INV Discharge (PV Priority)` | 0 A | Hard Limit (max. W) | **Optional aktivierbar.** Nur reiner PV-Strom ins Netz. Kehrt automatisch zur Nulleinspeisung zurück wenn Netz Strom anfordert. |
+| **0. Überschuss-Einspeisung** | SOC ≥ Export-Schwelle UND PV-Erzeugung - PV-reserve > verbrauch + solakon Leistung | `INV Discharge (PV Priority)` | 0 A | Hard Limit (max. W) | **Optional aktivierbar.** Nur reiner PV-Strom ins Netz. Kehrt automatisch zur Nulleinspeisung zurück wenn Netz Strom anfordert. |
 | **1. Aggressive Entladung** | SOC > Zone-1-Schwelle | `INV Discharge (PV Priority)` | 40 A | 0W + Offset 1 | Läuft **durchgehend bis SOC ≤ Zone-3-Schwelle** (kein Yo-Yo-Effekt). Auch nachts aktiv. Hard Limit. |
 | **2. Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `INV Discharge (PV Priority)` | **0 A** | 0W + Offset 2 | Dynamisches Limit: **Max(0, PV - Reserve)**. Optional: Nachtabschaltung möglich. |
 | **3. Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `Disabled` | 0 A | — | Ausgang = 0 W. Vollständiger Schutz der Batterie. |
@@ -119,7 +119,7 @@ Die Regelung wird anhand des aktuellen SOC in bis zu vier Betriebsmodi unterteil
 Die Überschuss-Einspeisung kann optional aktiviert werden und ermöglicht die Einspeisung von echtem PV-Überschuss ins Netz, wenn der Akku voll ist:
 
 * **Aktivierung:** Über den Parameter "Überschuss-Einspeisung aktivieren"
-* **Startbedingung:** SOC ≥ konfigurierte Export-Schwelle (z.B. 100 %) **UND** PV-Erzeugung > geschätzter Hausverbrauch + 50 W
+* **Startbedingung:** SOC ≥ konfigurierte Export-Schwelle (z.B. 100 %) **UND** PV-Erzeugung - PV-reserve > verbrauch + solakon Leistung
 * **Verhalten:**
   - Max. Entladestrom wird auf 0 A gesetzt (kein Batterieentladen)
   - AC-Output-Limit wird auf das Hard Limit gesetzt (z.B. 800 W)
