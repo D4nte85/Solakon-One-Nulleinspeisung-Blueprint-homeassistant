@@ -10,23 +10,23 @@
 
         %% ── Zone 1 ──────────────────────────────────────────────────
         ZONE_CHECK -- "SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
-        Z1_START["🔋 Zone 1 aktivieren • Zyklus = on • Integral = 0 • Modus → INV Discharge PV Priority   (Puls-Sequenz: 10s → 3599s)"]
+        Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Modus → INV Discharge PV Priority   (Puls-Sequenz: 10s → 3599s)"]
 
         %% ── Zone 3 (Zyklus on) ──────────────────────────────────────
         ZONE_CHECK -- "SOC ≤ Zone-3-Schwelle UND Zyklus = on" --> Z3_A
-        Z3_A["🛑 Zone 3 aktivieren • Zyklus = off • Integral = 0 • Modus → Disabled • Output → 0 W"]
+        Z3_A["🛑 Zone 3 aktivieren   Zyklus = off   Integral = 0   Modus → Disabled   Output → 0 W"]
 
         %% ── Zone 3 (Absicherung) ────────────────────────────────────
         ZONE_CHECK -- "SOC < Zone-3-Schwelle UND Zyklus = off UND Modus ≠ Disabled" --> Z3_B
-        Z3_B["🛑 Zone 3 Absicherung • Modus → Disabled • Output → 0 W"]
+        Z3_B["🛑 Zone 3 Absicherung   Modus → Disabled   Output → 0 W"]
 
         %% ── Zone 2 ──────────────────────────────────────────────────
         ZONE_CHECK -- "Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = Disabled UND NICHT Nacht" --> Z2_START
-        Z2_START["🔋 Zone 2 aktivieren • Integral = 0 • Modus → INV Discharge PV Priority   (Puls-Sequenz: 10s → 3599s)"]
+        Z2_START["🔋 Zone 2 aktivieren   Integral = 0   Modus → INV Discharge PV Priority   (Puls-Sequenz: 10s → 3599s)"]
 
         %% ── Nachtabschaltung ────────────────────────────────────────
         ZONE_CHECK -- "Nachtabschaltung aktiv UND PV < Schwelle UND Zyklus = off UND Modus aktiv" --> NIGHT
-        NIGHT["🌙 Nachtabschaltung • Integral = 0 • Modus → Disabled • Output → 0 W"]
+        NIGHT["🌙 Nachtabschaltung   Integral = 0   Modus → Disabled   Output → 0 W"]
 
         %% ── Kein Zonenwechsel ───────────────────────────────────────
         ZONE_CHECK -- "Kein Zonenwechsel" --> PI_GATE
@@ -52,7 +52,7 @@
         SURPLUS_COND -- Ja --> CALC_SURPLUS
 
         %% ── Zone-0-Pfad ─────────────────────────────────────────────
-        CALC_SURPLUS["☀️ Zone 0 — Überschuss-Einspeisung • Entladestrom → 0 A • final_power = Hard Limit • Integral gespeichert"]
+        CALC_SURPLUS["☀️ Zone 0 — Überschuss-Einspeisung   Entladestrom → 0 A   final_power = Hard Limit   Integral gespeichert"]
         CALC_SURPLUS --> TIMEOUT_CHECK
 
         %% ── Normaler PI-Pfad ────────────────────────────────────────
