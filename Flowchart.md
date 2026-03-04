@@ -1,32 +1,32 @@
 ```mermaid
     flowchart TD
-        START([⚡ Trigger\nGrid / PV / SOC / Modus]) --> VAL
+        START([⚡ Trigger Grid / PV / SOC / Modus]) --> VAL
 
-        VAL{{"🛡️ Validierung\nSOC-Limits & Entitäten"}}
+        VAL{{"🛡️ Validierung SOC-Limits & Entitäten"}}
         VAL -- Fehler --> STOP([🛑 Stop + Log-Eintrag])
         VAL -- OK --> ZONE_CHECK
 
         ZONE_CHECK{{"SOC & Zyklus-Status?"}}
 
         %% ── Zone 1 ──────────────────────────────────────────────────
-        ZONE_CHECK -- "SOC > Zone-1-Schwelle\nUND Zyklus = off" --> Z1_START
-        Z1_START["🔋 Zone 1 aktivieren\n• Zyklus = on\n• Integral = 0\n• Modus → INV Discharge PV Priority\n  (Puls-Sequenz: 10s → 3599s)"]
+        ZONE_CHECK -- "SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
+        Z1_START["🔋 Zone 1 aktivieren • Zyklus = on • Integral = 0 • Modus → INV Discharge PV Priority   (Puls-Sequenz: 10s → 3599s)"]
 
         %% ── Zone 3 (Zyklus on) ──────────────────────────────────────
-        ZONE_CHECK -- "SOC ≤ Zone-3-Schwelle\nUND Zyklus = on" --> Z3_A
-        Z3_A["🛑 Zone 3 aktivieren\n• Zyklus = off\n• Integral = 0\n• Modus → Disabled\n• Output → 0 W"]
+        ZONE_CHECK -- "SOC ≤ Zone-3-Schwelle UND Zyklus = on" --> Z3_A
+        Z3_A["🛑 Zone 3 aktivieren • Zyklus = off • Integral = 0 • Modus → Disabled • Output → 0 W"]
 
         %% ── Zone 3 (Absicherung) ────────────────────────────────────
-        ZONE_CHECK -- "SOC < Zone-3-Schwelle\nUND Zyklus = off\nUND Modus ≠ Disabled" --> Z3_B
-        Z3_B["🛑 Zone 3 Absicherung\n• Modus → Disabled\n• Output → 0 W"]
+        ZONE_CHECK -- "SOC < Zone-3-Schwelle UND Zyklus = off UND Modus ≠ Disabled" --> Z3_B
+        Z3_B["🛑 Zone 3 Absicherung • Modus → Disabled • Output → 0 W"]
 
         %% ── Zone 2 ──────────────────────────────────────────────────
-        ZONE_CHECK -- "Zone-3 < SOC ≤ Zone-1\nUND Zyklus = off\nUND Modus = Disabled\nUND NICHT Nacht" --> Z2_START
-        Z2_START["🔋 Zone 2 aktivieren\n• Integral = 0\n• Modus → INV Discharge PV Priority\n  (Puls-Sequenz: 10s → 3599s)"]
+        ZONE_CHECK -- "Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = Disabled UND NICHT Nacht" --> Z2_START
+        Z2_START["🔋 Zone 2 aktivieren • Integral = 0 • Modus → INV Discharge PV Priority   (Puls-Sequenz: 10s → 3599s)"]
 
         %% ── Nachtabschaltung ────────────────────────────────────────
-        ZONE_CHECK -- "Nachtabschaltung aktiv\nUND PV < Schwelle\nUND Zyklus = off\nUND Modus aktiv" --> NIGHT
-        NIGHT["🌙 Nachtabschaltung\n• Integral = 0\n• Modus → Disabled\n• Output → 0 W"]
+        ZONE_CHECK -- "Nachtabschaltung aktiv UND PV < Schwelle UND Zyklus = off UND Modus aktiv" --> NIGHT
+        NIGHT["🌙 Nachtabschaltung • Integral = 0 • Modus → Disabled • Output → 0 W"]
 
         %% ── Kein Zonenwechsel ───────────────────────────────────────
         ZONE_CHECK -- "Kein Zonenwechsel" --> PI_GATE
@@ -38,37 +38,37 @@
         NIGHT --> END_STOP
 
         %% ── PI-Regler Gate ──────────────────────────────────────────
-        PI_GATE{{"Modus = INV Discharge?\nUND Zone 1 ODER Tag?"}}
+        PI_GATE{{"Modus = INV Discharge? UND Zone 1 ODER Tag?"}}
         PI_GATE -- Nein --> END_SKIP([Ende — kein Output])
         PI_GATE -- Ja --> SURPLUS_CHECK
 
         %% ── Überschuss-Prüfung ──────────────────────────────────────
-        SURPLUS_CHECK{{"☀️ Überschuss-Einspeisung\naktiviert?"}}
+        SURPLUS_CHECK{{"☀️ Überschuss-Einspeisung aktiviert?"}}
         SURPLUS_CHECK -- Nein --> CALC_NORMAL
         SURPLUS_CHECK -- Ja --> SURPLUS_COND
 
-        SURPLUS_COND{{"SOC ≥ Export-Schwelle\nUND PV > Haus + 50W?"}}
+        SURPLUS_COND{{"SOC ≥ Export-Schwelle UND PV > Haus + 50W?"}}
         SURPLUS_COND -- Nein --> CALC_NORMAL
         SURPLUS_COND -- Ja --> CALC_SURPLUS
 
         %% ── Zone-0-Pfad ─────────────────────────────────────────────
-        CALC_SURPLUS["☀️ Zone 0 — Überschuss-Einspeisung\n• Entladestrom → 0 A\n• final_power = Hard Limit\n• Integral gespeichert"]
+        CALC_SURPLUS["☀️ Zone 0 — Überschuss-Einspeisung • Entladestrom → 0 A • final_power = Hard Limit • Integral gespeichert"]
         CALC_SURPLUS --> TIMEOUT_CHECK
 
         %% ── Normaler PI-Pfad ────────────────────────────────────────
-        CALC_NORMAL["🧠 PI-Regler\n1. Fehler berechnen (zonabhängig)\n2. Integral aktualisieren (Anti-Windup)\n3. Korrektur = P-Teil + I-Teil\n4. new_power = current + Korrektur\n5. Begrenzen: Zone 1 → Hard Limit\n              Zone 2 → Max(0, PV-Reserve)"]
+        CALC_NORMAL["🧠 PI-Regler 1. Fehler berechnen (zonabhängig) 2. Integral aktualisieren (Anti-Windup) 3. Korrektur = P-Teil + I-Teil 4. new_power = current + Korrektur 5. Begrenzen: Zone 1 → Hard Limit               Zone 2 → Max(0, PV-Reserve)"]
         CALC_NORMAL --> DISCHARGE_SET
 
         %% ── Entladestrom setzen ─────────────────────────────────────
         DISCHARGE_SET{{"Zyklus = on?"}}
-        DISCHARGE_SET -- "Ja (Zone 1)" --> SET_40A["🔋 Entladestrom → konfigurierter Max-Wert\n(nur wenn Wert abweicht)"]
-        DISCHARGE_SET -- "Nein (Zone 2)" --> SET_0A["🔋 Entladestrom → 0 A\n(nur wenn Wert abweicht)"]
+        DISCHARGE_SET -- "Ja (Zone 1)" --> SET_40A["🔋 Entladestrom → konfigurierter Max-Wert (nur wenn Wert abweicht)"]
+        DISCHARGE_SET -- "Nein (Zone 2)" --> SET_0A["🔋 Entladestrom → 0 A (nur wenn Wert abweicht)"]
         SET_40A --> TIMEOUT_CHECK
         SET_0A --> TIMEOUT_CHECK
 
         %% ── Timeout ─────────────────────────────────────────────────
         TIMEOUT_CHECK{{"Countdown < 120s?"}}
-        TIMEOUT_CHECK -- Ja --> TIMEOUT_RESET["⏱️ Timeout-Reset\n10s → (1s Pause) → 3599s"]
+        TIMEOUT_CHECK -- Ja --> TIMEOUT_RESET["⏱️ Timeout-Reset 10s → (1s Pause) → 3599s"]
         TIMEOUT_CHECK -- Nein --> INTEGRAL_SAVE
         TIMEOUT_RESET --> INTEGRAL_SAVE
 
@@ -76,11 +76,11 @@
         INTEGRAL_SAVE["💾 Integral-Wert speichern"]
         INTEGRAL_SAVE --> TOL_CHECK
 
-        TOL_CHECK{{"Toleranz überschritten?\nODER Surplus-Status geändert?"}}
-        TOL_CHECK -- Nein --> END_TOL([Ende — kein Output\nkeine unnötigen API-Calls])
+        TOL_CHECK{{"Toleranz überschritten? ODER Surplus-Status geändert?"}}
+        TOL_CHECK -- Nein --> END_TOL([Ende — kein Output keine unnötigen API-Calls])
         TOL_CHECK -- Ja --> SET_OUTPUT
 
-        SET_OUTPUT["⚙️ Ausgangsleistung setzen\nMax(0, final_power) → Wechselrichter"]
+        SET_OUTPUT["⚙️ Ausgangsleistung setzen Max(0, final_power) → Wechselrichter"]
         SET_OUTPUT --> WAIT["⏳ Wartezeit (0–30s)"]
         WAIT --> END_OK([Ende])
 
