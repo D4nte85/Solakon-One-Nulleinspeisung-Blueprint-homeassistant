@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V207)
+  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V208)
   description: |
     ### Dynamische Nulleinspeisung mit SOC-Zonenlogik
       Dieser Home Assistant Blueprint implementiert eine dynamische Nulleinspeisung für den Solakon ONE Wechselrichter.
@@ -16,9 +16,14 @@ blueprint:
     
     ---
     
-    ### 🔋 Dreistufige SOC-Zonenlogik
-    Die Logik unterteilt den Batterieladestand (SOC) in drei Zonen:
+    ### 🔋 SOC-Zonenlogik (3 oder 4 Zonen je nach Konfiguration)
     
+    #### 0. Zone: Überschuss-Einspeisung (Optional - aktivierbar)
+    * **Bedingung:** SOC erreicht konfigurierte Schwelle (z.B. 100 %) UND PV-Erzeugung > Hausverbrauch + Pv-Reserve.
+    * **Aktion:** AC-Output-Limit wird auf Maximum gesetzt, Max. Entladestrom auf 0 A. Nur reiner PV-Strom fließt ins Netz.
+    * **Rückkehr:** Sobald das Netz wieder Strom anfordert (> Offset + Toleranz), kehrt das System zur Nulleinspeisung zurück.
+    * **⚠️ Deaktiviert:** Wenn diese Funktion deaktiviert ist gilt die klassische Nulleinspeisung.
+        
     #### 1. Zone: Aggressive Regelung (Entladezyklus / Hoher SOC)
     * **Bedingung:** SOC > Oberer Schwellenwert (`soc_fast_limit`) ODER Entladezyklus aktiv.
     * **Aktion:** Max. Entladestrom wird auf den Standardwert (z.B. 40 A) gesetzt.
@@ -359,7 +364,38 @@ blueprint:
                 min: 0
                 max: 1200
                 unit_of_measurement: W
-        
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # ☀️ ÜBERSCHUSS-EINSPEISUNG (Optional - Zone 0)
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      surplus_parameter:
+        name: "☀️ ÜBERSCHUSS-EINSPEISUNG (Optional - Zone 0):"
+        description: |
+          Wenn aktiviert: Bei vollem Akku und echtem PV-Überschuss wird der Überschuss direkt ins Netz eingespeist.
+          Wenn deaktiviert: Klassische Nulleinspeisung, kein Einspeisen ins Netz.
+        collapsed: true
+        input:
+          surplus_export_enabled:
+            name: ☀️ Überschuss-Einspeisung aktivieren
+            description: |
+              Aktiviert Zone 0 (Überschuss-Einspeisung bei vollem Akku).
+              ✅ EIN: Wenn SOC ≥ Schwelle UND PV > Verbrauch + PV-Ladereserve → AC-Limit auf Maximum, PV-Überschuss ins Netz.
+              ❌ AUS: Klassische Nulleinspeisung. Kein aktives Einspeisen.
+            default: false
+            selector:
+              boolean:
+
+          soc_export_limit:
+            name: 🔋 SOC-Schwelle für Überschuss-Einspeisung
+            description: |
+              Erreicht der SOC diesen Wert (z.B. 100 %) und es liegt PV-Überschuss an,
+              wird die Nulleinspeisung ausgesetzt und PV-Überschuss ins Netz gedrückt.
+              ⚠️ Nur relevant wenn Überschuss-Einspeisung aktiviert ist.
+            default: 100
+            selector:
+              number:
+                min: 50
+                max: 100
+                unit_of_measurement: "%"
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🌙 NACHTABSCHALTUNG (Optional)
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -459,7 +495,7 @@ triggers:
 
 action:
   # -------------------------------------------------------------------------------------------------
-  # VALIDIERUNG: Check auf kritische Fehler (Werte und Entitäten)
+  # PRÜFUNG: Check auf kritische Fehler (Werte und Entitäten)
   # -------------------------------------------------------------------------------------------------
   - choose:
     # PRÜFUNG A: SOC-Limits
@@ -687,8 +723,7 @@ action:
                   value: 0
                           
   # -------------------------------------------------------------------------------------------------
-  # AKTION E: PI-Regler Logik, Timeout-Refresh UND Entlade-Limit-Absicherung
-  # NUR ausführen wenn Modus aktiv ist UND (Zone 1 ODER Tag)!
+  # PRÜFUNG: NUR ausführen wenn Modus aktiv ist UND (Zone 1 ODER Tag)!
   # -------------------------------------------------------------------------------------------------
   - condition: template
     value_template: >
@@ -760,8 +795,29 @@ action:
       
       # Wartezeit
       wait_time_int: !input wait_time
+            
+      # -----------------------------------------------------------------------
+      # ÜBERSCHUSS-MODUS (Zone 0): Nur berechnen wenn Feature aktiviert
+      # -----------------------------------------------------------------------
+
+      is_surplus_mode: >
+        {% if not surplus_export_enabled_bool %}
+          false
+        {% else %}
+          {% set currently_in_surplus = (states(discharge_current_entity) | float(999) == 0) and (states(active_power_entity) | float(0) >= max_active_power_limit_int) %}
+          {% if currently_in_surplus %}
+            {# Abbruchbedingung: Wenn das Netz wieder über Offset + Toleranz Strom anfordert #}
+            {{ (states(soc) | float(0) >= soc_export_limit_int) and (grid_power_float <= (target_offset + tolerance_int)) }}
+          {% else %}
+            {# Startbedingung: SOC voll UND echter PV-Überschuss #}
+            {{ (states(soc) | float(0) >= soc_export_limit_int) and ((solar_power_float - pv_charge_reserve_int) > (grid_power_float + active_power_entity)) }}
+          {% endif %}
+        {% endif %}
       
-     # PI-Regler Berechnung
+      # -----------------------------------------------------------------------
+      # PI-Regler Berechnung
+      # -----------------------------------------------------------------------
+
       # 1. Aktueller Fehler 
       error: >
         {% if is_state(cycle_active, 'on') %}
@@ -863,9 +919,18 @@ action:
       entity_id: !input integral_helper
       value: "{{ integral_new }}"
       
-  # 4. Power Limit setzen (Nur wenn Toleranz überschritten ist)
+
+  # 4. Ausgangsleistung setzen
+  # Bedingung: Toleranz überschritten ODER Überschuss-Modus hat sich geändert
+
   - condition: template
-    value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
+    value_template: >
+      {% if is_surplus_mode %}
+        {# Nur setzen wenn Output-Limit noch nicht auf Maximum steht (Modbus-Spam verhindern) #}
+        {{ states(active_power_entity) | float(0) < max_active_power_limit_int }}
+      {% else %}
+        {{ grid_error_for_tolerance > tolerance_int }}
+      {% endif %}
   
   - service: number.set_value
     data:
@@ -873,15 +938,3 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
-
-
-
-
-
-
-
-
-
-
-
-
