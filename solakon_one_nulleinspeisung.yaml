@@ -769,6 +769,8 @@ action:
         {% endif %}
       max_active_power_limit_int: !input max_active_power_limit
       pv_charge_reserve_int: !input pv_charge_reserve
+      surplus_export_enabled_bool: !input surplus_export_enabled
+      soc_export_limit_int: !input soc_export_limit
       
       # PI-Regler-Variablen
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
@@ -810,7 +812,7 @@ action:
             {{ (states(soc) | float(0) >= soc_export_limit_int) and (grid_power_float <= (target_offset + tolerance_int)) }}
           {% else %}
             {# Startbedingung: SOC voll UND echter PV-Überschuss #}
-            {{ (states(soc) | float(0) >= soc_export_limit_int) and ((solar_power_float - pv_charge_reserve_int) > (grid_power_float + active_power_entity)) }}
+            {{ (states(soc) | float(0) >= soc_export_limit_int) and ((solar_power_float - pv_charge_reserve_int) > (grid_power_float + current_active_power)) }}
           {% endif %}
         {% endif %}
       
@@ -938,4 +940,5 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
+
 
