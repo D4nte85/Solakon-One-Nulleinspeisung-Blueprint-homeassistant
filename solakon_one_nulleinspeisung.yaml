@@ -640,7 +640,29 @@ action:
                 data:
                   entity_id: !input active_power_number
                   value: 0
-                  
+          # FALL X: Recovery - Modus fiel ab, aber Zyklus ist noch aktiv
+          - conditions:
+              - condition: state
+                entity_id: !input cycle_active_input_select
+                state: 'on'
+              - condition: template
+                value_template: "{{ states(solakon_mode) != '1' }}"
+              - condition: template
+                value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int }}"
+            sequence:
+              - service: number.set_value
+                data:
+                  entity_id: !input remote_timeout_set_number
+                  value: 10
+              - delay: '00:00:01'
+              - service: number.set_value
+                data:
+                  entity_id: !input remote_timeout_set_number
+                  value: 3599
+    - service: select.select_option
+      data:
+        entity_id: !input mode_select
+        option: '1'        
           # FALL D: ZONE 2 - Batterieschonend START (P-Regler aktiv, aber 0 A Entladung)
           - conditions:
               - condition: template
@@ -885,9 +907,6 @@ action:
               
       # FALL E.2: Limit für Zone 2 setzen (Batterieschonend = 0 A)
       - conditions:
-          - condition: state
-            entity_id: !input cycle_active_input_select
-            state: 'off'
           - condition: template
             value_template: >
               {# Prüfe, ob der aktuelle Wert NICHT 0 A entspricht und (cycle ist inaktiv oder surplus mode ist aktiv) #}
@@ -945,6 +964,7 @@ action:
        {% endif %}
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
