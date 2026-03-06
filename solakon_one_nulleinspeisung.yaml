@@ -625,7 +625,7 @@ action:
                 entity_id: !input cycle_active_input_select
                 state: 'off'
               - condition: template
-                value_template: "{{ states(solakon_mode) != '1' }}"
+                value_template: "{{ states(solakon_mode) != '0' }}"
             sequence:
               # Modus auf 'Disabled' setzen
               - choose:
@@ -875,8 +875,8 @@ action:
             state: 'on'
           - condition: template
             value_template: >
-              {# Prüfe, ob der aktuelle Wert NICHT dem Maximalwert entspricht #}
-              {{ states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
+              {# Prüfe, ob der aktuelle Wert NICHT dem Maximalwert entspricht und der Surplus modus inaktiv ist #}
+              {{ not is_surplus_mode and states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
         sequence:
           - service: number.set_value
             data:
@@ -937,9 +937,15 @@ action:
   - service: number.set_value
     data:
       entity_id: !input active_power_number
-      value: "{{ [0, final_power_calculated] | max | round(0) }}"
+      value: >
+       {% if is_surplus_mode %}
+         {{ max_active_power_limit_int }}
+       {% else %}
+         {{ [0, final_power_calculated] | max | round(0) }}
+       {% endif %}
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
