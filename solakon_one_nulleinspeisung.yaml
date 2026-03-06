@@ -641,7 +641,7 @@ action:
                   entity_id: !input active_power_number
                   value: 0
                   
-          # FALL X: Recovery - Modus fiel ab, aber Zyklus ist noch aktiv
+          # FALL D: Recovery - Modus fiel ab, aber Zyklus ist noch aktiv
           - conditions:
               - condition: state
                 entity_id: !input cycle_active_input_select
@@ -665,7 +665,7 @@ action:
                   entity_id: !input mode_select
                   option: '1'
         
-          # FALL D: ZONE 2 - Batterieschonend START (P-Regler aktiv, aber 0 A Entladung)
+          # FALL E: ZONE 2 - Batterieschonend START (P-Regler aktiv, aber 0 A Entladung)
           - conditions:
               - condition: template
                 value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int and states(soc) | float(0) <= soc_fast_limit_int }}"
@@ -892,7 +892,7 @@ action:
         {% endif %}
         
   - choose:
-      # FALL E.1: Limit für Zone 1 setzen (Aggressiv)
+      # FALL F.1: Limit für Zone 1 setzen (Aggressiv)
       - conditions:
           - condition: state
             entity_id: !input cycle_active_input_select
@@ -907,7 +907,7 @@ action:
               entity_id: !input max_discharge_current_number
               value: "{{ discharge_current_max }}"
               
-      # FALL E.2: Limit für Zone 2 setzen (Batterieschonend = 0 A)
+      # FALL F.2: Limit für Zone 2 setzen (Batterieschonend = 0 A)
       - conditions:
           - condition: template
             value_template: >
@@ -966,6 +966,7 @@ action:
        {% endif %}
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
