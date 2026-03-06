@@ -19,7 +19,7 @@ blueprint:
     ### 🔋 SOC-Zonenlogik (3 oder 4 Zonen je nach Konfiguration)
     
     #### 0. Zone: Überschuss-Einspeisung (Optional - aktivierbar)
-    * **Bedingung:** SOC erreicht konfigurierte Schwelle (z.B. 100 %) UND PV-Erzeugung > Hausverbrauch + Pv-Reserve.
+    * **Bedingung:** SOC erreicht konfigurierte Schwelle (z.B. 100 %) UND Netz im Gleichgeweicht (Netz < Offset + Toleranz).
     * **Aktion:** AC-Output-Limit wird auf Maximum gesetzt, Max. Entladestrom auf 0 A. Nur reiner PV-Strom fließt ins Netz.
     * **Rückkehr:** Sobald das Netz wieder Strom anfordert (> Offset + Toleranz), kehrt das System zur Nulleinspeisung zurück.
     * **⚠️ Deaktiviert:** Wenn diese Funktion deaktiviert ist gilt die klassische Nulleinspeisung.
@@ -808,8 +808,8 @@ action:
         {% else %}
           {% set currently_in_surplus = (states(discharge_current_entity) | float(999) == 0) and (states(active_power_entity) | float(0) >= max_active_power_limit_int) %}
           {% if currently_in_surplus %}
-            {# Abbruchbedingung: Wenn das Netz wieder über Offset + Toleranz Strom anfordert #}
-            {{ (states(soc) | float(0) >= soc_export_limit_int) and (grid_power_float <= (target_offset + tolerance_int)) }}
+            {# Abbruchbedingung: Wenn das Netz wieder über Offset + 2 * Toleranz Strom anfordert #}
+            {{ (states(soc) | float(0) >= soc_export_limit_int) and (grid_power_float <= (target_offset + (2*tolerance_int))) }}
           {% else %}
             {# Startbedingung: SOC voll UND Netz im Gleichgewicht #}
             {{ (states(soc) | float(0) >= soc_export_limit_int) and (grid_power_float <= (target_offset + tolerance_int)) }}
@@ -940,6 +940,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
