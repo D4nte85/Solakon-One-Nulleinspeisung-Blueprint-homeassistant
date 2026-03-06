@@ -589,7 +589,7 @@ action:
                 entity_id: !input cycle_active_input_select
                 state: 'off'
               - condition: template
-                value_template: "{{ states(solakon_mode) != '1' }}"
+                value_template: "{{ states(solakon_mode) != '0' }}"
             sequence:
               # Modus auf 'Disabled' setzen
               - choose:
@@ -873,6 +873,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
