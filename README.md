@@ -77,7 +77,7 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung:
   - Konfigurierbare Geschwindigkeit über den **I-Faktor** (z.B. 0.05)
   - **Anti-Windup:** Begrenzt auf ±1000 Punkte
   - **Automatischer Reset:** Bei jedem Zonenwechsel auf 0 zurückgesetzt
-  - **Toleranz-Decay:** 5% Abbau wenn keine Korrektur nötig
+  - **Toleranz-Decay:** 5% Abbau pro Zyklus, solange der Grid-Fehler innerhalb der Toleranz liegt und `|Integral| > 10`. Verhindert schleichendes Integral-Windup bei stabiler Regelung.
 
 * **Messprinzip:**
   - Basiert auf dem **Netz-Leistungssensor** (z.B. Shelly 3EM)
@@ -85,8 +85,8 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung:
   - Keine Verzögerung — sofortige Reaktion auf Sensor-Änderungen
 
 * **Fehlerberechnung mit dynamischer Begrenzung:**
-  - **Zone 1:** Fehler = Min(verfügbare Kapazität, Grid Power - Offset)
-  - **Zone 2:** Fehler = Min(verfügbare Kapazität, Grid Power - Offset, PV-Kapazität)
+  - **Zone 1:** Fehler = Min(verfügbare Kapazität, Grid Power − Offset₁)
+  - **Zone 2:** Fehler = Min(verfügbare Kapazität, Grid Power − Offset₂, PV-Kapazität)
 
 * **Leistungsbegrenzung:**
   - Oberes Hard Limit (z.B. 800 W) in Zone 1 und Zone 0
@@ -101,9 +101,9 @@ Die Regelung wird anhand des aktuellen SOC in bis zu vier Betriebsmodi unterteil
 
 | Zone | SOC-Bereich / Bedingung | Modus | Max. Entladestrom | Regelziel | Besonderheiten |
 |:-----|:------------------------|:------|:-----------------|:---------|:--------------|
-| **0. Überschuss-Einspeisung** | SOC ≥ Export-Schwelle UND Netz im Gleichgeweicht (Netz < Offset + Toleranz) | `INV Discharge (PV Priority)` | 0 A | Hard Limit (max. W) | **Optional aktivierbar.** Nur reiner PV-Strom ins Netz. Kehrt automatisch zur Nulleinspeisung zurück wenn Netz Strom anfordert. |
+| **0. Überschuss-Einspeisung** | SOC ≥ Export-Schwelle UND Netz im Gleichgewicht | `INV Discharge (PV Priority)` | 0 A | Hard Limit (max. W) | **Optional aktivierbar.** Nur reiner PV-Strom ins Netz. Zwei-Zustands-Logik für Eintritt und Verbleib (siehe unten). |
 | **1. Aggressive Entladung** | SOC > Zone-1-Schwelle | `INV Discharge (PV Priority)` | 40 A | 0W + Offset 1 | Läuft **durchgehend bis SOC ≤ Zone-3-Schwelle** (kein Yo-Yo-Effekt). Auch nachts aktiv. Hard Limit. |
-| **2. Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `INV Discharge (PV Priority)` | **0 A** | 0W + Offset 2 | Dynamisches Limit: **Max(0, PV - Reserve)**. Optional: Nachtabschaltung möglich. |
+| **2. Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `INV Discharge (PV Priority)` | **0 A** | 0W + Offset 2 | Dynamisches Limit: **Max(0, PV − Reserve)**. Optional: Nachtabschaltung möglich. |
 | **3. Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `Disabled` | 0 A | — | Ausgang = 0 W. Vollständiger Schutz der Batterie. |
 
 **Wichtig:**
@@ -112,19 +112,35 @@ Die Regelung wird anhand des aktuellen SOC in bis zu vier Betriebsmodi unterteil
 - Dies verhindert ständiges Hin- und Herwechseln zwischen den Zonen
 - **Max. Entladestrom** wird automatisch gesteuert — keine manuelle Einstellung nötig
 
+#### 🔄 Recovery-Mechanismus
+
+Falls der Modus des Wechselrichters extern zurückgesetzt wird (z.B. durch einen Neustart der Integration oder manuelle Änderung), während der Entladezyklus noch aktiv ist (`Zyklus = on`), erkennt der Blueprint diesen Zustand automatisch und reaktiviert den Modus über die Puls-Sequenz (10s → 3599s) — ohne Zonenwechsel oder Integral-Reset. Voraussetzung: SOC liegt noch über der Zone-3-Schwelle.
+
 ---
 
 ### 3. ☀️ Überschuss-Einspeisung (Optional — Zone 0)
 
-Die Überschuss-Einspeisung kann optional aktiviert werden und ermöglicht die Einspeisung von echtem PV-Überschuss ins Netz, wenn der Akku voll ist:
+Die Überschuss-Einspeisung kann optional aktiviert werden und ermöglicht die Einspeisung von echtem PV-Überschuss ins Netz, wenn der Akku voll ist. Der Wechsel in und aus Zone 0 folgt einer **Zwei-Zustands-Logik**, die instabiles Hin- und Herschalten bei wechselnder Bewölkung verhindert:
 
 * **Aktivierung:** Über den Parameter "Überschuss-Einspeisung aktivieren"
-* **Startbedingung:** SOC ≥ konfigurierte Export-Schwelle (z.B. 100 %) **UND** Netz im Gleichgeweicht (Netz < Offset + Toleranz).
-* **Verhalten:**
+
+* **Eintritts-Bedingung** (Wechsel von Nulleinspeisung → Zone 0):
+  - SOC ≥ konfigurierte Export-Schwelle (z.B. 100 %)
+  - Netz im Gleichgewicht: Grid Power ≤ Offset + Toleranz
+  - PV aktiv: PV-Leistung ≥ Nacht-Schwelle *(schützt vor Eintritt im Dunkeln)*
+
+* **Verbleib-Bedingung** (einmal in Zone 0, Verbleib solange):
+  - SOC ≥ Export-Schwelle
+  - Grid Power ≤ Offset + **2 × Toleranz** *(breiteres Band, kein PV-Check — kurze Wolken werfen das System nicht raus)*
+
+* **Verhalten in Zone 0:**
   - Max. Entladestrom wird auf 0 A gesetzt (kein Batterieentladen)
   - AC-Output-Limit wird auf das Hard Limit gesetzt (z.B. 800 W)
   - Ausschließlich reiner PV-Strom wird ins Netz eingespeist
-* **Rückkehr zur Nulleinspeisung:** Sobald das Netz wieder Strom anfordert (Netzbezug > Offset + 2 * Toleranz), kehrt das System automatisch zur normalen Regelung zurück
+  - Output wird nur gesetzt, wenn er noch nicht auf dem Hard Limit steht (verhindert Modbus-Spam)
+
+* **Rückkehr zur Nulleinspeisung:** Sobald eine der Verbleib-Bedingungen nicht mehr erfüllt ist, kehrt das System automatisch zur normalen PI-Regelung zurück
+
 * **Deaktiviert:** Das System verhält sich wie klassische Nulleinspeisung — kein aktives Einspeisen ins Netz
 
 ---
@@ -155,7 +171,7 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 2. **Forcierter Reset bei Moduswechsel:**
    - Zweistufige Puls-Sequenz: 10s → 3599s (mit 1s Verzögerung)
    - Stellt sichere Modusübernahme sicher
-   - Verhindert Timeout-Fehler
+   - Gilt bei Zone-1-Start, Zone-2-Start und Recovery
 
 ---
 
@@ -190,7 +206,7 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 - **Zu langsam?** → P-Faktor erhöhen (z.B. 2.0) oder I-Faktor erhöhen (z.B. 0.08)
 - **Schwingt/Überschwingt?** → P-Faktor senken (z.B. 1.0) oder I-Faktor senken (z.B. 0.03)
 - **Permanente Mini-Korrekturen?** → Toleranzbereich erhöhen (z.B. 35 W)
-- **Integral läuft hoch obwohl stabil?** → Toleranz-Decay greift automatisch (5% Abbau)
+- **Integral läuft hoch obwohl stabil?** → Toleranz-Decay greift automatisch (5% Abbau pro Zyklus wenn `|Integral| > 10`)
 
 ---
 
@@ -223,7 +239,7 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 | **Nullpunkt-Offset-1 (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert wenn konfiguriert. |
 | **Nullpunkt-Offset-2 (Statisch)** | 30 W | 0 | 100 W | Statischer Fallback-Wert für Zone 2. |
 | **Nullpunkt-Offset-2 (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert wenn konfiguriert. |
-| **PV-Ladereserve** | 50 W | 0 | 1000 W | Reservierte PV-Leistung für Ladung in Zone 2. Dynamisches Limit: Max(0, PV - Reserve). |
+| **PV-Ladereserve** | 50 W | 0 | 1000 W | Reservierte PV-Leistung für Ladung in Zone 2. Dynamisches Limit: Max(0, PV − Reserve). |
 
 **Dynamischer Offset – Anwendungsbeispiel:**
 
@@ -355,9 +371,10 @@ Max. Entladestrom Zone 1: 40A
 - **Bleibt aktiv, auch wenn SOC wieder unter die Zone-1-Schwelle fällt!**
 
 **Mittags mit vollem Akku (SOC: 100% + Überschuss-Einspeisung aktiviert)**
-- Zone 0 aktiv (SOC ≥ Export-Schwelle UND PV > Hausverbrauch + 50W)
-- Max. Entladestrom: **0A** (kein Batterieentladen)
+- Eintritts-Bedingung: SOC ≥ Export-Schwelle, Netz ≤ Offset + Toleranz, PV aktiv
+- Zone 0 aktiv → Max. Entladestrom: **0A** (kein Batterieentladen)
 - AC-Limit auf Hard Limit (800W) — reiner PV-Strom ins Netz
+- Kurze Wolke: System bleibt in Zone 0 (Verbleib-Bedingung: Netz ≤ Offset + 2×Toleranz, kein PV-Check)
 - Bei steigendem Hausverbrauch: automatische Rückkehr zu Zone 1
 
 **Abends (20:00 - SOC: 22%)**
@@ -402,7 +419,7 @@ Zone 2: error = Min(verfügbare_Kapazität, grid_power - offset_2, pv_kapazität
 Wenn |grid_error| > tolerance:
   integral_new = Clamp(integral_old + error, -1000, 1000)
 Sonst wenn |integral_old| > 10:
-  integral_new = integral_old * 0.95  # 5% Abbau
+  integral_new = integral_old * 0.95  # 5% Abbau pro Zyklus
 Sonst:
   integral_new = integral_old         # Keine Änderung
 ```
@@ -413,19 +430,50 @@ correction = error * P_Factor + integral_new * I_Factor
 new_power = current_power + correction
 ```
 
-**Finale Leistung (zonabhängige Begrenzung):**
+**Finale Leistung (zonenabhängige Begrenzung):**
 ```
 Zone 0: final_power = hard_limit                       (Überschuss-Einspeisung)
 Zone 1: final_power = Min(hard_limit, new_power)
 Zone 2: final_power = Min(Max(0, PV - reserve), new_power)
 ```
 
+**Ausgangs-Update-Bedingung:**
+```
+Überschuss-Modus: Nur setzen wenn current_output < hard_limit  (Modbus-Spam verhindern)
+Normal-Modus:     Nur setzen wenn |grid_error| > tolerance
+```
+
+---
+
 ### Überschuss-Einspeisung State-Machine
 
 ```
-Startbedingung:  SOC >= export_limit UND solar_power > (inverter_output + grid_power) + 50W
-Abbruchbedingung: grid_power > (target_offset + tolerance)
+Eintritts-Bedingung:  SOC >= export_limit
+                  UND grid_power <= (target_offset + tolerance)
+                  UND solar_power >= night_threshold
+
+Verbleib-Bedingung:   SOC >= export_limit
+                  UND grid_power <= (target_offset + 2 * tolerance)
+                  (kein PV-Check — Wolken werfen System nicht raus)
+
+Abbruch-Bedingung:    Verbleib-Bedingung nicht mehr erfüllt
 ```
+
+---
+
+### Recovery-Mechanismus
+
+```
+Bedingung:  Zyklus = on
+        UND Modus ≠ INV Discharge PV Priority
+        UND SOC > Zone-3-Schwelle
+
+Aktion:     Puls-Sequenz 10s → (1s Pause) → 3599s
+            Modus → INV Discharge PV Priority
+            (kein Integral-Reset, kein Zonenwechsel)
+```
+
+---
 
 ### Automatische Entladestrom-Steuerung
 
@@ -450,8 +498,9 @@ Abbruchbedingung: grid_power > (target_offset + tolerance)
 7. **Keine Trigger-Verzögerung:** Der Blueprint reagiert sofort auf Sensor-Änderungen
 8. **Regelbare Wartezeit:** Nach jeder Leistungsänderung wartet der Blueprint 0–30 Sekunden
 9. **Entladestrom-Automatik:** Max. Entladestrom wird vollautomatisch gesteuert — keine manuelle Einstellung nötig
-10. **Toleranz-Decay:** Verhindert automatisch Integral-Windup bei stabiler Regelung
-11. **Überschuss-Einspeisung:** Deaktiviert = klassische Nulleinspeisung ohne Netzeinspeisung
+10. **Toleranz-Decay:** Verhindert automatisch Integral-Windup — 5% Abbau pro Zyklus wenn `|Integral| > 10` und Grid-Fehler innerhalb der Toleranz
+11. **Überschuss-Einspeisung:** Zwei-Zustands-Logik verhindert instabiles Hin- und Herschalten bei wechselnder Bewölkung
+12. **Recovery:** Modus-Verlust bei aktivem Zyklus wird automatisch erkannt und korrigiert — kein manueller Eingriff nötig
 
 ---
 
@@ -465,6 +514,6 @@ Der Blueprint reagiert auf folgende Events:
 | Solar Power Change | `solar_power_change` | Sofortige PI-Regelung bei PV-Leistungsänderung |
 | SOC High | `soc_high` | Zone 1 Start (SOC > Zone-1-Schwelle) |
 | SOC Low | `soc_low` | Zone 3 Start (SOC ≤ Zone-3-Schwelle) |
-| Mode Change | `mode_change` | Reagiert auf externe Modusänderungen |
+| Mode Change | `mode_change` | Reagiert auf externe Modusänderungen, löst ggf. Recovery aus |
 
 **Alle Trigger** führen die komplette Logik aus — keine separate Behandlung nötig.
