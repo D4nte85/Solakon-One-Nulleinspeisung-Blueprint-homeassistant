@@ -907,7 +907,7 @@ action:
               entity_id: !input max_discharge_current_number
               value: "{{ discharge_current_max }}"
               
-      # FALL F.2: Limit für Zone 2 setzen (Batterieschonend = 0 A)
+      # FALL F.2: Limit für Zone 0 & 2 setzen (Batterieschonend = 0 A)
       - conditions:
           - condition: template
             value_template: >
@@ -966,6 +966,7 @@ action:
        {% endif %}
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
