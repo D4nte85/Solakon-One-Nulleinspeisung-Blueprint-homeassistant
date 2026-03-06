@@ -811,8 +811,8 @@ action:
             {# Abbruchbedingung: Wenn das Netz wieder über Offset + Toleranz Strom anfordert #}
             {{ (states(soc) | float(0) >= soc_export_limit_int) and (grid_power_float <= (target_offset + tolerance_int)) }}
           {% else %}
-            {# Startbedingung: SOC voll UND echter PV-Überschuss #}
-            {{ (states(soc) | float(0) >= soc_export_limit_int) and ((solar_power_float - pv_charge_reserve_int) > (grid_power_float + current_active_power)) }}
+            {# Startbedingung: SOC voll UND Netz im Gleichgewicht #}
+            {{ (states(soc) | float(0) >= soc_export_limit_int) and (grid_power_float <= (target_offset + tolerance_int)) }}
           {% endif %}
         {% endif %}
       
@@ -940,5 +940,6 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
