@@ -640,6 +640,7 @@ action:
                 data:
                   entity_id: !input active_power_number
                   value: 0
+                  
           # FALL X: Recovery - Modus fiel ab, aber Zyklus ist noch aktiv
           - conditions:
               - condition: state
@@ -659,10 +660,11 @@ action:
                 data:
                   entity_id: !input remote_timeout_set_number
                   value: 3599
-    - service: select.select_option
-      data:
-        entity_id: !input mode_select
-        option: '1'        
+              - service: select.select_option
+                data:
+                  entity_id: !input mode_select
+                  option: '1'
+        
           # FALL D: ZONE 2 - Batterieschonend START (P-Regler aktiv, aber 0 A Entladung)
           - conditions:
               - condition: template
@@ -964,6 +966,7 @@ action:
        {% endif %}
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
