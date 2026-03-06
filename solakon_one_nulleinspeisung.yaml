@@ -21,7 +21,7 @@ blueprint:
     #### 0. Zone: Überschuss-Einspeisung (Optional - aktivierbar)
     * **Bedingung:** SOC erreicht konfigurierte Schwelle (z.B. 100 %) UND Netz im Gleichgeweicht (Netz < Offset + Toleranz).
     * **Aktion:** AC-Output-Limit wird auf Maximum gesetzt, Max. Entladestrom auf 0 A. Nur reiner PV-Strom fließt ins Netz.
-    * **Rückkehr:** Sobald das Netz wieder Strom anfordert (> Offset + Toleranz), kehrt das System zur Nulleinspeisung zurück.
+    * **Rückkehr:** Sobald das Netz wieder Strom anfordert (> Offset + 2 * Toleranz), kehrt das System zur Nulleinspeisung zurück.
     * **⚠️ Deaktiviert:** Wenn diese Funktion deaktiviert ist gilt die klassische Nulleinspeisung.
         
     #### 1. Zone: Aggressive Regelung (Entladezyklus / Hoher SOC)
@@ -940,6 +940,7 @@ action:
       value: "{{ [0, final_power_calculated] | max | round(0) }}"
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
