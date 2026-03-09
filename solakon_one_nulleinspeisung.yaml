@@ -975,17 +975,7 @@ action:
       
 
   # 4. Ausgangsleistung setzen
-  # Bedingung: Toleranz überschritten ODER Überschuss-Modus hat sich geändert
-    - service: number.set_value
-      data:
-        entity_id: !input active_power_number
-        value: >
-         {% if is_surplus_mode %}
-           {{ max_active_power_limit_int }}
-         {% else %}
-           {{ [0, final_power_calculated] | max | round(0) }}
-         {% endif %}
-         
+  # Bedingung: Toleranz überschritten ODER Überschuss-Modus hat sich geändert       
   - condition: template
     value_template: >
       {% if is_surplus_mode %}
@@ -1004,6 +994,21 @@ action:
        {% else %}
          {{ [0, final_power_calculated] | max | round(0) }}
        {% endif %}
+       
+  # 5. Surplus-Boolean aktualisieren
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_surplus_mode }}"
+        sequence:
+          - service: input_boolean.turn_on
+            data:
+              entity_id: !input surplus_state_helper
+      default:
+        - service: input_boolean.turn_off
+          data:
+            entity_id: !input surplus_state_helper
   - delay:
       seconds: '{{wait_time_int}}'
+
 
