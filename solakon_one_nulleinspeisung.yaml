@@ -390,11 +390,12 @@ blueprint:
               Erreicht der SOC diesen Wert (z.B. 90 %) und es liegt PV-Überschuss an,
               wird die Nulleinspeisung ausgesetzt und PV-Überschuss ins Netz gedrückt.
               ⚠️ Nur relevant wenn Überschuss-Einspeisung aktiviert ist.
+              ⚠️ MUSS echt kleiner sein als das in der Solakon eingestellte max soc !!!
             default: 90
             selector:
               number:
                 min: 50
-                max: 90
+                max: 99
                 unit_of_measurement: "%"
                 
           surplus_state_helper:
@@ -860,15 +861,16 @@ action:
         {% else %}
           {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
           {% if currently_in_surplus %}
-            {# EXIT nur wenn: SOC fällt ODER Grid fordert deutlich mehr als Ziel #}
             {{ surplus_hold_active 
                or ((states(soc) | float(0) >= soc_export_limit_int)
-               and (grid_power_float <= (target_offset + (2 * tolerance_int)))) }}
+               and (solar_power_float > (current_active_power + grid_power_float)
+                    or solar_power_float >= max_active_power_limit_int)) }}
           {% else %}
             {# ENTRY: SOC voll UND Netz eingeregelt UND PV aktiv #}
             {{ (states(soc) | float(0) >= soc_export_limit_int)
                and (grid_power_float <= (target_offset + tolerance_int))
-               and (solar_power_float >= night_pv_threshold) }}
+               and (solar_power_float >= night_pv_threshold)
+               and (solar_power_float > (current_active_power + grid_power_float))}}
           {% endif %}
         {% endif %}
       
@@ -1028,6 +1030,7 @@ action:
   
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
