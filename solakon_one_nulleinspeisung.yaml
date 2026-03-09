@@ -398,11 +398,12 @@ blueprint:
                 max: 99
                 unit_of_measurement: "%"
                 
-          surplus_state_helper:
-            name: ☀️ Surplus-Zustand Speicher (input_boolean - ERFORDERLICH wenn Zone 0 aktiv!)
+surplus_state_helper:
+            name: ☀️ Surplus-Zustand Speicher (input_boolean - Optional, nur für Zone 0)
             description: |
               input_boolean Helper zum persistenten Tracken des Surplus-Zustands.
               Verhindert vorzeitigen Exit während MPPT-Ramping.
+              ⚠️ Nur erforderlich wenn Überschuss-Einspeisung aktiviert ist. Bei deaktivierter Zone 0 kann dieses Feld leer gelassen werden.
             default: input_boolean.solakon_surplus_aktiv
             selector:
               entity:
@@ -1048,6 +1049,7 @@ action:
       - service: input_boolean.turn_off
         data:
           entity_id: !input surplus_state_helper
+
 
 
 
