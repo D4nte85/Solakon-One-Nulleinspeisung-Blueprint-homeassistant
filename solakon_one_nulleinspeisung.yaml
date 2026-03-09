@@ -471,6 +471,7 @@ variables:
   
   # Parameter
   discharge_current_max: !input default_discharge_current
+  surplus_export_enabled_bool: !input surplus_export_enabled
 
 triggers:
   # -------------------------------------------------------------------------------------------------
@@ -572,11 +573,14 @@ action:
                 data:
                   entity_id: !input cycle_active_input_select
                   option: 'on'
-              # 2. Surplusmode auf off setzen
-              - service: input_boolean.turn_off
-                data:
-                  entity_id: !input surplus_state_helper
-              # 3. Modus-Wechsel zu 'INV Discharge PV Priority' (mit Puls-Sequenz zur Sicherheit)
+              # 2. Surplusmode auf off setzen (nur wenn Zone 0 aktiv)
+              - choose:
+                  - conditions: "{{ surplus_export_enabled_bool }}"
+                    sequence:
+                      - service: input_boolean.turn_off
+                        data:
+                          entity_id: !input surplus_state_helper
+              # 3. Modus-Wechsel zu 'INV Discharge PV Priority'
               - choose:
                   - conditions: "{{ states(solakon_mode) != '1' }}"
                     sequence:
@@ -618,10 +622,13 @@ action:
                 data:
                   entity_id: !input cycle_active_input_select
                   option: 'off'
-              # 2. Surplusmode auf off setzen
-              - service: input_boolean.turn_off
-                data:
-                  entity_id: !input surplus_state_helper
+              # 2. Surplusmode auf off setzen (nur wenn Zone 0 aktiv)
+              - choose:
+                  - conditions: "{{ surplus_export_enabled_bool }}"
+                    sequence:
+                      - service: input_boolean.turn_off
+                        data:
+                          entity_id: !input surplus_state_helper
               # 3. Modus-Wechsel zu 'Disabled'
               - choose:
                   - conditions: "{{ states(solakon_mode) != '0' }}"
@@ -654,10 +661,13 @@ action:
                         data:
                           entity_id: !input mode_select
                           option: '0'
-              # 2. Surplusmode auf off setzen
-              - service: input_boolean.turn_off
-                data:
-                  entity_id: !input surplus_state_helper
+              # 2. Surplusmode auf off setzen (nur wenn Zone 0 aktiv)
+              - choose:
+                  - conditions: "{{ surplus_export_enabled_bool }}"
+                    sequence:
+                      - service: input_boolean.turn_off
+                        data:
+                          entity_id: !input surplus_state_helper
               # 3. Power Limit auf 0 W setzen
               - service: number.set_value
                 data:
@@ -816,7 +826,6 @@ action:
         {% endif %}
       max_active_power_limit_int: !input max_active_power_limit
       pv_charge_reserve_int: !input pv_charge_reserve
-      surplus_export_enabled_bool: !input surplus_export_enabled
       soc_export_limit_int: !input soc_export_limit
       
       # Surplus
@@ -1039,6 +1048,7 @@ action:
       - service: input_boolean.turn_off
         data:
           entity_id: !input surplus_state_helper
+
 
 
 
