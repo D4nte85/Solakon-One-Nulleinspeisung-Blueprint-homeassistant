@@ -387,15 +387,16 @@ blueprint:
           soc_export_limit:
             name: 🔋 SOC-Schwelle für Überschuss-Einspeisung
             description: |
-              Erreicht der SOC diesen Wert (z.B. 100 %) und es liegt PV-Überschuss an,
+              Erreicht der SOC diesen Wert (z.B. 90 %) und es liegt PV-Überschuss an,
               wird die Nulleinspeisung ausgesetzt und PV-Überschuss ins Netz gedrückt.
               ⚠️ Nur relevant wenn Überschuss-Einspeisung aktiviert ist.
-            default: 100
+            default: 90
             selector:
               number:
                 min: 50
-                max: 100
+                max: 90
                 unit_of_measurement: "%"
+                
           surplus_state_helper:
             name: ☀️ Surplus-Zustand Speicher (input_boolean - ERFORDERLICH wenn Zone 0 aktiv!)
             description: |
@@ -931,7 +932,7 @@ action:
           - condition: template
             value_template: >
               {# Prüfe, ob der aktuelle Wert NICHT dem Maximalwert entspricht und der Surplus modus inaktiv ist #}
-              {{ not is_surplus_mode and states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
+              {{ not (is_surplus_mode | bool) and states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
         sequence:
           - service: number.set_value
             data:
@@ -943,8 +944,7 @@ action:
           - condition: template
             value_template: >
               {# Prüfe, ob der aktuelle Wert NICHT 0 A entspricht und (cycle ist inaktiv oder surplus mode ist aktiv) #}
-              {{ (is_state(cycle_active, 'off') or is_surplus_mode) and states(discharge_current_entity) | float(999) | round(2) != 0 }}
-        sequence:
+              {{ (is_state(cycle_active, 'off') or (is_surplus_mode | bool)) and states(discharge_current_entity) | float(999) | round(2) != 0 }}
           - service: number.set_value
             data:
               entity_id: !input max_discharge_current_number
@@ -1027,6 +1027,7 @@ action:
   
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
