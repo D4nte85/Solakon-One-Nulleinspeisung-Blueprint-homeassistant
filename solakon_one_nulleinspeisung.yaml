@@ -945,6 +945,7 @@ action:
             value_template: >
               {# Prüfe, ob der aktuelle Wert NICHT 0 A entspricht und (cycle ist inaktiv oder surplus mode ist aktiv) #}
               {{ (is_state(cycle_active, 'off') or (is_surplus_mode | bool)) and states(discharge_current_entity) | float(999) | round(2) != 0 }}
+        sequence:
           - service: number.set_value
             data:
               entity_id: !input max_discharge_current_number
@@ -1027,6 +1028,7 @@ action:
   
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
