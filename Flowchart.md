@@ -10,17 +10,17 @@
 
         %% ── Zone 1 ──────────────────────────────────────────────────
         ZONE_CHECK -- "SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
-        Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Modus → INV Discharge PV Priority   (Puls-Sequenz: 10s → 3599s)"]
+        Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Surplus-Boolean → off (nur wenn Zone 0 aktiv)   Modus → INV Discharge PV Priority   (Puls-Sequenz: 10s → 3599s)"]
 
         %% ── Zone 3 (Zyklus on) ──────────────────────────────────────
         ZONE_CHECK -- "SOC ≤ Zone-3-Schwelle UND Zyklus = on" --> Z3_A
-        Z3_A["🛑 Zone 3 aktivieren   Zyklus = off   Integral = 0   Modus → Disabled   Output → 0 W"]
+        Z3_A["🛑 Zone 3 aktivieren   Zyklus = off   Integral = 0   Surplus-Boolean → off (nur wenn Zone 0 aktiv)   Modus → Disabled   Output → 0 W"]
 
         %% ── Zone 3 (Absicherung) ────────────────────────────────────
         ZONE_CHECK -- "SOC < Zone-3-Schwelle UND Zyklus = off UND Modus ≠ Disabled" --> Z3_B
-        Z3_B["🛑 Zone 3 Absicherung   Modus → Disabled   Output → 0 W"]
+        Z3_B["🛑 Zone 3 Absicherung   Surplus-Boolean → off (nur wenn Zone 0 aktiv)   Modus → Disabled   Output → 0 W"]
 
-        %% ── Recovery (NEU) ──────────────────────────────────────────
+        %% ── Recovery ────────────────────────────────────────────────
         ZONE_CHECK -- "Zyklus = on UND Modus ≠ INV Discharge UND SOC > Zone-3-Schwelle" --> RECOVERY
         RECOVERY["🔄 Recovery — Modus-Reaktivierung   Modus → INV Discharge PV Priority   (Puls-Sequenz: 10s → 3599s)"]
 
@@ -52,10 +52,10 @@
         SURPLUS_CHECK -- Nein --> CALC_NORMAL
         SURPLUS_CHECK -- Ja --> SURPLUS_STATE
 
-        %% ── Surplus Zwei-Zustands-Logik (NEU) ───────────────────────
-        SURPLUS_STATE{{"Aktuell im Überschuss-Modus?   (Entladestrom = 0A UND Output = Hard Limit)"}}
-        SURPLUS_STATE -- "Ja — Bleiben:   SOC ≥ Export-Schwelle-3   UND Netz ≤ Offset + 2×Toleranz   (kein PV-Check)" --> CALC_SURPLUS
-        SURPLUS_STATE -- "Nein — Eintreten:   SOC ≥ Export-Schwelle   UND Netz ≤ Offset + Toleranz   UND PV ≥ Nacht-Schwelle" --> CALC_SURPLUS
+        %% ── Surplus Zwei-Zustands-Logik ─────────────────────────────
+        SURPLUS_STATE{{"Aktuell im Überschuss-Modus?   (input_boolean = on)"}}
+        SURPLUS_STATE -- "Ja — Bleiben:   surplus_hold_active (60s nach Eintritt)   ODER (SOC ≥ Export-Schwelle   UND (PV > Output + Grid   ODER PV ≥ Hard Limit))" --> CALC_SURPLUS
+        SURPLUS_STATE -- "Nein — Eintreten:   SOC ≥ Export-Schwelle   UND Grid ≤ Offset + Toleranz   UND PV ≥ Nacht-Schwelle   UND PV > Output + Grid" --> CALC_SURPLUS
         SURPLUS_STATE -- "Bedingung nicht erfüllt" --> CALC_NORMAL
 
         %% ── Zone-0-Pfad ─────────────────────────────────────────────
@@ -80,14 +80,15 @@
         TIMEOUT_RESET --> INTEGRAL_SAVE
 
         %% ── Integral & Output ───────────────────────────────────────
-        INTEGRAL_SAVE["💾 Integral-Wert speichern"]
+        INTEGRAL_SAVE["💾 Integral-Wert speichern   Zone 0: integral_old (eingefroren)   Sonst: integral_new"]
         INTEGRAL_SAVE --> TOL_CHECK
 
         TOL_CHECK{{"Überschuss-Modus aktiv?   → Output < Hard Limit?   SONST Normal-Modus   → |Grid-Fehler| > Toleranz?"}}
-        TOL_CHECK -- Nein --> END_TOL([Ende — kein Output keine unnötigen API-Calls])
+        TOL_CHECK -- Nein --> BOOL_UPDATE["🔁 Surplus-Boolean aktualisieren   (on/off je nach is_surplus_mode)"]
+        BOOL_UPDATE --> END_TOL([Ende — kein Output keine unnötigen API-Calls])
         TOL_CHECK -- Ja --> SET_OUTPUT
 
-        SET_OUTPUT["⚙️ Ausgangsleistung setzen   Überschuss-Modus: Hard Limit   Normal-Modus: Max(0, final_power) → Wechselrichter"]
+        SET_OUTPUT["⚙️ Ausgangsleistung setzen   Überschuss-Modus: Hard Limit + Boolean → on   Normal-Modus: Max(0, final_power) + Boolean → off   → Wechselrichter"]
         SET_OUTPUT --> WAIT["⏳ Wartezeit (0–30s)"]
         WAIT --> END_OK([Ende])
 
@@ -101,12 +102,12 @@
         classDef pi fill:#cce5ff,stroke:#004085,color:#000
         classDef end_node fill:#f8f9fa,stroke:#6c757d,color:#000
 
-        class CALC_SURPLUS,SURPLUS_COND,SURPLUS_STATE zone0
+        class CALC_SURPLUS,SURPLUS_STATE zone0
         class Z1_START zone1
         class Z2_START zone2
         class Z3_A,Z3_B zone3
         class NIGHT night
         class RECOVERY recovery
         class CALC_NORMAL,DISCHARGE_SET,SET_40A,SET_0A pi
-        class END_STOP,END_SKIP,END_TOL,END_OK end_node
+        class END_STOP,END_SKIP,END_TOL,END_OK,BOOL_UPDATE end_node
 ```
