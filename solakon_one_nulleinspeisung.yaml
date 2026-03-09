@@ -860,7 +860,8 @@ action:
           {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
           {% if currently_in_surplus %}
             {# EXIT nur wenn: SOC fällt ODER Grid fordert deutlich mehr als Ziel #}
-            {{ surplus_hold_time_ok and (grid_power_float <= soc_export_limit_int)
+            {{ surplus_hold_time_ok 
+               and (states(soc) | float(0) >= soc_export_limit_int)
                and (grid_power_float <= (target_offset + (2 * tolerance_int))) }}
           {% else %}
             {# ENTRY: SOC voll UND Netz eingeregelt UND PV aktiv #}
@@ -1005,3 +1006,4 @@ action:
        {% endif %}
   - delay:
       seconds: '{{wait_time_int}}'
+
