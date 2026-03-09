@@ -975,7 +975,29 @@ action:
       
 
   # 4. Ausgangsleistung setzen
-  # Bedingung: Toleranz überschritten ODER Überschuss-Modus hat sich geändert       
+  # EITHER: Surplus Mode aktiv → Max Power
+  # OR: Normale Regelung UND Toleranz überschritten → PI-Regler-Power
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_surplus_mode }}"
+        sequence:
+          - service: number.set_value
+            data:
+              entity_id: !input active_power_number
+              value: "{{ max_active_power_limit_int }}"
+      
+      # Normale Regelung nur wenn Toleranz überschritten
+      - conditions:
+          - condition: template
+            value_template: "{{ grid_error_for_tolerance > tolerance_int and not is_surplus_mode }}"
+        sequence:
+          - service: number.set_value
+            data:
+              entity_id: !input active_power_number
+              value: "{{ [0, final_power_calculated] | max | round(0) }}"
+       
+# 5. Surplus-Boolean aktualisieren (ON/OFF je nach is_surplus_mode)
   - choose:
       - conditions:
           - condition: template
@@ -989,28 +1011,9 @@ action:
         data:
           entity_id: !input surplus_state_helper
   
-  - service: number.set_value
-    data:
-      entity_id: !input active_power_number
-      value: >
-       {% if is_surplus_mode %}
-         {{ max_active_power_limit_int }}
-       {% else %}
-         {{ [0, final_power_calculated] | max | round(0) }}
-       {% endif %}
-       
-  # 5. Surplus-Boolean aktualisieren
-  - choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ is_surplus_mode }}"
-        sequence:
-          - service: input_boolean.turn_on
-            data:
-              entity_id: !input surplus_state_helper
-
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
