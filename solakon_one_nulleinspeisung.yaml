@@ -396,6 +396,15 @@ blueprint:
                 min: 50
                 max: 100
                 unit_of_measurement: "%"
+          surplus_state_helper:
+            name: ☀️ Surplus-Zustand Speicher (input_boolean - ERFORDERLICH wenn Zone 0 aktiv!)
+            description: |
+              input_boolean Helper zum persistenten Tracken des Surplus-Zustands.
+              Verhindert vorzeitigen Exit während MPPT-Ramping.
+            default: input_boolean.solakon_surplus_aktiv
+            selector:
+              entity:
+                domain: input_boolean  
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🌙 NACHTABSCHALTUNG (Optional)
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -561,7 +570,11 @@ action:
                 data:
                   entity_id: !input cycle_active_input_select
                   option: 'on'
-              # 2. Modus-Wechsel zu 'INV Discharge PV Priority' (mit Puls-Sequenz zur Sicherheit)
+              # 2. Surplusmode auf off setzen
+              - service: input_boolean.turn_off
+                data:
+                  entity_id: !input surplus_state_helper
+              # 3. Modus-Wechsel zu 'INV Discharge PV Priority' (mit Puls-Sequenz zur Sicherheit)
               - choose:
                   - conditions: "{{ states(solakon_mode) != '1' }}"
                     sequence:
@@ -603,7 +616,11 @@ action:
                 data:
                   entity_id: !input cycle_active_input_select
                   option: 'off'
-              # 2. Modus-Wechsel zu 'Disabled'
+              # 2. Surplusmode auf off setzen
+              - service: input_boolean.turn_off
+                data:
+                  entity_id: !input surplus_state_helper
+              # 3. Modus-Wechsel zu 'Disabled'
               - choose:
                   - conditions: "{{ states(solakon_mode) != '0' }}"
                     sequence:
@@ -611,7 +628,7 @@ action:
                         data:
                           entity_id: !input mode_select
                           option: '0'
-              # 3. Power Limit auf 0 W setzen (Soft Stopp)
+              # 4. Power Limit auf 0 W setzen (Soft Stopp)
               - service: number.set_value
                 data:
                   entity_id: !input active_power_number
@@ -627,7 +644,7 @@ action:
               - condition: template
                 value_template: "{{ states(solakon_mode) != '0' }}"
             sequence:
-              # Modus auf 'Disabled' setzen
+              # 1. Modus auf 'Disabled' setzen
               - choose:
                   - conditions: "{{ states(solakon_mode) != '0' }}"
                     sequence:
@@ -635,7 +652,11 @@ action:
                         data:
                           entity_id: !input mode_select
                           option: '0'
-              # Power Limit auf 0 W setzen
+              # 2. Surplusmode auf off setzen
+              - service: input_boolean.turn_off
+                data:
+                  entity_id: !input surplus_state_helper
+              # 3. Power Limit auf 0 W setzen
               - service: number.set_value
                 data:
                   entity_id: !input active_power_number
@@ -796,6 +817,13 @@ action:
       surplus_export_enabled_bool: !input surplus_export_enabled
       soc_export_limit_int: !input soc_export_limit
       
+      # Surplus
+      surplus_state_entity: !input surplus_state_helper
+      surplus_helper_last_changed: >
+        {{ (as_timestamp(states[surplus_state_entity].last_changed) | default(0)) }}
+      surplus_hold_time_ok: >
+        {{ (as_timestamp(now()) - surplus_helper_last_changed) > 60 }}
+      
       # PI-Regler-Variablen
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
         
@@ -825,18 +853,20 @@ action:
       # -----------------------------------------------------------------------
       # ÜBERSCHUSS-MODUS (Zone 0): Nur berechnen wenn Feature aktiviert
       # -----------------------------------------------------------------------
-
       is_surplus_mode: >
         {% if not surplus_export_enabled_bool %}
           false
         {% else %}
-          {% set currently_in_surplus = (states(discharge_current_entity) | float(999) == 0) and (states(active_power_entity) | float(0) >= max_active_power_limit_int) %}
+          {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
           {% if currently_in_surplus %}
-            {# BLEIBEN: kein PV-Check - nicht wegen kurzer Wolke rauswerfen #}
-            {{ (states(soc) | float(0) >= soc_export_limit_int - 3) and (grid_power_float <= (target_offset + (2 * tolerance_int))) }}
+            {# EXIT nur wenn: SOC fällt ODER Grid fordert deutlich mehr als Ziel #}
+            {{ surplus_hold_time_ok and (grid_power_float <= soc_export_limit_int)
+               and (grid_power_float <= (target_offset + (2 * tolerance_int))) }}
           {% else %}
-            {# EINTRETEN: SOC voll UND Netz eingeregelt UND Sonne scheint #}
-            {{ (states(soc) | float(0) >= soc_export_limit_int) and (grid_power_float <= (target_offset + tolerance_int)) and (solar_power_float >= night_pv_threshold) }}
+            {# ENTRY: SOC voll UND Netz eingeregelt UND PV aktiv #}
+            {{ (states(soc) | float(0) >= soc_export_limit_int)
+               and (grid_power_float <= (target_offset + tolerance_int))
+               and (solar_power_float >= night_pv_threshold) }}
           {% endif %}
         {% endif %}
       
@@ -966,6 +996,7 @@ action:
        {% endif %}
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
