@@ -974,28 +974,50 @@ action:
       value: "{{ integral_new }}"
       
 
-  # 4. Ausgangsleistung setzen
-  # EITHER: Surplus Mode aktiv → Max Power
-  # OR: Normale Regelung UND Toleranz überschritten → PI-Regler-Power
+  # 4. Ausgangsleistung setzen + Delay (NUR wenn nötig)
   - choose:
       - conditions:
           - condition: template
             value_template: "{{ is_surplus_mode }}"
         sequence:
+          # Surplus Boolean setzen
+          - service: input_boolean.turn_on
+            data:
+              entity_id: !input surplus_state_helper
+          # Output auf Hard Limit
           - service: number.set_value
             data:
               entity_id: !input active_power_number
               value: "{{ max_active_power_limit_int }}"
-      
-      # Normale Regelung nur wenn Toleranz überschritten
+          - delay:
+              seconds: '{{wait_time_int}}'
+
       - conditions:
           - condition: template
-            value_template: "{{ grid_error_for_tolerance > tolerance_int and not is_surplus_mode }}"
+            value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
         sequence:
+          # Surplus Boolean zurücksetzen
+          - service: input_boolean.turn_off
+            data:
+              entity_id: !input surplus_state_helper
+          # Normaler PI-Output
           - service: number.set_value
             data:
               entity_id: !input active_power_number
               value: "{{ [0, final_power_calculated] | max | round(0) }}"
+          - delay:
+              seconds: '{{wait_time_int}}'
+
+    # Kein Output nötig (innerhalb Toleranz) → Automation endet hier sofort
+    # Surplus Boolean nur zurücksetzen wenn nötig
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ not is_surplus_mode and is_state(surplus_state_entity, 'on') }}"
+        sequence:
+          - service: input_boolean.turn_off
+            data:
+              entity_id: !input surplus_state_helper
        
 # 5. Surplus-Boolean aktualisieren (ON/OFF je nach is_surplus_mode)
   - choose:
@@ -1013,6 +1035,7 @@ action:
   
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
