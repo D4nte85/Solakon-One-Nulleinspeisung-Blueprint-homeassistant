@@ -833,7 +833,7 @@ action:
           {% set currently_in_surplus = (states(discharge_current_entity) | float(999) == 0) and (states(active_power_entity) | float(0) >= max_active_power_limit_int) %}
           {% if currently_in_surplus %}
             {# BLEIBEN: kein PV-Check - nicht wegen kurzer Wolke rauswerfen #}
-            {{ (states(soc) | float(0) >= soc_export_limit_int) and (grid_power_float <= (target_offset + (2 * tolerance_int))) }}
+            {{ (states(soc) | float(0) >= soc_export_limit_int - 3) and (grid_power_float <= (target_offset + (2 * tolerance_int))) }}
           {% else %}
             {# EINTRETEN: SOC voll UND Netz eingeregelt UND Sonne scheint #}
             {{ (states(soc) | float(0) >= soc_export_limit_int) and (grid_power_float <= (target_offset + tolerance_int)) and (solar_power_float >= night_pv_threshold) }}
@@ -966,6 +966,7 @@ action:
        {% endif %}
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
