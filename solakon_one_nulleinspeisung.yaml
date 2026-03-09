@@ -821,8 +821,8 @@ action:
       surplus_state_entity: !input surplus_state_helper
       surplus_helper_last_changed: >
         {{ (as_timestamp(states[surplus_state_entity].last_changed) | default(0)) }}
-      surplus_hold_time_ok: >
-        {{ (as_timestamp(now()) - surplus_helper_last_changed) > 60 }}
+      surplus_hold_active: >
+        {{ (as_timestamp(now()) - surplus_helper_last_changed) <= 60 }}
       
       # PI-Regler-Variablen
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
@@ -860,7 +860,7 @@ action:
           {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
           {% if currently_in_surplus %}
             {# EXIT nur wenn: SOC fällt ODER Grid fordert deutlich mehr als Ziel #}
-            {{ surplus_hold_time_ok 
+            {{ surplus_hold_active 
                and (states(soc) | float(0) >= soc_export_limit_int)
                and (grid_power_float <= (target_offset + (2 * tolerance_int))) }}
           {% else %}
@@ -1010,5 +1010,6 @@ action:
             entity_id: !input surplus_state_helper
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
