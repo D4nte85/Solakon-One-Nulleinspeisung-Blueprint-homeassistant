@@ -54,7 +54,7 @@
 
         %% ── Surplus Zwei-Zustands-Logik (NEU) ───────────────────────
         SURPLUS_STATE{{"Aktuell im Überschuss-Modus?   (Entladestrom = 0A UND Output = Hard Limit)"}}
-        SURPLUS_STATE -- "Ja — Bleiben:   SOC ≥ Export-Schwelle   UND Netz ≤ Offset + 2×Toleranz   (kein PV-Check)" --> CALC_SURPLUS
+        SURPLUS_STATE -- "Ja — Bleiben:   SOC ≥ (Export-Schwelle -3)   UND Netz ≤ Offset + 2×Toleranz   (kein PV-Check)" --> CALC_SURPLUS
         SURPLUS_STATE -- "Nein — Eintreten:   SOC ≥ Export-Schwelle   UND Netz ≤ Offset + Toleranz   UND PV ≥ Nacht-Schwelle" --> CALC_SURPLUS
         SURPLUS_STATE -- "Bedingung nicht erfüllt" --> CALC_NORMAL
 
