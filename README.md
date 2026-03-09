@@ -54,9 +54,7 @@ aus Zone 0 herausfällt.
 3. Name: z.B. `Solakon Surplus Aktiv`
 4. Speichern (Entity ID: z.B. `input_boolean.solakon_surplus_aktiv`)
 
-> ⚠️ **Wichtig:** Auch wenn die Überschuss-Einspeisung deaktiviert ist, muss dieser
-> Helper existieren und im Blueprint eingetragen sein, da der Blueprint ihn bei
-> Zonenwechseln zurücksetzt.
+> ℹ️ **Hinweis:** Dieser Helper wird nur benötigt wenn die Überschuss-Einspeisung aktiviert ist. Bei deaktivierter Zone 0 kann dieses Feld im Blueprint leer gelassen werden.
 
 ### 4. Input Number Helper für Dynamischen Offset (Optional)
 
@@ -207,6 +205,7 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 | **Solakon** | Betriebsmodus-Auswahl | `select.solakon_one_modus_fernsteuern` | Schaltet Betriebsmodus |
 | **Helper** | Entladezyklus-Speicher | `input_select.soc_entladezyklus_status` | Input Select: `on`/`off` |
 | **Helper** | Integral-Speicher | `input_number.solakon_integral` | Input Number: -1000 bis 1000 |
+| **Helper** | Surplus-Zustand-Speicher | `input_boolean.solakon_surplus_aktiv` | Nur erforderlich wenn Überschuss-Einspeisung aktiviert ist (Zone 0). Bei deaktivierter Zone 0: n/a |
 
 ---
 
@@ -243,7 +242,7 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
 | **Überschuss-Einspeisung aktivieren** | false | — | — | Schalter zum Aktivieren von Zone 0. |
-| **SOC-Schwelle Überschuss** | 100 % | 50 % | 100 % | Ab diesem SOC wird bei PV-Überschuss ins Netz eingespeist. |
+| **SOC-Schwelle Überschuss** | 90 % | 50 % | 99 % | Ab diesem SOC wird bei PV-Überschuss ins Netz eingespeist. |
 
 ---
 
@@ -517,7 +516,7 @@ Aktion:     Puls-Sequenz 10s → (1s Pause) → 3599s
 8. **Regelbare Wartezeit:** Nach jeder Leistungsänderung wartet der Blueprint 0–30 Sekunden
 9. **Entladestrom-Automatik:** Max. Entladestrom wird vollautomatisch gesteuert — keine manuelle Einstellung nötig
 10. **Toleranz-Decay:** Verhindert automatisch Integral-Windup — 5% Abbau pro Zyklus wenn `|Integral| > 10` und Grid-Fehler innerhalb der Toleranz
-11. **Überschuss-Einspeisung:** Persistenter `input_boolean` speichert den Zone-0-Zustand über Automation-Läufe hinweg. Eine 60-Sekunden Hold-Zeit nach Eintritt verhindert vorzeitigen Exit während des MPPT-Rampings. Danach gilt: Danach gilt: Verbleib solange SOC ≥ Schwelle UND (PV > aktuelle Ausgangsleistung + Grid-Leistung ODER PV ≥ Hard Limit).
+11. **Überschuss-Einspeisung:** Persistenter `input_boolean` speichert den Zone-0-Zustand über Automation-Läufe hinweg. Eine 60-Sekunden Hold-Zeit nach Eintritt verhindert vorzeitigen Exit während des MPPT-Rampings. Danach gilt: Verbleib solange SOC ≥ Schwelle UND (PV > aktuelle Ausgangsleistung + Grid-Leistung ODER PV ≥ Hard Limit). Der Helper ist nur erforderlich wenn Zone 0 aktiviert ist.
 12. **Recovery:** Modus-Verlust bei aktivem Zyklus wird automatisch erkannt und korrigiert — kein manueller Eingriff nötig
 
 ---
