@@ -1010,14 +1010,6 @@ action:
 
     # Kein Output nötig (innerhalb Toleranz) → Automation endet hier sofort
     # Surplus Boolean nur zurücksetzen wenn nötig
-  - choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ not is_surplus_mode and is_state(surplus_state_entity, 'on') }}"
-        sequence:
-          - service: input_boolean.turn_off
-            data:
-              entity_id: !input surplus_state_helper
        
 # 5. Surplus-Boolean aktualisieren (ON/OFF je nach is_surplus_mode)
   - choose:
@@ -1035,6 +1027,7 @@ action:
   
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
