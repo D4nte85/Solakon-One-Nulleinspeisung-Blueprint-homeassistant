@@ -696,7 +696,7 @@ action:
                 entity_id: !input cycle_active_input_select
                 state: 'off'
               - condition: template
-                value_template: "{{ states(solakon_mode) != '1' }}"
+                value_template: "{{ states(solakon_mode) == '0' }}"
               # Nachtcheck: Nur starten wenn NICHT Nacht ODER Funktion deaktiviert
               - condition: template
                 value_template: >
@@ -824,7 +824,8 @@ action:
       surplus_helper_last_changed: >
         {{ (as_timestamp(states[surplus_state_entity].last_changed) | default(0)) }}
       surplus_hold_active: >
-        {{ (as_timestamp(now()) - surplus_helper_last_changed) <= 60 }}
+        {{ is_state(surplus_state_entity, 'on') and
+           (as_timestamp(now()) - surplus_helper_last_changed) <= 60 }}
       
       # PI-Regler-Variablen
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
@@ -970,18 +971,28 @@ action:
               entity_id: !input remote_timeout_set_number
               value: 3599
               
-  # 3. Integral speichern
-  - service: input_number.set_value
-    data:
-      entity_id: !input integral_helper
-      value: "{{ integral_new }}"
+  # 3. Integral speichern (in Zone 0 einfrieren)
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_surplus_mode }}"
+        sequence:
+          - service: input_number.set_value
+            data:
+              entity_id: !input integral_helper
+              value: "{{ integral_old }}"
+    default:
+      - service: input_number.set_value
+        data:
+          entity_id: !input integral_helper
+          value: "{{ integral_new }}"
       
 
   # 4. Ausgangsleistung setzen + Delay (NUR wenn nötig)
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ is_surplus_mode }}"
+            value_template: "{{ is_surplus_mode and current_active_power < max_active_power_limit_int }}"
         sequence:
           # Surplus Boolean setzen
           - service: input_boolean.turn_on
@@ -1014,7 +1025,8 @@ action:
     # Kein Output nötig (innerhalb Toleranz) → Automation endet hier sofort
     # Surplus Boolean nur zurücksetzen wenn nötig
        
-# 5. Surplus-Boolean aktualisieren (ON/OFF je nach is_surplus_mode)
+# 5. Surplus-Boolean aktualisieren — NUR für den Fall dass Schritt 4 keinen Output gesetzt hat
+#    (Grid-Fehler <= Toleranz → Schritt 4 wurde übersprungen, Boolean bleibt sonst veraltet)
   - choose:
       - conditions:
           - condition: template
@@ -1027,6 +1039,7 @@ action:
       - service: input_boolean.turn_off
         data:
           entity_id: !input surplus_state_helper
+
 
 
 
