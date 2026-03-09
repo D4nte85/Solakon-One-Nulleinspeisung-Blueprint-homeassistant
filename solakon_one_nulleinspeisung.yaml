@@ -19,9 +19,9 @@ blueprint:
     ### 🔋 SOC-Zonenlogik (3 oder 4 Zonen je nach Konfiguration)
     
     #### 0. Zone: Überschuss-Einspeisung (Optional - aktivierbar)
-    * **Bedingung:** SOC erreicht konfigurierte Schwelle (z.B. 100 %) UND Netz im Gleichgeweicht (Netz < Offset + Toleranz).
+    * **Eintritts-Bedingung:** SOC ≥ konfigurierte Schwelle UND Netz ≤ Offset + Toleranz UND PV aktiv (≥ Nacht-Schwelle) UND PV > aktuelle Ausgangsleistung + Grid-Leistung.
     * **Aktion:** AC-Output-Limit wird auf Maximum gesetzt, Max. Entladestrom auf 0 A. Nur reiner PV-Strom fließt ins Netz.
-    * **Rückkehr:** Sobald das Netz wieder Strom anfordert (> Offset + 2 * Toleranz), kehrt das System zur Nulleinspeisung zurück.
+    * **Rückkehr:** Nach Ablauf der 60s Hold-Zeit, sobald kein echter PV-Überschuss mehr vorhanden ist (PV ≤ Ausgangsleistung + Grid UND PV < Hard Limit) oder SOC unter die Schwelle fällt.
     * **⚠️ Deaktiviert:** Wenn diese Funktion deaktiviert ist gilt die klassische Nulleinspeisung.
         
     #### 1. Zone: Aggressive Regelung (Entladezyklus / Hoher SOC)
@@ -1027,6 +1027,7 @@ action:
       - service: input_boolean.turn_off
         data:
           entity_id: !input surplus_state_helper
+
 
 
 
