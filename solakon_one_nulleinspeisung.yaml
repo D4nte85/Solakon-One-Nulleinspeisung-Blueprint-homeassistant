@@ -976,14 +976,18 @@ action:
 
   # 4. Ausgangsleistung setzen
   # Bedingung: Toleranz überschritten ODER Überschuss-Modus hat sich geändert       
-  - condition: template
-    value_template: >
-      {% if is_surplus_mode %}
-        {# Nur setzen wenn Output-Limit noch nicht auf Maximum steht (Modbus-Spam verhindern) #}
-        {{ states(active_power_entity) | float(0) < max_active_power_limit_int }}
-      {% else %}
-        {{ grid_error_for_tolerance > tolerance_int }}
-      {% endif %}
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_surplus_mode }}"
+        sequence:
+          - service: input_boolean.turn_on
+            data:
+              entity_id: !input surplus_state_helper
+    default:
+      - service: input_boolean.turn_off
+        data:
+          entity_id: !input surplus_state_helper
   
   - service: number.set_value
     data:
@@ -1007,6 +1011,7 @@ action:
 
   - delay:
       seconds: '{{wait_time_int}}'
+
 
 
 
