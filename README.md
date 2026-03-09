@@ -43,7 +43,22 @@ Der Blueprint benötigt **zwei Helper**, die Sie vor der Installation erstellen 
    * Initialwert: `0`
 5. Speichern (Entity ID: z.B. `input_number.solakon_integral`)
 
-### 3. Input Number Helper für Dynamischen Offset (Optional)
+### 3. Input Boolean Helper (Surplus-Zustand — ERFORDERLICH wenn Zone 0 aktiv!)
+
+Wird benötigt, um den Überschuss-Einspeisung-Zustand **persistent über Automation-Läufe
+hinweg** zu speichern. Verhindert, dass das System während des MPPT-Rampings vorzeitig
+aus Zone 0 herausfällt.
+
+1. Gehen Sie zu **Einstellungen** → **Geräte & Dienste** → **Helfer**
+2. Klicken Sie auf **Helfer erstellen** → **Umschalter** (Toggle)
+3. Name: z.B. `Solakon Surplus Aktiv`
+4. Speichern (Entity ID: z.B. `input_boolean.solakon_surplus_aktiv`)
+
+> ⚠️ **Wichtig:** Auch wenn die Überschuss-Einspeisung deaktiviert ist, muss dieser
+> Helper existieren und im Blueprint eingetragen sein, da der Blueprint ihn bei
+> Zonenwechseln zurücksetzt.
+
+### 4. Input Number Helper für Dynamischen Offset (Optional)
 
 Wenn Sie den Nullpunkt-Offset zur Laufzeit per Automatisierung anpassen möchten, erstellen Sie einen oder zwei zusätzliche Helper:
 
@@ -129,9 +144,11 @@ Die Überschuss-Einspeisung kann optional aktiviert werden und ermöglicht die E
   - Netz im Gleichgewicht: Grid Power ≤ Offset + Toleranz
   - PV aktiv: PV-Leistung ≥ Nacht-Schwelle *(schützt vor Eintritt im Dunkeln)*
 
-* **Verbleib-Bedingung** (einmal in Zone 0, Verbleib solange):
-  - SOC ≥ Export-Schwelle
-  - Grid Power ≤ Offset + **2 × Toleranz** *(breiteres Band, kein PV-Check — kurze Wolken werfen das System nicht raus)*
+* **Verbleib-Bedingung**
+  - surplus_hold_active (< 60s seit Eintritt)
+  - ODER   (SOC >= export_limit
+  - UND  grid_power <= (target_offset + 2 * tolerance))
+  - (Hold-Zeit schützt vor vorzeitigem Exit während MPPT-Ramping)
 
 * **Verhalten in Zone 0:**
   - Max. Entladestrom wird auf 0 A gesetzt (kein Batterieentladen)
@@ -499,7 +516,7 @@ Aktion:     Puls-Sequenz 10s → (1s Pause) → 3599s
 8. **Regelbare Wartezeit:** Nach jeder Leistungsänderung wartet der Blueprint 0–30 Sekunden
 9. **Entladestrom-Automatik:** Max. Entladestrom wird vollautomatisch gesteuert — keine manuelle Einstellung nötig
 10. **Toleranz-Decay:** Verhindert automatisch Integral-Windup — 5% Abbau pro Zyklus wenn `|Integral| > 10` und Grid-Fehler innerhalb der Toleranz
-11. **Überschuss-Einspeisung:** Zwei-Zustands-Logik verhindert instabiles Hin- und Herschalten bei wechselnder Bewölkung
+11. **Überschuss-Einspeisung:** Persistenter `input_boolean` speichert den Zone-0-Zustand über Automation-Läufe hinweg. Eine 60-Sekunden Hold-Zeit nach Eintritt verhindert vorzeitigen Exit während des MPPT-Rampings. Danach gilt: Verbleib solange SOC ≥ Schwelle UND Grid ≤ Offset + 2×Toleranz.
 12. **Recovery:** Modus-Verlust bei aktivem Zyklus wird automatisch erkannt und korrigiert — kein manueller Eingriff nötig
 
 ---
