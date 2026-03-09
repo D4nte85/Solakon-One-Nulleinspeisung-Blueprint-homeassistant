@@ -975,7 +975,16 @@ action:
 
   # 4. Ausgangsleistung setzen
   # Bedingung: Toleranz überschritten ODER Überschuss-Modus hat sich geändert
-
+    - service: number.set_value
+      data:
+        entity_id: !input active_power_number
+        value: >
+         {% if is_surplus_mode %}
+           {{ max_active_power_limit_int }}
+         {% else %}
+           {{ [0, final_power_calculated] | max | round(0) }}
+         {% endif %}
+         
   - condition: template
     value_template: >
       {% if is_surplus_mode %}
@@ -996,17 +1005,3 @@ action:
        {% endif %}
   - delay:
       seconds: '{{wait_time_int}}'
-
-
-
-
-
-
-
-
-
-
-
-
-
-
