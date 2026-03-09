@@ -145,10 +145,8 @@ Die Überschuss-Einspeisung kann optional aktiviert werden und ermöglicht die E
   - PV aktiv: PV-Leistung ≥ Nacht-Schwelle *(schützt vor Eintritt im Dunkeln)*
 
 * **Verbleib-Bedingung**
-  - surplus_hold_active (< 60s seit Eintritt)
-  - ODER   (SOC >= export_limit
-  - UND  grid_power <= (target_offset + 2 * tolerance))
-  - (Hold-Zeit schützt vor vorzeitigem Exit während MPPT-Ramping)
+  - surplus_hold_active ODER (SOC >= export_limit UND grid_power <= (target_offset + 2 * tolerance))
+  - (Hold-Zeit(60s) schützt vor vorzeitigem Exit während MPPT-Ramping)
 
 * **Verhalten in Zone 0:**
   - Max. Entladestrom wird auf 0 A gesetzt (kein Batterieentladen)
