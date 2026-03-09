@@ -398,7 +398,7 @@ blueprint:
                 max: 99
                 unit_of_measurement: "%"
                 
-surplus_state_helper:
+          surplus_state_helper:
             name: ☀️ Surplus-Zustand Speicher (input_boolean - Optional, nur für Zone 0)
             description: |
               input_boolean Helper zum persistenten Tracken des Surplus-Zustands.
@@ -832,10 +832,18 @@ action:
       # Surplus
       surplus_state_entity: !input surplus_state_helper
       surplus_helper_last_changed: >
-        {{ (as_timestamp(states[surplus_state_entity].last_changed) | default(0)) }}
+        {% if surplus_export_enabled_bool and surplus_state_entity is string and surplus_state_entity | length > 0 %}
+          {{ (as_timestamp(states[surplus_state_entity].last_changed) | default(0)) }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
       surplus_hold_active: >
-        {{ is_state(surplus_state_entity, 'on') and
-           (as_timestamp(now()) - surplus_helper_last_changed) <= 60 }}
+        {% if surplus_export_enabled_bool and surplus_state_entity is string and surplus_state_entity | length > 0 %}
+          {{ is_state(surplus_state_entity, 'on') and
+             (as_timestamp(now()) - surplus_helper_last_changed) <= 60 }}
+        {% else %}
+          {{ false }}
+        {% endif %}
       
       # PI-Regler-Variablen
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
@@ -1049,6 +1057,7 @@ action:
       - service: input_boolean.turn_off
         data:
           entity_id: !input surplus_state_helper
+
 
 
 
