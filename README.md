@@ -140,13 +140,14 @@ Die Überschuss-Einspeisung kann optional aktiviert werden und ermöglicht die E
 * **Aktivierung:** Über den Parameter "Überschuss-Einspeisung aktivieren"
 
 * **Eintritts-Bedingung** (Wechsel von Nulleinspeisung → Zone 0):
-  - SOC ≥ konfigurierte Export-Schwelle (z.B. 100 %)
+  - SOC ≥ konfigurierte Export-Schwelle
   - Netz im Gleichgewicht: Grid Power ≤ Offset + Toleranz
   - PV aktiv: PV-Leistung ≥ Nacht-Schwelle *(schützt vor Eintritt im Dunkeln)*
+  - PV-Überschuss vorhanden: PV > aktuelle Ausgangsleistung + Grid-Leistung
 
 * **Verbleib-Bedingung**
-  - surplus_hold_active ODER (SOC >= export_limit UND grid_power <= (target_offset + 2 * tolerance))
-  - (Hold-Zeit(60s) schützt vor vorzeitigem Exit während MPPT-Ramping)
+  - surplus_hold_active (60s Hold nach Eintritt schützt vor vorzeitigem Exit während MPPT-Ramping)
+  - ODER (SOC ≥ Export-Schwelle UND (PV > aktuelle Ausgangsleistung + Grid-Leistung ODER PV ≥ Hard Limit))
 
 * **Verhalten in Zone 0:**
   - Max. Entladestrom wird auf 0 A gesetzt (kein Batterieentladen)
@@ -389,7 +390,7 @@ Max. Entladestrom Zone 1: 40A
 - Eintritts-Bedingung: SOC ≥ Export-Schwelle, Netz ≤ Offset + Toleranz, PV aktiv
 - Zone 0 aktiv → Max. Entladestrom: **0A** (kein Batterieentladen)
 - AC-Limit auf Hard Limit (800W) — reiner PV-Strom ins Netz
-- Kurze Wolke: System bleibt in Zone 0 (Verbleib-Bedingung: Netz ≤ Offset + 2×Toleranz, kein PV-Check)
+- Kurze Wolke: System bleibt in Zone 0 während der 60s Hold-Zeit; danach Verbleib solange PV > Ausgangsleistung + Grid ODER PV ≥ Hard Limit
 - Bei steigendem Hausverbrauch: automatische Rückkehr zu Zone 1
 
 **Abends (20:00 - SOC: 22%)**
@@ -466,10 +467,12 @@ Normal-Modus:     Nur setzen wenn |grid_error| > tolerance
 Eintritts-Bedingung:  SOC >= export_limit
                   UND grid_power <= (target_offset + tolerance)
                   UND solar_power >= night_threshold
+                  UND solar_power > (current_active_power + grid_power)
 
-Verbleib-Bedingung:   SOC >= export_limit
-                  UND grid_power <= (target_offset + 2 * tolerance)
-                  (kein PV-Check — Wolken werfen System nicht raus)
+Verbleib-Bedingung:   surplus_hold_active (60s nach Eintritt)
+                  ODER (SOC >= export_limit
+                       UND (solar_power > (current_active_power + grid_power)
+                            ODER solar_power >= hard_limit))
 
 Abbruch-Bedingung:    Verbleib-Bedingung nicht mehr erfüllt
 ```
@@ -514,7 +517,7 @@ Aktion:     Puls-Sequenz 10s → (1s Pause) → 3599s
 8. **Regelbare Wartezeit:** Nach jeder Leistungsänderung wartet der Blueprint 0–30 Sekunden
 9. **Entladestrom-Automatik:** Max. Entladestrom wird vollautomatisch gesteuert — keine manuelle Einstellung nötig
 10. **Toleranz-Decay:** Verhindert automatisch Integral-Windup — 5% Abbau pro Zyklus wenn `|Integral| > 10` und Grid-Fehler innerhalb der Toleranz
-11. **Überschuss-Einspeisung:** Persistenter `input_boolean` speichert den Zone-0-Zustand über Automation-Läufe hinweg. Eine 60-Sekunden Hold-Zeit nach Eintritt verhindert vorzeitigen Exit während des MPPT-Rampings. Danach gilt: Verbleib solange SOC ≥ Schwelle UND Grid ≤ Offset + 2×Toleranz.
+11. **Überschuss-Einspeisung:** Persistenter `input_boolean` speichert den Zone-0-Zustand über Automation-Läufe hinweg. Eine 60-Sekunden Hold-Zeit nach Eintritt verhindert vorzeitigen Exit während des MPPT-Rampings. Danach gilt: Danach gilt: Verbleib solange SOC ≥ Schwelle UND (PV > aktuelle Ausgangsleistung + Grid-Leistung ODER PV ≥ Hard Limit).
 12. **Recovery:** Modus-Verlust bei aktivem Zyklus wird automatisch erkannt und korrigiert — kein manueller Eingriff nötig
 
 ---
