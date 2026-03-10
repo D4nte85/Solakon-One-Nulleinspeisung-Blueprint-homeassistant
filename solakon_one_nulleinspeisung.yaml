@@ -960,7 +960,7 @@ action:
               entity_id: !input max_discharge_current_number
               value: "{{ discharge_current_max }}"
               
-      # FALL F.2a: Zone 0 (Surplus) - kleiner Pufferstrom
+      # FALL F.2: Limit für Zone 0 setzen (Surplus-Puffer = 2 A)
       - conditions:
           - condition: template
             value_template: >
@@ -972,7 +972,7 @@ action:
               entity_id: !input max_discharge_current_number
               value: 2
       
-      # FALL F.2b: Zone 2 - weiterhin 0 A
+      # FALL F.3: Limit für Zone 2 setzen (Batterieschonend = 0 A) 
       - conditions:
           - condition: template
             value_template: >
