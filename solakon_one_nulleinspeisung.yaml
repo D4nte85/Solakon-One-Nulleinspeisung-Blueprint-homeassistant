@@ -900,7 +900,7 @@ action:
             {{ (states(soc) | float(0) >= soc_export_limit_int)
                and (grid_power_float <= (target_offset + tolerance_int))
                and (solar_power_float >= night_pv_threshold)
-               and (solar_power_float > (current_active_power + grid_power_float))}}
+               and (solar_power_float > (actual_power_float + grid_power_float))}}
           {% endif %}
         {% endif %}
       
