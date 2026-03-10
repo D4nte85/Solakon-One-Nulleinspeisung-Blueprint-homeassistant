@@ -1050,7 +1050,7 @@ action:
 
       - conditions:
           - condition: template
-            value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
+            value_template: "{{ not is_surplus_mode and grid_error_for_tolerance > tolerance_int }}"
         sequence:
           # Surplus Boolean zurücksetzen
           - service: input_boolean.turn_off
