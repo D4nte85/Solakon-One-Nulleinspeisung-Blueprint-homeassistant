@@ -110,6 +110,6 @@
         class Z3_A,Z3_B zone3
         class NIGHT night
         class RECOVERY recovery
-        class CALC_NORMAL,DISCHARGE_SET,SET_40A,SET_0A pi
+        class CALC_NORMAL,DISCHARGE_SET,SET_40A,SET_0A,SET_2A pi
         class END_STOP,END_SKIP,END_TOL,END_OK,BOOL_UPDATE end_node
 ```
