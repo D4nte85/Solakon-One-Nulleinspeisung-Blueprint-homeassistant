@@ -1052,11 +1052,18 @@ action:
           - condition: template
             value_template: "{{ not is_surplus_mode and grid_error_for_tolerance > tolerance_int }}"
         sequence:
-          # Surplus Boolean zurücksetzen
-          - service: input_boolean.turn_off
-            data:
-              entity_id: !input surplus_state_helper
-          # Normaler PI-Output
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ surplus_export_enabled_bool and 
+                         surplus_state_entity is string and 
+                         surplus_state_entity | length > 0 }}
+                sequence:
+                  - service: input_boolean.turn_off
+                    data:
+                      entity_id: !input surplus_state_helper
+          # PI-Output unverändert:
           - service: number.set_value
             data:
               entity_id: !input active_power_number
@@ -1078,9 +1085,18 @@ action:
             data:
               entity_id: !input surplus_state_helper
     default:
-      - service: input_boolean.turn_off
-        data:
-          entity_id: !input surplus_state_helper
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: >
+                  {{ surplus_export_enabled_bool and 
+                     surplus_state_entity is string and 
+                     surplus_state_entity | length > 0 }}
+            sequence:
+              - service: input_boolean.turn_off
+                data:
+                  entity_id: !input surplus_state_helper
+
 
 
 
