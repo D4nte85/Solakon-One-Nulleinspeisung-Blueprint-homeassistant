@@ -114,7 +114,7 @@ Die Regelung wird anhand des aktuellen SOC in bis zu vier Betriebsmodi unterteil
 
 | Zone | SOC-Bereich / Bedingung | Modus | Max. Entladestrom | Regelziel | Besonderheiten |
 |:-----|:------------------------|:------|:-----------------|:---------|:--------------|
-| **0. Überschuss-Einspeisung** | SOC ≥ Export-Schwelle UND Netz im Gleichgewicht | `INV Discharge (PV Priority)` | 0 A | Hard Limit (max. W) | **Optional aktivierbar.** Nur reiner PV-Strom ins Netz. Zwei-Zustands-Logik für Eintritt und Verbleib (siehe unten). |
+| **0. Überschuss-Einspeisung** | SOC ≥ Export-Schwelle UND Netz im Gleichgewicht | `INV Discharge (PV Priority)` | 2 A (Stabilitätspuffer) | Hard Limit (max. W) | **Optional aktivierbar.** Überwiegend PV-Strom ins Netz. Zwei-Zustands-Logik für Eintritt und Verbleib (siehe unten). |
 | **1. Aggressive Entladung** | SOC > Zone-1-Schwelle | `INV Discharge (PV Priority)` | 40 A | 0W + Offset 1 | Läuft **durchgehend bis SOC ≤ Zone-3-Schwelle** (kein Yo-Yo-Effekt). Auch nachts aktiv. Hard Limit. |
 | **2. Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `INV Discharge (PV Priority)` | **0 A** | 0W + Offset 2 | Dynamisches Limit: **Max(0, PV − Reserve)**. Optional: Nachtabschaltung möglich. |
 | **3. Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `Disabled` | 0 A | — | Ausgang = 0 W. Vollständiger Schutz der Batterie. |
@@ -150,7 +150,7 @@ Die Überschuss-Einspeisung kann optional aktiviert werden und ermöglicht die E
 * **Verhalten in Zone 0:**
   - Max. Entladestrom wird auf 0 A gesetzt (kein Batterieentladen)
   - AC-Output-Limit wird auf das Hard Limit gesetzt (z.B. 800 W)
-  - Ausschließlich reiner PV-Strom wird ins Netz eingespeist
+  - Überwiegend PV-Strom wird ins Netz eingespeist (2 A Stabilitätspuffer ermöglicht minimalen Batteriebeitrag)
   - Output wird nur gesetzt, wenn er noch nicht auf dem Hard Limit steht (verhindert Modbus-Spam)
 
 * **Rückkehr zur Nulleinspeisung:** Sobald eine der Verbleib-Bedingungen nicht mehr erfüllt ist, kehrt das System automatisch zur normalen PI-Regelung zurück
@@ -197,6 +197,7 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 |:----------|:---------|:----------------|:-------------|
 | **Extern** | Netz-Leistungssensor | *(kein Standard)* | Z.B. Shelly 3EM. **Positiv = Bezug, Negativ = Einspeisung** |
 | **Solakon** | Solarleistung | `sensor.solakon_one_pv_leistung` | Aktuelle PV-Erzeugung in Watt |
+| **Solakon** | Tatsächliche Ausgangsleistung | `sensor.solakon_one_leistung` | Aktuelle AC-Ausgangsleistung des Wechselrichters in Watt |
 | **Solakon** | Batterieladestand (SOC) | `sensor.solakon_one_batterie_ladestand` | Ladestand in % |
 | **Solakon** | Remote Timeout Countdown | `sensor.solakon_one_fernsteuerung_zeituberschreitung` | Verbleibender Countdown |
 | **Solakon** | Ausgangsleistungsregler | `number.solakon_one_fernsteuerung_leistung` | Setzt Leistungs-Sollwert |
@@ -387,7 +388,7 @@ Max. Entladestrom Zone 1: 40A
 
 **Mittags mit vollem Akku (SOC: 100% + Überschuss-Einspeisung aktiviert)**
 - Eintritts-Bedingung: SOC ≥ Export-Schwelle, Netz ≤ Offset + Toleranz, PV aktiv
-- Zone 0 aktiv → Max. Entladestrom: **0A** (kein Batterieentladen)
+- Zone 0 aktiv → Max. Entladestrom: **2A** (Stabilitätspuffer für den Wechselrichter)
 - AC-Limit auf Hard Limit (800W) — reiner PV-Strom ins Netz
 - Kurze Wolke: System bleibt in Zone 0 während der 60s Hold-Zeit; danach Verbleib solange PV > Ausgangsleistung + Grid ODER PV ≥ Hard Limit
 - Bei steigendem Hausverbrauch: automatische Rückkehr zu Zone 1
@@ -496,7 +497,7 @@ Aktion:     Puls-Sequenz 10s → (1s Pause) → 3599s
 
 | Zone | Entladestrom | Bedingung |
 |:-----|:------------|:----------|
-| Zone 0 (Überschuss) | 0 A | Immer, solange Zone 0 aktiv |
+| Zone 0 (Überschuss) | 2 A (Stabilitätspuffer) | Immer, solange Zone 0 aktiv |
 | Zone 1 (Aggressiv) | Konfigurierter Maximalwert | Nur wenn aktueller Wert abweicht |
 | Zone 2 (Schonend) | 0 A | Nur wenn aktueller Wert abweicht |
 
