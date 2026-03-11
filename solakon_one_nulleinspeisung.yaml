@@ -1099,11 +1099,12 @@ action:
       - choose:
           - conditions:
               - condition: template
-                value_template: "{{ surplus_entity_valid }}"
+                value_template: "{{ surplus_entity_valid  and  is_state(surplus_state_entity, 'on') }}"
             sequence:
               - service: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
