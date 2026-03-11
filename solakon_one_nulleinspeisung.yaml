@@ -1036,6 +1036,8 @@ action:
       
 
   # 4. Ausgangsleistung setzen + Delay (NUR wenn nötig)
+  #    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
+  #    Surplus Boolean nur zurücksetzen wenn nötig
   - choose:
       - conditions:
           - condition: template
@@ -1075,13 +1077,11 @@ action:
               value: "{{ [0, final_power_calculated] | max | round(0) }}"
           - delay:
               seconds: '{{wait_time_int}}'
-
-    #    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
-    #    Surplus Boolean nur zurücksetzen wenn nötig
+              
     
-    # 5. Surplus-Boolean finalisieren — läuft immer
-    #    Redundant wenn Schritt 4 Output gesetzt hat, aber notwendig wenn Schritt 4 wegen
-    #    Toleranz oder erfülltem Hard-Limit übersprungen wurde (Boolean sonst veraltet)
+  # 5. Surplus-Boolean finalisieren — läuft immer
+  #    Redundant wenn Schritt 4 Output gesetzt hat, aber notwendig wenn Schritt 4 wegen
+  #    Toleranz oder erfülltem Hard-Limit übersprungen wurde (Boolean sonst veraltet)
   - choose:
       - conditions:
           - condition: template
@@ -1104,6 +1104,7 @@ action:
               - service: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
