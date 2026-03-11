@@ -751,7 +751,8 @@ action:
                         data:
                           entity_id: !input mode_select
                           option: '1'
-          
+
+          # FALL F: Nachtabschaltung (Zone 2 bei PV < Schwelle)
           - conditions:
               # Nachtabschaltung aktiviert
               - condition: template
@@ -960,8 +961,9 @@ action:
           {{ [max_zone_2, p_regler_power] | min | float(0) }}
         {% endif %}
         
+# SCHRITT 1: Entladestrom setzen
   - choose:
-      # FALL F.1: Limit für Zone 1 setzen (Aggressiv)
+      # FALL 1a: Limit für Zone 1 setzen (Aggressiv)
       - conditions:
           - condition: state
             entity_id: !input cycle_active_input_select
@@ -976,7 +978,7 @@ action:
               entity_id: !input max_discharge_current_number
               value: "{{ discharge_current_max }}"
               
-      # FALL F.2: Limit für Zone 0 setzen (Surplus-Puffer = 2 A)
+      # FALL 1b: Limit für Zone 0 setzen (Surplus-Puffer = 2 A)
       - conditions:
           - condition: template
             value_template: >
@@ -988,7 +990,7 @@ action:
               entity_id: !input max_discharge_current_number
               value: 2
       
-      # FALL F.3: Limit für Zone 2 setzen (Batterieschonend = 0 A) 
+      # FALL 1c: Limit für Zone 2 setzen (Batterieschonend = 0 A)
       - conditions:
           - condition: template
             value_template: >
@@ -1001,7 +1003,7 @@ action:
               entity_id: !input max_discharge_current_number
               value: 0
 
-  # 2. Timeout-Reset
+  # SCHRITT 2: Timeout-Reset
   - choose: 
         # Timeout-Reset erforderlich
       - conditions:
@@ -1018,7 +1020,7 @@ action:
               entity_id: !input remote_timeout_set_number
               value: 3599
               
-  # 3. Integral speichern (in Zone 0 einfrieren)
+  # SCHRITT 3: Integral speichern (in Zone 0 einfrieren)
   - choose:
       - conditions:
           - condition: template
@@ -1035,7 +1037,7 @@ action:
           value: "{{ integral_new }}"
       
 
-  # 4. Ausgangsleistung setzen + Delay (NUR wenn nötig)
+  # SCHRITT 4: Ausgangsleistung setzen + Delay (NUR wenn nötig)
   #    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
   #    Surplus Boolean nur zurücksetzen wenn nötig
   - choose:
@@ -1079,7 +1081,7 @@ action:
               seconds: '{{wait_time_int}}'
               
     
-  # 5. Surplus-Boolean finalisieren — läuft immer
+  # SCHRITT 5: Surplus-Boolean finalisieren — läuft immer
   #    Redundant wenn Schritt 4 Output gesetzt hat, aber notwendig wenn Schritt 4 wegen
   #    Toleranz oder erfülltem Hard-Limit übersprungen wurde (Boolean sonst veraltet)
   - choose:
@@ -1104,6 +1106,7 @@ action:
               - service: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
