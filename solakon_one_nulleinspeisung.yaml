@@ -891,7 +891,7 @@ action:
       # ÜBERSCHUSS-MODUS (Zone 0): Nur berechnen wenn Feature aktiviert
       # -----------------------------------------------------------------------
       is_surplus_mode: >
-        {% if not surplus_export_enabled_bool %}
+        {% if not surplus_entity_valid %}
           {{ false }}
         {% else %}
           {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
@@ -1104,6 +1104,7 @@ action:
               - service: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
