@@ -256,47 +256,41 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 | **Nullpunkt-Offset-2 (Statisch)** | 30 W | 0 | 100 W | Statischer Fallback-Wert für Zone 2. |
 | **Nullpunkt-Offset-2 (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert wenn konfiguriert. |
 | **PV-Ladereserve** | 50 W | 0 | 1000 W | Reservierte PV-Leistung für Ladung in Zone 2. Dynamisches Limit: Max(0, PV − Reserve). |
+---
 
-**Dynamischer Offset – Anwendungsbeispiel:**
+## 🎯 Dynamischer Offset Blueprint (Empfohlen)
 
-Der dynamische Offset ermöglicht es, den Nullpunkt-Offset **zur Laufzeit per Automatisierung anzupassen**, ohne den Blueprint zu ändern. Erstellen Sie dazu einen `input_number` Helper (z.B. `input_number.solakon_offset_zone1`) und wählen Sie diesen im Blueprint aus.
+Der **dynamische Offset** ermöglicht es, den Nullpunkt-Offset **vollautomatisch an die aktuelle Netz-Volatilität anzupassen** — ohne den Nulleinspeisung-Blueprint ändern zu müssen.
 
-**Typischer Anwendungsfall – OLED-Fernseher:**
-Moderne OLED-TVs haben einen stark schwankenden Stromverbrauch (50–300 W). Mit einer einfachen Automatisierung kann der Offset dynamisch angehoben werden:
+Dafür steht ein eigener Blueprint zur Verfügung:
 
-```yaml
-# Beispiel-Automatisierung: Offset erhöhen wenn TV läuft
-automation:
-  - alias: "Solakon Offset TV anpassen"
-    trigger:
-      - platform: state
-        entity_id: media_player.wohnzimmer_tv
-        to: "on"
-    action:
-      - service: input_number.set_value
-        target:
-          entity_id:
-            - input_number.solakon_offset_zone1
-            - input_number.solakon_offset_zone2
-        data:
-          value: 300
+### 👉 [Solakon ONE — Dynamischer Offset (Spike-Filter & Volatilitäts-Regler)](https://github.com/D4nte85/Solakon-one-dynamic-offset-blueprint)
 
-  - alias: "Solakon Offset TV zurücksetzen"
-    trigger:
-      - platform: state
-        entity_id: media_player.wohnzimmer_tv
-        to: "off"
-    action:
-      - service: input_number.set_value
-        target:
-          entity_id:
-            - input_number.solakon_offset_zone1
-            - input_number.solakon_offset_zone2
-        data:
-          value: 30
-```
+[![Blueprint importieren](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://raw.githubusercontent.com/D4nte85/Solakon-one-dynamic-offset-blueprint/main/solakon_dynamic_offset_blueprint.yaml)
 
-> ⚠️ **Abwärtskompatibel:** Wenn keine dynamische Entität ausgewählt wird, funktioniert alles wie bisher mit dem statischen Wert.
+**Was er macht:**
+- Filtert Netzspitzen heraus (Spike-Filter mit konfigurierbarer Bestätigungszeit)
+- Analysiert die Netz-Volatilität der letzten 60 Sekunden (Standardabweichung)
+- Erhöht den Sicherheitspuffer automatisch bei unruhigem Netz (z.B. taktende Kompressoren, Waschmaschinen)
+- Schreibt den berechneten Wert direkt in die `input_number`-Helper für Zone 1 & Zone 2
+
+**Typischer Offset je nach Netzsituation:**
+
+| Netz-Zustand | StdDev | Berechneter Offset |
+|:------------|:------:|:------------------:|
+| Sehr ruhig | 5 W | 30 W *(Minimum)* |
+| Normal | 30 W | 53 W |
+| Unruhig | 80 W | 128 W |
+| Sehr unruhig | 160 W | 228 W |
+| Extrem | 250 W+ | 250 W *(Maximum)* |
+
+**Zusammenspiel mit diesem Blueprint:**
+1. Dynamic Offset Blueprint berechnet den optimalen Offset und schreibt ihn in `input_number.solakon_offset_zone1` / `_zone2`
+2. Dieser Blueprint liest den Wert aus diesen Entitäten über die "Dynamischer Nullpunkt-Offset" Felder
+3. Der Offset passt sich so vollautomatisch und ohne manuelle Eingriffe an
+
+> ⚠️ **Abwärtskompatibel:** Wenn keine dynamische Entität ausgewählt wird, funktioniert dieser Blueprint wie bisher mit dem konfigurierten statischen Offset-Wert.
+---
 
 **Erklärung PV-Ladereserve:**
 - Bei 300W PV-Erzeugung und 50W Reserve → Max. Ausgang in Zone 2: 250W
