@@ -1036,11 +1036,14 @@ action:
           - condition: template
             value_template: "{{ is_surplus_mode and current_active_power < max_active_power_limit_int }}"
         sequence:
-          # Surplus Boolean setzen
-          - service: input_boolean.turn_on
-            data:
-              entity_id: !input surplus_state_helper
-          # Output auf Hard Limit
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ not is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - service: input_boolean.turn_on
+                    data:
+                      entity_id: !input surplus_state_helper
           - service: number.set_value
             data:
               entity_id: !input active_power_number
@@ -1081,9 +1084,14 @@ action:
           - condition: template
             value_template: "{{ is_surplus_mode }}"
         sequence:
-          - service: input_boolean.turn_on
-            data:
-              entity_id: !input surplus_state_helper
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ not is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - service: input_boolean.turn_on
+                    data:
+                      entity_id: !input surplus_state_helper
     default:
       - choose:
           - conditions:
@@ -1096,6 +1104,7 @@ action:
               - service: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
