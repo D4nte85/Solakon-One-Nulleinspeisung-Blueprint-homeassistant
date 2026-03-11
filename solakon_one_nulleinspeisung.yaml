@@ -842,14 +842,19 @@ action:
       actual_power_sensor: !input actual_power_sensor
       actual_power_float: "{{ states(actual_power_sensor) | float(0) }}"
       surplus_state_entity: !input surplus_state_helper
+      surplus_entity_valid: >
+        {{ surplus_export_enabled_bool and
+           surplus_state_entity is string and 
+           surplus_state_entity | length > 0 and
+           states(surplus_state_entity) not in ['unknown', 'unavailable'] }}
       surplus_helper_last_changed: >
-        {% if surplus_export_enabled_bool and surplus_state_entity is string and surplus_state_entity | length > 0 %}
+        {% if surplus_entity_valid %}
           {{ (as_timestamp(states[surplus_state_entity].last_changed) | default(0)) }}
         {% else %}
           {{ 0 }}
         {% endif %}
       surplus_hold_active: >
-        {% if surplus_export_enabled_bool and surplus_state_entity is string and surplus_state_entity | length > 0 %}
+        {% if surplus_entity_valid %}
           {{ is_state(surplus_state_entity, 'on') and
              (as_timestamp(now()) - surplus_helper_last_changed) <= 60 }}
         {% else %}
@@ -1039,7 +1044,7 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ not is_state(surplus_state_entity, 'on') }}"
+                    value_template: "{{ surplus_entity_valid and not is_state(surplus_state_entity, 'on') }}"
                 sequence:
                   - service: input_boolean.turn_on
                     data:
@@ -1058,10 +1063,7 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: >
-                      {{ surplus_export_enabled_bool and 
-                         surplus_state_entity is string and 
-                         surplus_state_entity | length > 0 }}
+                    value_template: "{{ surplus_entity_valid }}"
                 sequence:
                   - service: input_boolean.turn_off
                     data:
@@ -1088,7 +1090,7 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ not is_state(surplus_state_entity, 'on') }}"
+                    value_template: "{{ surplus_entity_valid and not is_state(surplus_state_entity, 'on') }}"
                 sequence:
                   - service: input_boolean.turn_on
                     data:
@@ -1097,14 +1099,12 @@ action:
       - choose:
           - conditions:
               - condition: template
-                value_template: >
-                  {{ surplus_export_enabled_bool and 
-                     surplus_state_entity is string and 
-                     surplus_state_entity | length > 0 }}
+                value_template: "{{ surplus_entity_valid }}"
             sequence:
               - service: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
