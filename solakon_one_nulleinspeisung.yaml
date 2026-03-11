@@ -911,7 +911,7 @@ action:
       # 1. Aktueller Fehler 
       error: >
         {% if is_state(cycle_active, 'on') %}
-          {# ZONE 1: Min(verfügbare Kapazität, Grid) #}
+          {# ZONE 1: Min(verfügbare Kapazität, Grid - Offset) #}
           {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_1_int)] | min | float(0) }}
         {% else %}
           {# ZONE 2: Min(verfügbare Kapazität, Grid - Offset, PV-Kapazität) #}
@@ -1081,6 +1081,7 @@ action:
       - service: input_boolean.turn_off
         data:
           entity_id: !input surplus_state_helper
+
 
 
 
