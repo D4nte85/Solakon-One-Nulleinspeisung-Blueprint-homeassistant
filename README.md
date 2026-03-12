@@ -1,6 +1,6 @@
 # ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V209
 
-Dieser Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung** für den Solakon ONE Wechselrichter, basierend auf einem **PI-Regler (Proportional-Integral-Regler)** und einer intelligenten **SOC-Zonen-Logik** mit optionaler **Überschuss-Einspeisung bei vollem Akku**, optionalem **AC-First-Modus** sowie optionalem **AC Laden aus externer Einspeisung**.
+Dieser Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung** für den Solakon ONE Wechselrichter, basierend auf einem **PI-Regler (Proportional-Integral-Regler)** und einer intelligenten **SOC-Zonen-Logik** mit optionaler **Überschuss-Einspeisung bei vollem Akku** sowie optionalem **AC Laden aus externer Einspeisung**.
 
 Ziel dieses Blueprints ist es, PV-Energie direkt auszugeben ohne den Umweg über die Batterie. Dies verhindert das "Flackern", das die App mit ihrer (lade ein Prozent → entlade ein Prozent → repeat) Funktionsweise verursacht, und schont die Batterie.
 
@@ -100,6 +100,7 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung:
   - Keine Verzögerung — sofortige Reaktion auf Sensor-Änderungen
 
 * **Fehlerberechnung mit dynamischer Begrenzung:**
+  - **AC Laden (Modus 3):** Fehler = Min(Lade-Limit − Output, Offset − Grid)
   - **Zone 1:** Fehler = Min(verfügbare Kapazität, Grid Power − Offset₁)
   - **Zone 2:** Fehler = Min(verfügbare Kapazität, Grid Power − Offset₂, PV-Kapazität)
 
@@ -116,12 +117,10 @@ Die Regelung wird anhand des aktuellen SOC in bis zu vier Betriebsmodi unterteil
 
 | Zone | SOC-Bereich / Bedingung | Modus | Max. Entladestrom | Regelziel | Besonderheiten |
 |:-----|:------------------------|:------|:-----------------|:---------|:--------------|
-| **0. Überschuss-Einspeisung** | SOC ≥ Export-Schwelle UND Netz im Gleichgewicht UND PV ≥ Nacht-Schwelle UND PV > Ausgangsleistung + Grid | `discharge_mode` | 2 A (Stabilitätspuffer) | Hard Limit (max. W) | **Optional aktivierbar.** Überwiegend PV-Strom ins Netz. Austritt erst bei SOC < (Export-Schwelle − Hysterese). |
-| **1. Aggressive Entladung** | SOC > Zone-1-Schwelle | `discharge_mode` | Konfigurierter Max-Wert (Standard: 40 A) | 0W + Offset 1 | Läuft **durchgehend bis SOC ≤ Zone-3-Schwelle** (kein Yo-Yo-Effekt). Auch nachts aktiv. Hard Limit. |
-| **2. Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `discharge_mode` | **0 A** | 0W + Offset 2 | Dynamisches Limit: **Max(0, PV − Reserve)**. Optional: Nachtabschaltung möglich. |
+| **0. Überschuss-Einspeisung** | SOC ≥ Export-Schwelle UND Netz im Gleichgewicht UND PV ≥ Nacht-Schwelle UND PV > Ausgangsleistung + Grid + PV-Hysterese | `INV Discharge (PV Priority)` | 2 A (Stabilitätspuffer) | Hard Limit (max. W) | **Optional aktivierbar.** Überwiegend PV-Strom ins Netz. Austritt bei SOC < (Export-Schwelle − SOC-Hysterese) oder PV < (Ausgangsleistung + Grid − PV-Hysterese). |
+| **1. Aggressive Entladung** | SOC > Zone-1-Schwelle | `INV Discharge (PV Priority)` | Konfigurierter Max-Wert (Standard: 40 A) | 0W + Offset 1 | Läuft **durchgehend bis SOC ≤ Zone-3-Schwelle** (kein Yo-Yo-Effekt). Auch nachts aktiv. Hard Limit. |
+| **2. Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `INV Discharge (PV Priority)` | **0 A** | 0W + Offset 2 | Dynamisches Limit: **Max(0, PV − Reserve)**. Optional: Nachtabschaltung möglich. |
 | **3. Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `Disabled` | 0 A | — | Ausgang = 0 W. Vollständiger Schutz der Batterie. |
-
-> `discharge_mode` ist entweder `INV Discharge (PV Priority)` (Standard) oder `INV Discharge (AC First)` je nach Konfiguration des AC-First-Parameters.
 
 **Wichtig:**
 - Zone 1 wird **einmal aktiviert** beim Überschreiten der Zone-1-Schwelle und läuft dann durch bis zur Zone-3-Schwelle
@@ -131,13 +130,13 @@ Die Regelung wird anhand des aktuellen SOC in bis zu vier Betriebsmodi unterteil
 
 #### 🔄 Recovery-Mechanismus
 
-Falls der Modus des Wechselrichters extern zurückgesetzt wird (z.B. durch einen Neustart der Integration oder manuelle Änderung), während der Entladezyklus noch aktiv ist (`Zyklus = on`), erkennt der Blueprint diesen Zustand automatisch und reaktiviert den Modus über die Puls-Sequenz (10s → 3599s) — ohne Zonenwechsel oder Integral-Reset. Voraussetzung: SOC liegt noch über der Zone-3-Schwelle.
+Falls der Modus des Wechselrichters extern zurückgesetzt wird (z.B. durch einen Neustart der Integration oder manuelle Änderung), während der Entladezyklus noch aktiv ist (`Zyklus = on`), erkennt der Blueprint diesen Zustand automatisch und reaktiviert den Modus über die Puls-Sequenz (10s → 3599s) — ohne Zonenwechsel oder Integral-Reset. Voraussetzung: SOC liegt noch über der Zone-3-Schwelle und Modus ≠ `INV Discharge (PV Priority)`.
 
 ---
 
 ### 3. ☀️ Überschuss-Einspeisung (Optional — Zone 0)
 
-Die Überschuss-Einspeisung kann optional aktiviert werden und ermöglicht die Einspeisung von echtem PV-Überschuss ins Netz, wenn der Akku voll ist. Der Wechsel in und aus Zone 0 folgt einer **SOC-Hysterese-Logik**, die instabiles Hin- und Herschalten bei nachlassender PV verhindert:
+Die Überschuss-Einspeisung kann optional aktiviert werden und ermöglicht die Einspeisung von echtem PV-Überschuss ins Netz, wenn der Akku voll ist. Der Wechsel in und aus Zone 0 folgt einer **SOC- und PV-Hysterese-Logik**, die instabiles Hin- und Herschalten verhindert:
 
 * **Aktivierung:** Über den Parameter "Überschuss-Einspeisung aktivieren"
 
@@ -145,11 +144,12 @@ Die Überschuss-Einspeisung kann optional aktiviert werden und ermöglicht die E
   - SOC ≥ konfigurierte Export-Schwelle
   - Netz im Gleichgewicht: Grid Power ≤ Offset + Toleranz
   - PV aktiv: PV-Leistung ≥ Nacht-Schwelle *(schützt vor Eintritt im Dunkeln)*
-  - PV-Überschuss vorhanden: PV > aktuelle Ausgangsleistung + Grid-Leistung
+  - PV-Überschuss vorhanden: PV > aktuelle Ausgangsleistung + Grid-Leistung + PV-Hysterese
 
 * **Verbleib-Bedingung:**
-  - SOC ≥ (Export-Schwelle − Hysterese)
-  - Beispiel: Schwelle = 90 %, Hysterese = 5 % → Austritt erst bei SOC < 85 %
+  - SOC ≥ (Export-Schwelle − SOC-Hysterese)
+  - UND PV > aktuelle Ausgangsleistung + Grid-Leistung − PV-Hysterese
+  - Beispiel: Schwelle = 90 %, SOC-Hysterese = 5 % → SOC-Austritt erst bei SOC < 85 %
 
 * **Verhalten in Zone 0:**
   - Max. Entladestrom wird auf 2 A gesetzt (Stabilitätspuffer für den Wechselrichter)
@@ -157,7 +157,7 @@ Die Überschuss-Einspeisung kann optional aktiviert werden und ermöglicht die E
   - Überwiegend PV-Strom wird ins Netz eingespeist (2 A Stabilitätspuffer ermöglicht minimalen Batteriebeitrag)
   - Output wird nur gesetzt, wenn er noch nicht auf dem Hard Limit steht (verhindert Modbus-Spam)
 
-* **Rückkehr zur Nulleinspeisung:** Sobald SOC unter (Export-Schwelle − Hysterese) fällt, kehrt das System automatisch zur normalen PI-Regelung zurück
+* **Rückkehr zur Nulleinspeisung:** Sobald SOC unter (Export-Schwelle − SOC-Hysterese) fällt oder PV unter (Ausgangsleistung + Grid − PV-Hysterese) sinkt
 
 * **Deaktiviert:** Das System verhält sich wie klassische Nulleinspeisung — kein aktives Einspeisen ins Netz
 
@@ -178,50 +178,39 @@ Die Nachtabschaltung kann optional aktiviert werden und betrifft **nur Zone 2**:
 
 ---
 
-### 5. 🔌 AC-First Modus (Optional)
+### 5. ⚡ AC Laden (Optional)
 
-Der AC-First Modus ändert den Entlademodus des Wechselrichters von `INV Discharge (PV Priority)` auf `INV Discharge (AC First)`. Alle Zonen, der PI-Regler und alle Limits bleiben vollständig identisch — lediglich die Priorisierung der Energiequelle ändert sich.
-
-* **PV Priority (Standard):** PV-Energie wird bevorzugt genutzt, Netz ergänzt bei Bedarf
-* **AC First:** Netzstrom wird als primäre Quelle bevorzugt; PV und Batterie ergänzen den Bedarf
-
-Der gewählte Modus wird intern als `discharge_mode` gespeichert und in allen Zonenübergängen (Zone 1 Start, Zone 2 Start, Recovery, Exit aus AC Laden in Zone 1) konsistent verwendet.
-
----
-
-### 6. ⚡ AC Laden (Optional)
-
-Das AC Laden ermöglicht das Laden der Batterie wenn eine externe Einspeisung ins Netz erkannt wird — erkennbar daran, dass der Grid-Sensor negativ wird (Einspeisung statt Bezug). Typischer Anwendungsfall: eine externe PV-Anlage speist ihren Überschuss ins Netz, und die Solakon-Batterie soll diesen Überschuss statt des Netzes aufnehmen.
+Das AC Laden ermöglicht das Laden der Batterie wenn eine externe Einspeisung ins Netz erkannt wird. Die Erkennung basiert darauf, dass der kombinierte Wert aus Grid-Sensor und aktueller Solakon-Ausgangsleistung negativ wird — d.h. es liegt nach Abzug des Solakon-Beitrags noch Überschuss an. Typischer Anwendungsfall: eine externe PV-Anlage speist ihren Überschuss ins Netz, und die Solakon-Batterie soll diesen Überschuss statt des Netzes aufnehmen.
 
 * **Aktivierung:** Über den Parameter "AC Laden aktivieren"
 
 * **Eintritts-Bedingung:**
   - AC Laden aktiviert UND SOC < konfiguriertes Ladeziel
-  - Grid < aktiver Offset (Offset₁ in Zone 1, Offset₂ in Zone 2) minus Toleranz
+  - (Grid + Ausgangsleistung) < −Toleranz *(externe Einspeisung nach Abzug des Solakon-Beitrags)*
 
 * **Verbleib-Bedingung (Hysterese):**
-  - Grid < aktiver Offset − Toleranz + Hysterese
+  - Grid < Hysterese
   - Verhindert Flackern bei wechselnder Einspeisung
 
 * **Verhalten beim Laden:**
   - Entladestrom wird auf 0 A gesetzt
   - Modus → `INV Charge (PV Priority)` (Modus 3)
-  - Ladeleistung = Min(Max-Ladeleistung, Offset − Grid) — skaliert automatisch mit dem verfügbaren Überschuss
+  - Ladeleistung wird per PI-Regler auf den aktiven Offset geregelt, begrenzt auf Max-Ladeleistung
   - Gilt sowohl in Zone 1 (Zyklus = on) als auch in Zone 2 (Zyklus = off)
 
 * **Abbruch-Bedingung:**
   - SOC ≥ konfiguriertes Ladeziel, oder
-  - Grid ≥ aktiver Offset − Toleranz + Hysterese (Überschuss weg)
+  - Grid ≥ Hysterese
 
 * **Rückkehr nach dem Laden:**
-  - Zone 1: Modus zurück zu `discharge_mode` + Puls-Sequenz (10s → 3599s)
+  - Zone 1: Modus zurück zu `INV Discharge (PV Priority)` (Modus 1) + Puls-Sequenz (10s → 3599s)
   - Zone 2: Modus → `Disabled`, Output 0 W (Zone 2 greift beim nächsten Trigger neu ein)
 
 * **Priorität:** Zone 3 (SOC-Schutz) evaluiert vor dem AC-Laden-Fall — der SOC-Schutz bleibt immer wirksam
 
 ---
 
-### 7. ⏱️ Remote Timeout Reset und Moduswechsel-Sequenz
+### 6. ⏱️ Remote Timeout Reset und Moduswechsel-Sequenz
 
 Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 
@@ -292,7 +281,8 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 |:----------|:---------|:----|:----|:-------------|
 | **Überschuss-Einspeisung aktivieren** | false | — | — | Schalter zum Aktivieren von Zone 0. |
 | **SOC-Schwelle Überschuss** | 90 % | 50 % | 99 % | Ab diesem SOC wird bei PV-Überschuss ins Netz eingespeist. |
-| **Hysterese Überschuss-Austritt** | 5 % | 1 % | 20 % | SOC muss um diesen Wert unter die Eintritts-Schwelle fallen bevor Zone 0 verlassen wird. |
+| **Hysterese Überschuss-Austritt (SOC)** | 5 % | 1 % | 20 % | SOC muss um diesen Wert unter die Eintritts-Schwelle fallen bevor Zone 0 verlassen wird. |
+| **PV-Überschuss Hysterese** | 50 W | 10 W | 200 W | Totband um den Hausverbrauch. Eintritt erst wenn PV um diesen Wert über dem Verbrauch liegt, Austritt erst wenn PV um diesen Wert darunter fällt. |
 
 ---
 
@@ -316,14 +306,6 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 
 ---
 
-### 🔌 AC-First Modus (Optional)
-
-| Parameter | Standard | Beschreibung |
-|:----------|:---------|:-------------|
-| **AC-First Modus aktivieren** | false | Schaltet Entlademodus auf `INV Discharge (AC First)` (Modus 13). Standard ist `INV Discharge (PV Priority)` (Modus 1). |
-
----
-
 ### ⚡ AC Laden (Optional)
 
 | Parameter | Standard | Min | Max | Beschreibung |
@@ -331,7 +313,7 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 | **AC Laden aktivieren** | false | — | — | Schalter zum Aktivieren des AC Ladens. |
 | **SOC-Ladeziel** | 90 % | 10 % | 99 % | Laden stoppt wenn SOC diesen Wert erreicht. Empfohlen: ≤ Zone-1-Schwelle. |
 | **Max. Ladeleistung** | 800 W | 50 | 1200 W | Absolute Obergrenze der AC-Ladeleistung. |
-| **Hysterese Ladeabbruch** | 50 W | 0 | 300 W | Laden endet erst wenn Grid wieder über Offset − Toleranz + Hysterese steigt. |
+| **Hysterese Ladeabbruch** | 50 W | 0 | 300 W | Laden endet erst wenn Grid wieder auf oder über diesen Wert steigt. |
 
 ---
 
@@ -388,11 +370,11 @@ Dafür steht ein eigener Blueprint zur Verfügung:
 - Dynamisches Limit: Max(0, PV - 50W)
 - Batterie wird geladen
 
-**Morgens mit externer Einspeisung (SOC: 30%, Grid negativ)**
-- Externe Einspeisung erkannt: Grid < Offset₂ − Toleranz
+**Morgens mit externer Einspeisung (SOC: 30%, Grid + Output negativ)**
+- Externe Einspeisung erkannt: (Grid + Ausgangsleistung) < −Toleranz
 - AC Laden startet: Modus `INV Charge (PV Priority)`, Entladestrom 0 A
-- Ladeleistung = Min(Max-Ladeleistung, Offset₂ − Grid)
-- SOC steigt, AC Laden läuft bis SOC-Ladeziel oder Überschuss weg
+- Ladeleistung wird per PI-Regler auf Offset₂ geregelt, begrenzt auf Max-Ladeleistung
+- SOC steigt, AC Laden läuft bis SOC-Ladeziel oder Überschuss weg (Grid ≥ Hysterese)
 
 **Mittags (12:00 - SOC: 55%)**
 - Zone 1 aktiviert (SOC > Zone-1-Schwelle)
@@ -400,14 +382,13 @@ Dafür steht ein eigener Blueprint zur Verfügung:
 - Regelziel: Offset 1 (nahe Nulleinspeisung)
 - Hard Limit: 800W
 - **Bleibt aktiv, auch wenn SOC wieder unter die Zone-1-Schwelle fällt!**
-- Falls Grid noch negativ: AC Laden bleibt aktiv (Zone 1, Offset₁ als Referenz)
 
 **Mittags mit vollem Akku (SOC: 100% + Überschuss-Einspeisung aktiviert)**
-- Eintritts-Bedingung: SOC ≥ Export-Schwelle, Netz ≤ Offset + Toleranz, PV aktiv, PV > Ausgangsleistung + Grid
+- Eintritts-Bedingung: SOC ≥ Export-Schwelle, Netz ≤ Offset + Toleranz, PV aktiv, PV > Ausgangsleistung + Grid + PV-Hysterese
 - Zone 0 aktiv → Max. Entladestrom: **2A** (Stabilitätspuffer für den Wechselrichter)
 - AC-Limit auf Hard Limit (800W) — reiner PV-Strom ins Netz
-- Verbleib: solange SOC ≥ (Export-Schwelle − Hysterese), z.B. SOC ≥ 85% bei Schwelle 90% und Hysterese 5%
-- Bei steigendem Hausverbrauch und sinkendem SOC: automatische Rückkehr zu Zone 1
+- Verbleib: solange SOC ≥ (Export-Schwelle − SOC-Hysterese) UND PV > (Ausgangsleistung + Grid − PV-Hysterese)
+- Bei steigendem Hausverbrauch und sinkendem SOC oder nachlassender PV: automatische Rückkehr zu Zone 1
 
 **Abends (20:00 - SOC: 22%)**
 - Zone 1 immer noch aktiv (läuft bis zur Zone-3-Schwelle)
@@ -442,8 +423,9 @@ Der Blueprint validiert die Konfiguration beim Start. Fehler werden im **System-
 
 **Fehlerberechnung (je nach Zone):**
 ```
-Zone 1: error = Min(verfügbare_Kapazität, grid_power - offset_1)
-Zone 2: error = Min(verfügbare_Kapazität, grid_power - offset_2, pv_kapazität)
+AC Laden (Modus 3): error = Min(ac_charge_power_limit - current_power, target_offset - grid_power)
+Zone 1:             error = Min(hard_limit - current_power, grid_power - offset_1)
+Zone 2:             error = Min(hard_limit - current_power, grid_power - offset_2, pv_kapazität - current_power)
 ```
 
 **Integral-Logik mit Toleranz-Decay:**
@@ -464,9 +446,10 @@ new_power = current_power + correction
 
 **Finale Leistung (zonenabhängige Begrenzung):**
 ```
-Zone 0: final_power = hard_limit                       (Überschuss-Einspeisung)
-Zone 1: final_power = Min(hard_limit, new_power)
-Zone 2: final_power = Min(Max(0, PV - reserve), new_power)
+AC Laden (Modus 3): final_power = Min(ac_charge_power_limit, Max(0, new_power))
+Zone 0:             final_power = hard_limit                       (Überschuss-Einspeisung)
+Zone 1:             final_power = Min(hard_limit, new_power)
+Zone 2:             final_power = Min(Max(0, PV - reserve), new_power)
 ```
 
 **Ausgangs-Update-Bedingung:**
@@ -477,36 +460,25 @@ Normal-Modus:     Nur setzen wenn |grid_error| > tolerance
 
 ---
 
-### AC-First Modus
-
-```
-discharge_mode = '13'  (INV Discharge AC First)   wenn ac_first_enabled = true
-discharge_mode = '1'   (INV Discharge PV Priority) wenn ac_first_enabled = false
-
-Alle Zonenübergänge (Zone 1, Zone 2, Recovery, AC-Laden-Exit Zone 1)
-verwenden discharge_mode statt hardcodierter '1'.
-```
-
----
-
 ### AC Laden State-Machine
 
 ```
 Eintritts-Bedingung:  ac_charge_enabled = true
                   UND soc < soc_ac_charge_limit
-                  UND grid < active_offset - tolerance
+                  UND (grid + current_active_power) < -tolerance
 
-Verbleib-Bedingung:   grid < active_offset - tolerance + hysteresis
+Verbleib-Bedingung:   grid < ac_charge_hysteresis
 
 Abbruch-Bedingung:    soc >= soc_ac_charge_limit
-                  ODER grid >= active_offset - tolerance + hysteresis
+                  ODER grid >= ac_charge_hysteresis
 
-Ladeleistung:         Min(ac_charge_power_limit, Max(0, active_offset - grid))
+Ladeleistung:         PI-geregelt, begrenzt auf ac_charge_power_limit
+                      Ziel: grid → active_offset
 
 active_offset:        offset_1_int  wenn cycle = on (Zone 1)
                       offset_2_int  wenn cycle = off (Zone 2)
 
-Exit Zone 1 → discharge_mode + Puls-Sequenz
+Exit Zone 1 → INV Discharge (PV Priority) (Modus 1) + Puls-Sequenz
 Exit Zone 2 → Disabled + Output 0W
 ```
 
@@ -518,11 +490,13 @@ Exit Zone 2 → Disabled + Output 0W
 Eintritts-Bedingung:  SOC >= export_limit
                   UND grid_power <= (target_offset + tolerance)
                   UND solar_power >= night_threshold
-                  UND solar_power > (current_active_power + grid_power)
+                  UND solar_power > (current_active_power + grid_power + pv_hysteresis)
 
-Verbleib-Bedingung:   SOC >= (export_limit - hysteresis)
+Verbleib-Bedingung:   SOC >= (export_limit - soc_hysteresis)
+                  UND solar_power > (current_active_power + grid_power - pv_hysteresis)
 
-Abbruch-Bedingung:    SOC < (export_limit - hysteresis)
+Abbruch-Bedingung:    SOC < (export_limit - soc_hysteresis)
+                  ODER solar_power <= (current_active_power + grid_power - pv_hysteresis)
 ```
 
 ---
@@ -531,11 +505,11 @@ Abbruch-Bedingung:    SOC < (export_limit - hysteresis)
 
 ```
 Bedingung:  Zyklus = on
-        UND Modus ≠ discharge_mode
+        UND Modus ≠ '1' (INV Discharge PV Priority)
         UND SOC > Zone-3-Schwelle
 
 Aktion:     Puls-Sequenz 10s → (1s Pause) → 3599s
-            Modus → discharge_mode
+            Modus → INV Discharge (PV Priority)
             (kein Integral-Reset, kein Zonenwechsel)
 ```
 
@@ -565,10 +539,9 @@ Aktion:     Puls-Sequenz 10s → (1s Pause) → 3599s
 8. **Regelbare Wartezeit:** Nach jeder Leistungsänderung wartet der Blueprint 0–30 Sekunden
 9. **Entladestrom-Automatik:** Max. Entladestrom wird vollautomatisch gesteuert — keine manuelle Einstellung nötig
 10. **Toleranz-Decay:** Verhindert automatisch Integral-Windup — 5% Abbau pro Zyklus wenn `|Integral| > 10` und Grid-Fehler innerhalb der Toleranz
-11. **Überschuss-Einspeisung:** Persistenter `input_boolean` speichert den Zone-0-Zustand über Automation-Läufe hinweg. Austritt erfolgt erst wenn SOC unter (Export-Schwelle − Hysterese) fällt — verhindert Flackern bei nachlassender PV. Der Helper ist nur erforderlich wenn Zone 0 aktiviert ist.
+11. **Überschuss-Einspeisung:** Persistenter `input_boolean` speichert den Zone-0-Zustand über Automation-Läufe hinweg. Austritt erfolgt erst wenn SOC unter (Export-Schwelle − SOC-Hysterese) fällt oder PV unter (Ausgangsleistung + Grid − PV-Hysterese) sinkt — verhindert Flackern bei nachlassender PV oder MPPT-Throttling. Der Helper ist nur erforderlich wenn Zone 0 aktiviert ist.
 12. **Recovery:** Modus-Verlust bei aktivem Zyklus wird automatisch erkannt und korrigiert — kein manueller Eingriff nötig
-13. **AC-First:** Nur der Entlademodus ändert sich — alle Zonen, der PI-Regler und alle Limits bleiben identisch
-14. **AC Laden:** Gilt in Zone 1 und Zone 2. Zone 3 (SOC-Schutz) hat immer Vorrang. Der Offset des aktiven Betriebsbereichs (Offset₁ in Zone 1, Offset₂ in Zone 2) dient als Referenz für den Ladestart und die Ladeleistungsberechnung.
+13. **AC Laden:** Gilt in Zone 1 und Zone 2. Zone 3 (SOC-Schutz) hat immer Vorrang. Eintritt wird erkannt über (Grid + Ausgangsleistung) < −Toleranz, Verbleib über Grid < Hysterese.
 
 ---
 
@@ -614,7 +587,8 @@ I-Faktor: 0.08
 Toleranzbereich: 20W
 Überschuss-Einspeisung: true
 SOC-Schwelle Überschuss: 95%
-Hysterese Überschuss-Austritt: 5%
+Hysterese Überschuss-Austritt (SOC): 5%
+PV-Überschuss Hysterese: 50W
 AC Laden: true
 SOC-Ladeziel: 90%
 Max. Ladeleistung: 800W
@@ -634,5 +608,4 @@ Toleranzbereich: 25W
 Max. Entladestrom Zone 1: 40A
 Überschuss-Einspeisung: false
 AC Laden: false
-AC-First: false
 ```
