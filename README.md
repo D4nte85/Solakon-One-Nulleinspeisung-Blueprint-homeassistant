@@ -220,6 +220,7 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 | **P-Faktor** | 1.5 | 0.1 | 5.0 | Proportional-Verstärkung. Höher = aggressiver, schneller. |
 | **I-Faktor** | 0.05 | 0.01 | 0.2 | Integral-Verstärkung. Höher = schnellere Fehlerkorrektur, aber instabiler. |
 | **Toleranzbereich** | 25 W | 0 | 200 W | Totband um Regelziel. Keine Korrektur innerhalb dieser Zone. |
+| **Wartezeit** | 3 s | 0 | 30 s | Verzögerung nach Leistungsänderung. Gibt Wechselrichter und Sensoren Zeit zum Aktualisieren. |
 
 **Tuning-Tipps:**
 - **Zu langsam?** → P-Faktor erhöhen (z.B. 2.0) oder I-Faktor erhöhen (z.B. 0.08)
