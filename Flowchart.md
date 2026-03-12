@@ -10,7 +10,7 @@
 
         %% ── Zone 1 ──────────────────────────────────────────────────
         ZONE_CHECK -- "SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
-        Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Surplus-Boolean → off (nur wenn Zone 0 aktiv)   Modus → discharge_mode   (Puls-Sequenz: 10s → 3599s)"]
+        Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Surplus-Boolean → off (nur wenn Zone 0 aktiv)   Modus → 1 (INV Discharge PV Priority)   (Puls-Sequenz: 10s → 3599s)"]
 
         %% ── Zone 3 (Zyklus on) ──────────────────────────────────────
         ZONE_CHECK -- "SOC < Zone-3-Schwelle UND Zyklus = on" --> Z3_A
@@ -21,22 +21,22 @@
         Z3_B["🛑 Zone 3 Absicherung   Surplus-Boolean → off (nur wenn Zone 0 aktiv)   Modus → Disabled   Output → 0 W"]
 
         %% ── AC Laden Eintritt ───────────────────────────────────────
-        ZONE_CHECK -- "AC Laden aktiviert   UND SOC < Ladeziel   UND Grid < aktiver Offset − Toleranz" --> G_CHECK
+        ZONE_CHECK -- "AC Laden aktiviert   UND SOC < Ladeziel   UND Grid + Output < −Toleranz (Entry)   ODER Modus = INV Charge UND Grid < Hysterese (Stay)" --> G_CHECK
         G_CHECK{{"Aktuell im Lade-Modus?   (Modus = INV Charge)"}}
-        G_CHECK -- "Nein — Entry:   Grid < Offset − Toleranz" --> AC_LOAD
-        G_CHECK -- "Ja — Stay:   Grid < Offset − Toleranz + Hysterese" --> AC_LOAD
-        G_CHECK -- "Exit:   SOC ≥ Ladeziel   ODER Grid ≥ Offset − Toleranz + Hysterese" --> AC_LOAD_EXIT
+        G_CHECK -- "Nein — Entry:   (Grid + Output) < −Toleranz" --> AC_LOAD
+        G_CHECK -- "Ja — Stay:   Grid < Hysterese" --> AC_LOAD
+        G_CHECK -- "Exit:   SOC ≥ Ladeziel   ODER Grid ≥ Hysterese" --> AC_LOAD_EXIT
 
-        AC_LOAD["⚡ AC Laden aktiv   Entladestrom → 0 A   Modus → INV Charge (PV Priority)   (Puls-Sequenz: 10s → 3599s)   Ladeleistung = Min(Limit, Offset − Grid)"]
-        AC_LOAD_EXIT["⚡ AC Laden beenden   Zone 1 → discharge_mode + Puls-Sequenz   Zone 2 → Disabled + Output 0 W"]
+        AC_LOAD["⚡ AC Laden aktiv   Entladestrom → 0 A   Modus → INV Charge (PV Priority)   (Puls-Sequenz: 10s → 3599s)   Ladeleistung = PI-geregelt auf Offset, Max = Lade-Limit"]
+        AC_LOAD_EXIT["⚡ AC Laden beenden   Zone 1 → Modus 1 (INV Discharge PV Priority) + Puls-Sequenz   Zone 2 → Disabled + Output 0 W"]
 
         %% ── Recovery ────────────────────────────────────────────────
-        ZONE_CHECK -- "Zyklus = on UND Modus ≠ discharge_mode UND SOC > Zone-3-Schwelle" --> RECOVERY
-        RECOVERY["🔄 Recovery — Modus-Reaktivierung   Modus → discharge_mode   (Puls-Sequenz: 10s → 3599s)"]
+        ZONE_CHECK -- "Zyklus = on UND Modus ≠ 1 UND SOC > Zone-3-Schwelle" --> RECOVERY
+        RECOVERY["🔄 Recovery — Modus-Reaktivierung   Modus → 1 (INV Discharge PV Priority)   (Puls-Sequenz: 10s → 3599s)"]
 
         %% ── Zone 2 ──────────────────────────────────────────────────
         ZONE_CHECK -- "Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = Disabled UND NICHT Nacht" --> Z2_START
-        Z2_START["🔋 Zone 2 aktivieren   Integral = 0   Modus → discharge_mode   (Puls-Sequenz: 10s → 3599s)"]
+        Z2_START["🔋 Zone 2 aktivieren   Integral = 0   Modus → 1 (INV Discharge PV Priority)   (Puls-Sequenz: 10s → 3599s)"]
 
         %% ── Nachtabschaltung ────────────────────────────────────────
         ZONE_CHECK -- "Nachtabschaltung aktiv UND PV < Schwelle UND Zyklus = off UND Modus aktiv" --> NIGHT
@@ -55,7 +55,7 @@
         AC_LOAD_EXIT --> END_STOP
 
         %% ── PI-Regler Gate ──────────────────────────────────────────
-        PI_GATE{{"Modus = discharge_mode? UND Zone 1 ODER Tag?"}}
+        PI_GATE{{"Modus = '1' ODER '3'? UND Zone 1 ODER Tag?"}}
         PI_GATE -- Nein --> END_SKIP([Ende — kein Output])
         PI_GATE -- Ja --> SURPLUS_CHECK
 
@@ -66,8 +66,8 @@
 
         %% ── Surplus Zwei-Zustands-Logik ─────────────────────────────
         SURPLUS_STATE{{"Aktuell im Überschuss-Modus?   (input_boolean = on)"}}
-        SURPLUS_STATE -- "Ja — Bleiben:   SOC ≥ (Export-Schwelle − Hysterese)" --> CALC_SURPLUS
-        SURPLUS_STATE -- "Nein — Eintreten:   SOC ≥ Export-Schwelle   UND Grid ≤ Offset + Toleranz   UND PV ≥ Nacht-Schwelle   UND PV > Output + Grid" --> CALC_SURPLUS
+        SURPLUS_STATE -- "Ja — Bleiben:   SOC ≥ (Export-Schwelle − SOC-Hysterese)   UND PV > Output + Grid − PV-Hysterese" --> CALC_SURPLUS
+        SURPLUS_STATE -- "Nein — Eintreten:   SOC ≥ Export-Schwelle   UND Grid ≤ Offset + Toleranz   UND PV ≥ Nacht-Schwelle   UND PV > Output + Grid + PV-Hysterese" --> CALC_SURPLUS
         SURPLUS_STATE -- "Bedingung nicht erfüllt" --> CALC_NORMAL
 
         %% ── Zone-0-Pfad ─────────────────────────────────────────────
@@ -75,7 +75,7 @@
         CALC_SURPLUS --> DISCHARGE_SET
 
         %% ── Normaler PI-Pfad ────────────────────────────────────────
-        CALC_NORMAL["🧠 PI-Regler   1. Fehler berechnen (zonenabhängig)      Zone 1: Min(Kapazität, Grid − Offset₁)      Zone 2: Min(Kapazität, Grid − Offset₂, PV-Kap.)   2. Integral aktualisieren (Anti-Windup)      |Grid-Fehler| > Toleranz → Integral += Fehler (±1000)      |Grid-Fehler| ≤ Toleranz UND |Integral| > 10 → Integral × 0,95      sonst → kein Update   3. Korrektur = P-Teil + I-Teil   4. new_power = current + Korrektur   5. Begrenzen:      Zone 1 → Hard Limit      Zone 2 → Max(0, PV − Reserve)"]
+        CALC_NORMAL["🧠 PI-Regler   1. Fehler berechnen (zonenabhängig)      AC Laden (Modus 3): Min(Lade-Limit − Output, Offset − Grid)      Zone 1: Min(Hard-Limit − Output, Grid − Offset₁)      Zone 2: Min(Hard-Limit − Output, Grid − Offset₂, PV-Kap. − Output)   2. Integral aktualisieren (Anti-Windup)      |Grid-Fehler| > Toleranz → Integral += Fehler (±1000)      |Grid-Fehler| ≤ Toleranz UND |Integral| > 10 → Integral × 0,95      sonst → kein Update   3. Korrektur = P-Teil + I-Teil   4. new_power = current + Korrektur   5. Begrenzen:      AC Laden → Lade-Limit      Zone 1 → Hard Limit      Zone 2 → Max(0, PV − Reserve)"]
         CALC_NORMAL --> DISCHARGE_SET
 
         %% ── Entladestrom setzen ─────────────────────────────────────
