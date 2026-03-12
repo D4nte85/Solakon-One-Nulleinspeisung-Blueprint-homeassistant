@@ -92,7 +92,7 @@
 
         SET_OUTPUT["⚙️ Ausgangsleistung setzen   Überschuss-Modus: Hard Limit + Boolean → on   Normal-Modus: Max(0, final_power) + Boolean → off   → Wechselrichter"]
         SET_OUTPUT --> WAIT["⏳ Wartezeit (0–30s)"]
-        WAIT --> END_OK([Ende])
+        WAIT --> BOOL_UPDATE
 
         %% ── Styles ──────────────────────────────────────────────────
         classDef zone0 fill:#fff3cd,stroke:#f0ad4e,color:#000
