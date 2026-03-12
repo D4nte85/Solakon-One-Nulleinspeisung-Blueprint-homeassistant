@@ -59,8 +59,8 @@
         SURPLUS_STATE -- "Bedingung nicht erfüllt" --> CALC_NORMAL
 
         %% ── Zone-0-Pfad ─────────────────────────────────────────────
-        CALC_SURPLUS["☀️ Zone 0 — Überschuss-Einspeisung   Entladestrom → 2 A (Stabilitätspuffer)   final_power = Hard Limit   Integral gespeichert (unverändert)"]
-        CALC_SURPLUS --> TIMEOUT_CHECK
+        CALC_SURPLUS["☀️ Zone 0 — Überschuss-Einspeisung   final_power = Hard Limit   Integral gespeichert (unverändert)"]
+        CALC_SURPLUS --> DISCHARGE_SET
 
         %% ── Normaler PI-Pfad ────────────────────────────────────────
         CALC_NORMAL["🧠 PI-Regler   1. Fehler berechnen (zonenabhängig)      Zone 1: Min(Kapazität, Grid − Offset₁)      Zone 2: Min(Kapazität, Grid − Offset₂, PV-Kap.)   2. Integral aktualisieren (Anti-Windup)      |Grid-Fehler| > Toleranz → Integral += Fehler (±1000)      |Grid-Fehler| ≤ Toleranz UND |Integral| > 10 → Integral × 0,95      sonst → kein Update   3. Korrektur = P-Teil + I-Teil   4. new_power = current + Korrektur   5. Begrenzen:      Zone 1 → Hard Limit      Zone 2 → Max(0, PV − Reserve)"]
