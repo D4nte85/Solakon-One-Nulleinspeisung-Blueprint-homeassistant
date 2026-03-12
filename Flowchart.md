@@ -59,7 +59,7 @@
         SURPLUS_STATE -- "Bedingung nicht erfüllt" --> CALC_NORMAL
 
         %% ── Zone-0-Pfad ─────────────────────────────────────────────
-        CALC_SURPLUS["☀️ Zone 0 — Überschuss-Einspeisung   final_power = Hard Limit   Integral gespeichert (unverändert)"]
+        CALC_SURPLUS["☀️ Zone 0 — Überschuss-Einspeisung   final_power = Hard Limit"]
         CALC_SURPLUS --> DISCHARGE_SET
 
         %% ── Normaler PI-Pfad ────────────────────────────────────────
@@ -69,8 +69,8 @@
         %% ── Entladestrom setzen ─────────────────────────────────────
         DISCHARGE_SET{{"Surplus aktiv? → 2 A   Zyklus = on? → Max-Wert   Sonst → 0 A"}}
         DISCHARGE_SET -- "Surplus aktiv: 2 A" --> SET_2A["🔋 Entladestrom → 2 A Stabilitätspuffer (nur wenn Wert abweicht)"]
-        DISCHARGE_SET -- "Ja (Zone 1): konfigurierter Max-Wert" --> SET_40A["🔋 Entladestrom → konfigurierter Max-Wert (nur wenn Wert abweicht)"]
-        DISCHARGE_SET -- "Nein (Zone 2): 0 A" --> SET_0A["🔋 Entladestrom → 0 A (nur wenn Wert abweicht)"]
+        DISCHARGE_SET -- "Zone 1: konfigurierter Max-Wert" --> SET_40A
+        DISCHARGE_SET -- "Zone 2: 0 A" --> SET_0A
         SET_2A --> TIMEOUT_CHECK
         SET_40A --> TIMEOUT_CHECK
         SET_0A --> TIMEOUT_CHECK
