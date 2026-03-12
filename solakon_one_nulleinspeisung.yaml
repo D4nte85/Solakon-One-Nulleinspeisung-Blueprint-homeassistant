@@ -796,13 +796,12 @@ actions:
                 value_template: >
                   {% set active_offset = offset_1_int if is_state(cycle_active, 'on') else offset_2_int %}
                   {% set grid = states(grid_power_entity) | float(0) %}
-                  {% set threshold = active_offset | float(0) - charge_tolerance | float(0) %}
                   {% if states(solakon_mode) == '3' %}
-                    {# Stay: Hysterese — erst beenden wenn Überschuss wirklich weg #}
-                    {{ grid < (threshold + ac_charge_hysteresis_int) }}
+                    {# Stay: erst beenden wenn Einspeisung wirklich weg #}
+                    {{ grid < ac_charge_hysteresis_int | float(0) }}
                   {% else %}
-                    {# Entry: klarer Überschuss nötig #}
-                    {{ grid < threshold }}
+                    {# Entry: grid muss wirklich negativ sein #}
+                    {{ grid < -(charge_tolerance | float(0)) }}
                   {% endif %}
             sequence:
               # Logging nur bei Moduswechsel
@@ -884,11 +883,8 @@ actions:
                 value_template: "{{ ac_charge_enabled_bool and states(solakon_mode) == '3' }}"
               - condition: template
                 value_template: >
-                  {% set active_offset = offset_1_int if is_state(cycle_active, 'on') else offset_2_int %}
-                  {% set grid = states(grid_power_entity) | float(0) %}
-                  {% set threshold = active_offset | float(0) - charge_tolerance | float(0) %}
                   {{ states(soc) | float(0) >= soc_ac_charge_limit_int or
-                     grid >= (threshold + ac_charge_hysteresis_int) }}
+                     states(grid_power_entity) | float(0) >= ac_charge_hysteresis_int | float(0) }}
             sequence:
               - action: logbook.log
                 data:
@@ -1309,6 +1305,7 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
