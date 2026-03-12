@@ -1083,7 +1083,7 @@ actions:
                   - action: input_boolean.turn_off
                     data:
                       entity_id: !input surplus_state_helper
-          # PI-Output unverändert:
+          # PI-Ausgangsleistung setzen:
           - action: number.set_value
             data:
               entity_id: !input active_power_number
@@ -1117,6 +1117,7 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
