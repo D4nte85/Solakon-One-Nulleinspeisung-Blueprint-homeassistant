@@ -10,7 +10,7 @@
 
         %% ── Zone 1 ──────────────────────────────────────────────────
         ZONE_CHECK -- "SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
-        Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Surplus-Boolean → off (nur wenn Zone 0 aktiv)   Modus → INV Discharge PV Priority   (Puls-Sequenz: 10s → 3599s)"]
+        Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Surplus-Boolean → off (nur wenn Zone 0 aktiv)   Modus → discharge_mode   (Puls-Sequenz: 10s → 3599s)"]
 
         %% ── Zone 3 (Zyklus on) ──────────────────────────────────────
         ZONE_CHECK -- "SOC < Zone-3-Schwelle UND Zyklus = on" --> Z3_A
@@ -20,13 +20,23 @@
         ZONE_CHECK -- "SOC < Zone-3-Schwelle UND Zyklus = off UND Modus ≠ Disabled" --> Z3_B
         Z3_B["🛑 Zone 3 Absicherung   Surplus-Boolean → off (nur wenn Zone 0 aktiv)   Modus → Disabled   Output → 0 W"]
 
+        %% ── AC Laden Eintritt ───────────────────────────────────────
+        ZONE_CHECK -- "AC Laden aktiviert   UND SOC < Ladeziel   UND Grid < aktiver Offset − Toleranz" --> G_CHECK
+        G_CHECK{{"Aktuell im Lade-Modus?   (Modus = INV Charge)"}}
+        G_CHECK -- "Nein — Entry:   Grid < Offset − Toleranz" --> AC_LOAD
+        G_CHECK -- "Ja — Stay:   Grid < Offset − Toleranz + Hysterese" --> AC_LOAD
+        G_CHECK -- "Exit:   SOC ≥ Ladeziel   ODER Grid ≥ Offset − Toleranz + Hysterese" --> AC_LOAD_EXIT
+
+        AC_LOAD["⚡ AC Laden aktiv   Entladestrom → 0 A   Modus → INV Charge (PV Priority)   (Puls-Sequenz: 10s → 3599s)   Ladeleistung = Min(Limit, Offset − Grid)"]
+        AC_LOAD_EXIT["⚡ AC Laden beenden   Zone 1 → discharge_mode + Puls-Sequenz   Zone 2 → Disabled + Output 0 W"]
+
         %% ── Recovery ────────────────────────────────────────────────
-        ZONE_CHECK -- "Zyklus = on UND Modus ≠ INV Discharge UND SOC > Zone-3-Schwelle" --> RECOVERY
-        RECOVERY["🔄 Recovery — Modus-Reaktivierung   Modus → INV Discharge PV Priority   (Puls-Sequenz: 10s → 3599s)"]
+        ZONE_CHECK -- "Zyklus = on UND Modus ≠ discharge_mode UND SOC > Zone-3-Schwelle" --> RECOVERY
+        RECOVERY["🔄 Recovery — Modus-Reaktivierung   Modus → discharge_mode   (Puls-Sequenz: 10s → 3599s)"]
 
         %% ── Zone 2 ──────────────────────────────────────────────────
         ZONE_CHECK -- "Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = Disabled UND NICHT Nacht" --> Z2_START
-        Z2_START["🔋 Zone 2 aktivieren   Integral = 0   Modus → INV Discharge PV Priority   (Puls-Sequenz: 10s → 3599s)"]
+        Z2_START["🔋 Zone 2 aktivieren   Integral = 0   Modus → discharge_mode   (Puls-Sequenz: 10s → 3599s)"]
 
         %% ── Nachtabschaltung ────────────────────────────────────────
         ZONE_CHECK -- "Nachtabschaltung aktiv UND PV < Schwelle UND Zyklus = off UND Modus aktiv" --> NIGHT
@@ -41,9 +51,11 @@
         Z3_A --> END_STOP([Ende])
         Z3_B --> END_STOP
         NIGHT --> END_STOP
+        AC_LOAD --> END_STOP
+        AC_LOAD_EXIT --> END_STOP
 
         %% ── PI-Regler Gate ──────────────────────────────────────────
-        PI_GATE{{"Modus = INV Discharge? UND Zone 1 ODER Tag?"}}
+        PI_GATE{{"Modus = discharge_mode? UND Zone 1 ODER Tag?"}}
         PI_GATE -- Nein --> END_SKIP([Ende — kein Output])
         PI_GATE -- Ja --> SURPLUS_CHECK
 
@@ -69,7 +81,7 @@
         %% ── Entladestrom setzen ─────────────────────────────────────
         DISCHARGE_SET{{"Entladestrom setzen?"}}
         DISCHARGE_SET -- "Surplus aktiv → 2 A" --> TIMEOUT_CHECK
-        DISCHARGE_SET -- "Zyklus = on → Max-Wert" --> TIMEOUT_CHECK
+        DISCHARGE_SET -- "Zyklus = on UND kein AC Laden → Max-Wert" --> TIMEOUT_CHECK
         DISCHARGE_SET -- "Sonst → 0 A" --> TIMEOUT_CHECK
 
         %% ── Timeout ─────────────────────────────────────────────────
@@ -98,6 +110,7 @@
         classDef zone3 fill:#f8d7da,stroke:#dc3545,color:#000
         classDef night fill:#e2d9f3,stroke:#6f42c1,color:#000
         classDef recovery fill:#fde8d0,stroke:#e07b20,color:#000
+        classDef accharge fill:#d0e8ff,stroke:#0066cc,color:#000
         classDef pi fill:#cce5ff,stroke:#004085,color:#000
         classDef end_node fill:#f8f9fa,stroke:#6c757d,color:#000
 
@@ -107,6 +120,7 @@
         class Z3_A,Z3_B zone3
         class NIGHT night
         class RECOVERY recovery
+        class AC_LOAD,AC_LOAD_EXIT,G_CHECK accharge
         class CALC_NORMAL,DISCHARGE_SET pi
         class END_STOP,END_SKIP,END_TOL,END_OK,BOOL_UPDATE end_node
 ```
