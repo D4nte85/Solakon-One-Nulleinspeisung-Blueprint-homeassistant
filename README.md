@@ -116,7 +116,7 @@ Die Regelung wird anhand des aktuellen SOC in bis zu vier Betriebsmodi unterteil
 
 | Zone | SOC-Bereich / Bedingung | Modus | Max. Entladestrom | Regelziel | Besonderheiten |
 |:-----|:------------------------|:------|:-----------------|:---------|:--------------|
-| **0. Überschuss-Einspeisung** | SOC ≥ Export-Schwelle UND Netz im Gleichgewicht UND PV ≥ Nacht-Schwelle UND PV > Ausgangsleistung + Grid | `INV Discharge (PV Priority)` | 2 A (Stabilitätspuffer) | Hard Limit (max. W) | **Optional aktivierbar.** Überwiegend PV-Strom ins Netz. Austritt erst bei SOC < (Export-Schwelle − Hysterese). |
+| **0. Überschuss-Einspeisung** | SOC ≥ Export-Schwelle UND Netz im Gleichgewicht UND PV ≥ Nacht-Schwelle UND PV > Ausgangsleistung + Grid + PV-Hysterese | `INV Discharge (PV Priority)` | 2 A (Stabilitätspuffer) | Hard Limit (max. W) | **Optional aktivierbar.** Überwiegend PV-Strom ins Netz. Austritt bei SOC < (Export-Schwelle − SOC-Hysterese) ODER PV < Hausverbrauch − PV-Hysterese. |
 | **1. Aggressive Entladung** | SOC > Zone-1-Schwelle | `INV Discharge (PV Priority)` | Konfigurierter Max-Wert (Standard: 40 A)| 0W + Offset 1 | Läuft **durchgehend bis SOC ≤ Zone-3-Schwelle** (kein Yo-Yo-Effekt). Auch nachts aktiv. Hard Limit. |
 | **2. Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `INV Discharge (PV Priority)` | **0 A** | 0W + Offset 2 | Dynamisches Limit: **Max(0, PV − Reserve)**. Optional: Nachtabschaltung möglich. |
 | **3. Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `Disabled` | 0 A | — | Ausgang = 0 W. Vollständiger Schutz der Batterie. |
@@ -143,11 +143,13 @@ Die Überschuss-Einspeisung kann optional aktiviert werden und ermöglicht die E
   - SOC ≥ konfigurierte Export-Schwelle
   - Netz im Gleichgewicht: Grid Power ≤ Offset + Toleranz
   - PV aktiv: PV-Leistung ≥ Nacht-Schwelle *(schützt vor Eintritt im Dunkeln)*
-  - PV-Überschuss vorhanden: PV > aktuelle Ausgangsleistung + Grid-Leistung
+  - PV-Überschuss vorhanden: PV > aktuelle Ausgangsleistung + Grid-Leistung + PV-Hysterese
 
 * **Verbleib-Bedingung:**
-  - SOC ≥ (Export-Schwelle − Hysterese)
-  - Beispiel: Schwelle = 90 %, Hysterese = 5 % → Austritt erst bei SOC < 85 %
+  - SOC ≥ (Export-Schwelle − SOC-Hysterese)
+  - PV > aktuelle Ausgangsleistung + Grid-Leistung − PV-Hysterese
+  - Beispiel: Schwelle = 90 %, SOC-Hysterese = 5 % → SOC-Exit bei SOC < 85 %
+  - Beispiel: PV-Hysterese = 50 W → PV-Exit erst wenn PV um 50 W unter Hausverbrauch fällt
 
 * **Verhalten in Zone 0:**
   - Max. Entladestrom wird auf 2 A gesetzt (Stabilitätspuffer für den Wechselrichter)
@@ -247,7 +249,8 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 |:----------|:---------|:----|:----|:-------------|
 | **Überschuss-Einspeisung aktivieren** | false | — | — | Schalter zum Aktivieren von Zone 0. |
 | **SOC-Schwelle Überschuss** | 90 % | 50 % | 99 % | Ab diesem SOC wird bei PV-Überschuss ins Netz eingespeist. |
-| **Hysterese Überschuss-Austritt** | 5 % | 1 % | 20 % | SOC muss um diesen Wert unter die Eintritts-Schwelle fallen bevor Zone 0 verlassen wird. |
+| **Hysterese Überschuss-Austritt (SOC)** | 5 % | 1 % | 20 % | SOC muss um diesen Wert unter die Eintritts-Schwelle fallen bevor Zone 0 verlassen wird. |
+| **Hysterese PV-Überschuss** | 50 W | 10 W | 200 W | Totband um den Hausverbrauch. Eintritt erst wenn PV um diesen Wert über dem Verbrauch liegt, Austritt erst wenn PV um diesen Wert darunter fällt. |
 
 ---
 
@@ -470,11 +473,13 @@ Normal-Modus:     Nur setzen wenn |grid_error| > tolerance
 Eintritts-Bedingung:  SOC >= export_limit
                   UND grid_power <= (target_offset + tolerance)
                   UND solar_power >= night_threshold
-                  UND solar_power > (current_active_power + grid_power)
+                  UND solar_power > (current_active_power + grid_power + pv_hysteresis)
 
-Verbleib-Bedingung:   SOC >= (export_limit - hysteresis)
+Verbleib-Bedingung:   SOC >= (export_limit - soc_hysteresis)
+                  UND solar_power > (current_active_power + grid_power - pv_hysteresis)
 
-Abbruch-Bedingung:    SOC < (export_limit - hysteresis)
+Abbruch-Bedingung:    SOC < (export_limit - soc_hysteresis)
+                  ODER solar_power <= (current_active_power + grid_power - pv_hysteresis)
 ```
 
 ---
