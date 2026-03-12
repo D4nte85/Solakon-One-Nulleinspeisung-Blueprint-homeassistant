@@ -58,7 +58,9 @@ aus Zone 0 herausfällt.
 
 ### 4. Input Number Helper für Dynamischen Offset (Optional)
 
-Wenn Sie den Nullpunkt-Offset zur Laufzeit per Automatisierung anpassen möchten, erstellen Sie einen oder zwei zusätzliche Helper:
+Wenn Sie den Nullpunkt-Offset zur Laufzeit dynamisch anpassen möchten, empfehlen wir den **Solakon ONE — Dynamischer Offset Blueprint** (siehe Abschnitt Dynamischer Offset). Dieser erstellt und befüllt die benötigten Helper automatisch.
+
+Alternativ können Sie auch manuell einen oder zwei Helper erstellen:
 
 1. Gehen Sie zu **Einstellungen** → **Geräte & Dienste** → **Helfer**
 2. Klicken Sie auf **Helfer erstellen** → **Number**
@@ -70,6 +72,7 @@ Wenn Sie den Nullpunkt-Offset zur Laufzeit per Automatisierung anpassen möchten
    * Initialwert: `30` (oder Ihr gewünschter Standard-Offset)
 5. Speichern (Entity ID: z.B. `input_number.solakon_offset_zone1`)
 6. Optional: Wiederholen für Zone 2 (`input_number.solakon_offset_zone2`)
+
 
 ---
 
@@ -297,6 +300,7 @@ Dafür steht ein eigener Blueprint zur Verfügung:
 - Stellt sicher, dass auch bei Trickle-Charge immer etwas für die Batterie übrig bleibt
 - Gleicht Wandlerverluste aus
 
+> ⚠️ **Abwärtskompatibel:** Wenn keine dynamische Entität ausgewählt wird, funktioniert dieser Blueprint wie bisher mit dem konfigurierten statischen Offset-Wert.
 ---
 
 ### 🔒 Sicherheits-Parameter
