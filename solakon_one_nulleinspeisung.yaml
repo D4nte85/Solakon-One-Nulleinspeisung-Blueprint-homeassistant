@@ -407,7 +407,6 @@ blueprint:
                 max: 99
                 unit_of_measurement: "%"
 
-                
           surplus_exit_hysteresis:
             name: 🔋 Überschuss-Einspeisung Hysterese (SOC)
             description: |
@@ -1117,6 +1116,7 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
