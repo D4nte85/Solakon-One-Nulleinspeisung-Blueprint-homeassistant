@@ -151,7 +151,7 @@ Die Überschuss-Einspeisung kann optional aktiviert werden und ermöglicht die E
   - ODER (SOC ≥ Export-Schwelle UND (PV > aktuelle Ausgangsleistung + Grid-Leistung ODER PV ≥ Hard Limit))
 
 * **Verhalten in Zone 0:**
-  - Max. Entladestrom wird auf 0 A gesetzt (kein Batterieentladen)
+  - Max. Entladestrom wird auf 2 A gesetzt (Stabilitätspuffer für den Wechselrichter)
   - AC-Output-Limit wird auf das Hard Limit gesetzt (z.B. 800 W)
   - Überwiegend PV-Strom wird ins Netz eingespeist (2 A Stabilitätspuffer ermöglicht minimalen Batteriebeitrag)
   - Output wird nur gesetzt, wenn er noch nicht auf dem Hard Limit steht (verhindert Modbus-Spam)
