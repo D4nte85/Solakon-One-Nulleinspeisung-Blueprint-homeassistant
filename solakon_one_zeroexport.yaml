@@ -42,7 +42,7 @@ blueprint:
     * **Action:** Immediate switch to "Disabled" and setting the AC output limit to 0 W.
     
   domain: automation
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/Solakon-ONE-Zero-Export//solakon_one_nulleinspeisung.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/Solakon-ONE-Zero-Export/solakon_one_zeroexport.yaml
   input:
       
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -74,7 +74,7 @@ blueprint:
           actual_power_sensor:
             name: ⚡ Solakon ONE - Actual Output Power
             description: The actual AC output power of the inverter.
-            default: sensor.solakon_one_leistung
+            default: sensor.solakon_one_active_power
             selector:
               entity:
                 domain: sensor
@@ -83,7 +83,7 @@ blueprint:
           solar_power_sensor:
             name: ☀️ Solakon ONE - Solar Power (PV Generation)
             description: The current total PV generation in watts.
-            default: sensor.solakon_one_pv_leistung
+            default: sensor.solakon_one_pv_power
             selector:
               entity:
                 domain: sensor
@@ -92,7 +92,7 @@ blueprint:
           soc_sensor:
             name: 🔋 Solakon ONE - Battery State of Charge (SOC)
             description: The current battery state of charge in %.
-            default: sensor.solakon_one_batterie_ladestand
+            default: sensor.solakon_one_battery_state_of_charge
             selector:
               entity:
                 domain: sensor
@@ -101,7 +101,7 @@ blueprint:
           remote_timeout_countdown_sensor:
             name: ⏱️ Solakon ONE - Remote Timeout Countdown
             description: Sensor showing the remaining timeout countdown.
-            default: sensor.solakon_one_fernsteuerung_zeituberschreitung
+            default: sensor.solakon_one_remote_timeout_countdown
             selector:
               entity:
                 domain: sensor
@@ -109,7 +109,7 @@ blueprint:
           active_power_number:
             name: ⚙️ Solakon ONE - Output Power Controller
             description: The entity for setting the power setpoint (Remote Active Power).
-            default: number.solakon_one_fernsteuerung_leistung
+            default: number.solakon_one_remote_control_power
             selector:
               entity:
                 domain: number
@@ -117,7 +117,7 @@ blueprint:
           max_discharge_current_number:
             name: 🔋 Solakon ONE - Max. Discharge Current
             description: The entity for controlling the maximum discharge current (A).
-            default: number.solakon_one_maximaler_entladestrom
+            default: number.solakon_one_maximum_discharge_current
             selector:
               entity:
                 domain: number
@@ -125,7 +125,7 @@ blueprint:
           remote_timeout_set_number:
             name: ⏲️ Solakon ONE - Mode Reset Timer
             description: Used to set/reset the remote timeout (max. 3599 s).
-            default: number.solakon_one_fernsteuerung_zeituberschreitung
+            default: number.solakon_one_remote_control_timeout
             selector:
               entity:
                 domain: number
@@ -133,7 +133,7 @@ blueprint:
           mode_select:
             name: 🔄 Solakon ONE - Operating Mode Select
             description: The entity for switching the operating mode (Remote Control Mode).
-            default: select.solakon_one_modus_fernsteuern
+            default: select.solakon_one_remote_control_mode
             selector:
               entity:
                 domain: select
