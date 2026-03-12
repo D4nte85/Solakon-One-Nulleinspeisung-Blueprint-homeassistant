@@ -1074,6 +1074,7 @@ actions:
       # Surplus
       actual_power_sensor: !input actual_power_sensor
       actual_power_float: "{{ states(actual_power_sensor) | float(0) }}"
+      surplus_pv_hysteresis_int: !input surplus_pv_hysteresis
       
       # PI-Regler-Variablen
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
@@ -1317,6 +1318,7 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
