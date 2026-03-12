@@ -21,7 +21,7 @@ blueprint:
     #### 0. Zone: Überschuss-Einspeisung (Optional - aktivierbar)
     * **Eintritts-Bedingung:** SOC ≥ konfigurierte Schwelle UND Netz ≤ Offset + Toleranz UND PV aktiv (≥ Nacht-Schwelle) UND PV > aktuelle Ausgangsleistung + Grid-Leistung.
     * **Aktion:** AC-Output-Limit wird auf Maximum gesetzt, Max. Entladestrom auf 2 A (Stabilitätspuffer für den Wechselrichter).Überwiegend PV-Strom fließt ins Netz.
-    * **Rückkehr:** Nach Ablauf der 60s Hold-Zeit, sobald kein echter PV-Überschuss mehr vorhanden ist (PV ≤ Ausgangsleistung + Grid UND PV < Hard Limit) oder SOC unter die Schwelle fällt.
+    * **Rückkehr:** Sobald SOC unter (Export-Schwelle − Hysterese) fällt, kehrt das System automatisch zur normalen PI-Regelung zurück.
     * **⚠️ Deaktiviert:** Wenn diese Funktion deaktiviert ist gilt die klassische Nulleinspeisung.
         
     #### 1. Zone: Aggressive Regelung (Entladezyklus / Hoher SOC)
@@ -1104,6 +1104,7 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
