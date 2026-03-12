@@ -54,8 +54,8 @@
 
         %% ── Surplus Zwei-Zustands-Logik ─────────────────────────────
         SURPLUS_STATE{{"Aktuell im Überschuss-Modus?   (input_boolean = on)"}}
-        SURPLUS_STATE -- "Ja — Bleiben:   SOC ≥ (Export-Schwelle − Hysterese)" --> CALC_SURPLUS
-        SURPLUS_STATE -- "Nein — Eintreten:   SOC ≥ Export-Schwelle   UND Grid ≤ Offset + Toleranz   UND PV ≥ Nacht-Schwelle   UND PV > Output + Grid" --> CALC_SURPLUS
+        SURPLUS_STATE -- "Ja — Bleiben:   SOC ≥ (Export-Schwelle − SOC-Hysterese)   UND PV > Output + Grid − PV-Hysterese" --> CALC_SURPLUS
+        SURPLUS_STATE -- "Nein — Eintreten:   SOC ≥ Export-Schwelle   UND Grid ≤ Offset + Toleranz   UND PV ≥ Nacht-Schwelle   UND PV > Output + Grid + PV-Hysterese" --> CALC_SURPLUS
         SURPLUS_STATE -- "Bedingung nicht erfüllt" --> CALC_NORMAL
 
         %% ── Zone-0-Pfad ─────────────────────────────────────────────
