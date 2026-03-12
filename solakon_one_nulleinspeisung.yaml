@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V207)
+  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V208)
   description: |
     ### Dynamische Nulleinspeisung mit SOC-Zonenlogik
       Dieser Home Assistant Blueprint implementiert eine dynamische Nulleinspeisung für den Solakon ONE Wechselrichter.
@@ -16,9 +16,14 @@ blueprint:
     
     ---
     
-    ### 🔋 Dreistufige SOC-Zonenlogik
-    Die Logik unterteilt den Batterieladestand (SOC) in drei Zonen:
+    ### 🔋 SOC-Zonenlogik (3 oder 4 Zonen je nach Konfiguration)
     
+    #### 0. Zone: Überschuss-Einspeisung (Optional - aktivierbar)
+    * **Eintritts-Bedingung:** SOC ≥ konfigurierte Schwelle UND Netz ≤ Offset + Toleranz UND PV aktiv (≥ Nacht-Schwelle) UND PV > aktuelle Ausgangsleistung + Grid-Leistung.
+    * **Aktion:** AC-Output-Limit wird auf Maximum gesetzt, Max. Entladestrom auf 2 A (Stabilitätspuffer für den Wechselrichter).Überwiegend PV-Strom fließt ins Netz.
+    * **Rückkehr:** Nach Ablauf der 60s Hold-Zeit, sobald kein echter PV-Überschuss mehr vorhanden ist (PV ≤ Ausgangsleistung + Grid UND PV < Hard Limit) oder SOC unter die Schwelle fällt.
+    * **⚠️ Deaktiviert:** Wenn diese Funktion deaktiviert ist gilt die klassische Nulleinspeisung.
+        
     #### 1. Zone: Aggressive Regelung (Entladezyklus / Hoher SOC)
     * **Bedingung:** SOC > Oberer Schwellenwert (`soc_fast_limit`) ODER Entladezyklus aktiv.
     * **Aktion:** Max. Entladestrom wird auf den Standardwert (z.B. 40 A) gesetzt.
@@ -37,7 +42,7 @@ blueprint:
     * **Aktion:** Sofortiges Umschalten auf "Disabled" und Setzen des AC-Output-Limits auf 0 W.
     
   domain: automation
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/main/solakon_one_nulleinspeisung.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/experimental/solakon_one_nulleinspeisung.yaml
   input:
       
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -65,7 +70,16 @@ blueprint:
         name: "⚡ SOLAKON ONE - ENTITÄTEN:"
         description: "Hier findest du die notwendigen Solakon One Entitäten mit ausgewählten Standarts."
         collapsed: true 
-        input:    
+        input:
+          actual_power_sensor:
+            name: ⚡ Solakon ONE - Tatsächliche Ausgangsleistung
+            description: Die tatsächliche AC-Ausgangsleistung des Wechselrichters.
+            default: sensor.solakon_one_leistung
+            selector:
+              entity:
+                domain: sensor
+                device_class: power
+
           solar_power_sensor:
             name: ☀️ Solakon ONE - Solarleistung (PV-Erzeugung)
             description: Die aktuelle PV-Gesamterzeugung in Watt.
@@ -359,7 +373,50 @@ blueprint:
                 min: 0
                 max: 1200
                 unit_of_measurement: W
-        
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # ☀️ ÜBERSCHUSS-EINSPEISUNG (Optional - Zone 0)
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      surplus_parameter:
+        name: "☀️ ÜBERSCHUSS-EINSPEISUNG (Optional - Zone 0):"
+        description: |
+          Wenn aktiviert: Bei vollem Akku und echtem PV-Überschuss wird der Überschuss direkt ins Netz eingespeist.
+          Wenn deaktiviert: Klassische Nulleinspeisung, kein Einspeisen ins Netz.
+        collapsed: true
+        input:
+          surplus_export_enabled:
+            name: ☀️ Überschuss-Einspeisung aktivieren
+            description: |
+              Aktiviert Zone 0 (Überschuss-Einspeisung bei vollem Akku).
+              ✅ EIN: Wenn SOC ≥ Schwelle UND PV > Verbrauch + PV-Ladereserve → AC-Limit auf Maximum, PV-Überschuss ins Netz.
+              ❌ AUS: Klassische Nulleinspeisung. Kein aktives Einspeisen.
+            default: false
+            selector:
+              boolean:
+
+          soc_export_limit:
+            name: 🔋 SOC-Schwelle für Überschuss-Einspeisung
+            description: |
+              Erreicht der SOC diesen Wert (z.B. 90 %) und es liegt PV-Überschuss an,
+              wird die Nulleinspeisung ausgesetzt und PV-Überschuss ins Netz gedrückt.
+              ⚠️ Nur relevant wenn Überschuss-Einspeisung aktiviert ist.
+              ⚠️ MUSS echt kleiner sein als das in der Solakon eingestellte max soc !!!
+            default: 90
+            selector:
+              number:
+                min: 50
+                max: 99
+                unit_of_measurement: "%"
+                
+          surplus_state_helper:
+            name: ☀️ Surplus-Zustand Speicher (input_boolean - Optional, nur für Zone 0)
+            description: |
+              input_boolean Helper zum persistenten Tracken des Surplus-Zustands.
+              Verhindert vorzeitigen Exit während MPPT-Ramping.
+              ⚠️ Nur erforderlich wenn Überschuss-Einspeisung aktiviert ist. Bei deaktivierter Zone 0 kann dieses Feld leer gelassen werden.
+            default: input_boolean.solakon_surplus_aktiv
+            selector:
+              entity:
+                domain: input_boolean  
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🌙 NACHTABSCHALTUNG (Optional)
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -424,6 +481,7 @@ variables:
   
   # Parameter
   discharge_current_max: !input default_discharge_current
+  surplus_export_enabled_bool: !input surplus_export_enabled
 
 triggers:
   # -------------------------------------------------------------------------------------------------
@@ -459,7 +517,7 @@ triggers:
 
 action:
   # -------------------------------------------------------------------------------------------------
-  # VALIDIERUNG: Check auf kritische Fehler (Werte und Entitäten)
+  # PRÜFUNG: Check auf kritische Fehler (Werte und Entitäten)
   # -------------------------------------------------------------------------------------------------
   - choose:
     # PRÜFUNG A: SOC-Limits
@@ -525,7 +583,14 @@ action:
                 data:
                   entity_id: !input cycle_active_input_select
                   option: 'on'
-              # 2. Modus-Wechsel zu 'INV Discharge PV Priority' (mit Puls-Sequenz zur Sicherheit)
+              # 2. Surplusmode auf off setzen (nur wenn Zone 0 aktiv)
+              - choose:
+                  - conditions: "{{ surplus_export_enabled_bool }}"
+                    sequence:
+                      - service: input_boolean.turn_off
+                        data:
+                          entity_id: !input surplus_state_helper
+              # 3. Modus-Wechsel zu 'INV Discharge PV Priority'
               - choose:
                   - conditions: "{{ states(solakon_mode) != '1' }}"
                     sequence:
@@ -567,7 +632,14 @@ action:
                 data:
                   entity_id: !input cycle_active_input_select
                   option: 'off'
-              # 2. Modus-Wechsel zu 'Disabled'
+              # 2. Surplusmode auf off setzen (nur wenn Zone 0 aktiv)
+              - choose:
+                  - conditions: "{{ surplus_export_enabled_bool }}"
+                    sequence:
+                      - service: input_boolean.turn_off
+                        data:
+                          entity_id: !input surplus_state_helper
+              # 3. Modus-Wechsel zu 'Disabled'
               - choose:
                   - conditions: "{{ states(solakon_mode) != '0' }}"
                     sequence:
@@ -575,7 +647,7 @@ action:
                         data:
                           entity_id: !input mode_select
                           option: '0'
-              # 3. Power Limit auf 0 W setzen (Soft Stopp)
+              # 4. Power Limit auf 0 W setzen (Soft Stopp)
               - service: number.set_value
                 data:
                   entity_id: !input active_power_number
@@ -591,7 +663,7 @@ action:
               - condition: template
                 value_template: "{{ states(solakon_mode) != '0' }}"
             sequence:
-              # Modus auf 'Disabled' setzen
+              # 1. Modus auf 'Disabled' setzen
               - choose:
                   - conditions: "{{ states(solakon_mode) != '0' }}"
                     sequence:
@@ -599,7 +671,14 @@ action:
                         data:
                           entity_id: !input mode_select
                           option: '0'
-              # Power Limit auf 0 W setzen
+              # 2. Surplusmode auf off setzen (nur wenn Zone 0 aktiv)
+              - choose:
+                  - conditions: "{{ surplus_export_enabled_bool }}"
+                    sequence:
+                      - service: input_boolean.turn_off
+                        data:
+                          entity_id: !input surplus_state_helper
+              # 3. Power Limit auf 0 W setzen
               - service: number.set_value
                 data:
                   entity_id: !input active_power_number
@@ -637,7 +716,7 @@ action:
                 entity_id: !input cycle_active_input_select
                 state: 'off'
               - condition: template
-                value_template: "{{ states(solakon_mode) != '1' }}"
+                value_template: "{{ states(solakon_mode) == '0' }}"
               # Nachtcheck: Nur starten wenn NICHT Nacht ODER Funktion deaktiviert
               - condition: template
                 value_template: >
@@ -672,7 +751,8 @@ action:
                         data:
                           entity_id: !input mode_select
                           option: '1'
-          
+
+          # FALL F: Nachtabschaltung (Zone 2 bei PV < Schwelle)
           - conditions:
               # Nachtabschaltung aktiviert
               - condition: template
@@ -711,8 +791,7 @@ action:
                   value: 0
                           
   # -------------------------------------------------------------------------------------------------
-  # AKTION E: PI-Regler Logik, Timeout-Refresh UND Entlade-Limit-Absicherung
-  # NUR ausführen wenn Modus aktiv ist UND (Zone 1 ODER Tag)!
+  # PRÜFUNG: NUR ausführen wenn Modus aktiv ist UND (Zone 1 ODER Tag)!
   # -------------------------------------------------------------------------------------------------
   - condition: template
     value_template: >
@@ -758,6 +837,30 @@ action:
         {% endif %}
       max_active_power_limit_int: !input max_active_power_limit
       pv_charge_reserve_int: !input pv_charge_reserve
+      soc_export_limit_int: !input soc_export_limit
+      
+      # Surplus
+      actual_power_sensor: !input actual_power_sensor
+      actual_power_float: "{{ states(actual_power_sensor) | float(0) }}"
+      surplus_state_entity: !input surplus_state_helper
+      surplus_entity_valid: >
+        {{ surplus_export_enabled_bool and
+           surplus_state_entity is string and 
+           surplus_state_entity | length > 0 and
+           states(surplus_state_entity) not in ['unknown', 'unavailable'] }}
+      surplus_helper_last_changed: >
+        {% if surplus_entity_valid %}
+          {{ (as_timestamp(states[surplus_state_entity].last_changed) | default(0)) }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+      surplus_hold_active: >
+        {% if surplus_entity_valid %}
+          {{ is_state(surplus_state_entity, 'on') and
+             (as_timestamp(now()) - surplus_helper_last_changed) <= 60 }}
+        {% else %}
+          {{ false }}
+        {% endif %}
       
       # PI-Regler-Variablen
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
@@ -784,12 +887,37 @@ action:
       
       # Wartezeit
       wait_time_int: !input wait_time
+            
+      # -----------------------------------------------------------------------
+      # ÜBERSCHUSS-MODUS (Zone 0): Nur berechnen wenn Feature aktiviert
+      # -----------------------------------------------------------------------
+      is_surplus_mode: >
+        {% if not surplus_entity_valid %}
+          {{ false }}
+        {% else %}
+          {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
+          {% if currently_in_surplus %}
+            {{ surplus_hold_active 
+               or ((states(soc) | float(0) >= soc_export_limit_int)
+               and (solar_power_float > (actual_power_float + grid_power_float)
+                    or solar_power_float >= max_active_power_limit_int)) }}
+          {% else %}
+            {# ENTRY: SOC voll UND Netz eingeregelt UND PV aktiv #}
+            {{ (states(soc) | float(0) >= soc_export_limit_int)
+               and (grid_power_float <= (target_offset + tolerance_int))
+               and (solar_power_float >= night_pv_threshold)
+               and (solar_power_float > (actual_power_float + grid_power_float))}}
+          {% endif %}
+        {% endif %}
       
-     # PI-Regler Berechnung
+      # -----------------------------------------------------------------------
+      # PI-Regler Berechnung
+      # -----------------------------------------------------------------------
+
       # 1. Aktueller Fehler 
       error: >
         {% if is_state(cycle_active, 'on') %}
-          {# ZONE 1: Min(verfügbare Kapazität, Grid) #}
+          {# ZONE 1: Min(verfügbare Kapazität, Grid − Offset) #}
           {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_1_int)] | min | float(0) }}
         {% else %}
           {# ZONE 2: Min(verfügbare Kapazität, Grid - Offset, PV-Kapazität) #}
@@ -833,38 +961,49 @@ action:
           {{ [max_zone_2, p_regler_power] | min | float(0) }}
         {% endif %}
         
+# SCHRITT 1: Entladestrom setzen
   - choose:
-      # FALL F.1: Limit für Zone 1 setzen (Aggressiv)
+      # FALL 1a: Limit für Zone 1 setzen (Aggressiv)
       - conditions:
           - condition: state
             entity_id: !input cycle_active_input_select
             state: 'on'
           - condition: template
             value_template: >
-              {# Prüfe, ob der aktuelle Wert NICHT dem Maximalwert entspricht #}
-              {{ states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
+              {# Prüfe, ob der aktuelle Wert NICHT dem Maximalwert entspricht und der Surplus modus inaktiv ist #}
+              {{ not (is_surplus_mode | bool) and states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
         sequence:
           - service: number.set_value
             data:
               entity_id: !input max_discharge_current_number
               value: "{{ discharge_current_max }}"
               
-      # FALL F.2: Limit für Zone 2 setzen (Batterieschonend = 0 A)
+      # FALL 1b: Limit für Zone 0 setzen (Surplus-Puffer = 2 A)
       - conditions:
-          - condition: state
-            entity_id: !input cycle_active_input_select
-            state: 'off'
           - condition: template
             value_template: >
-              {# Prüfe, ob der aktuelle Wert NICHT 0 A entspricht #}
-              {{ states(discharge_current_entity) | float(999) | round(2) != 0 }}
+              {{ (is_surplus_mode | bool) and 
+                 states(discharge_current_entity) | float(999) | round(2) != 2 }}
+        sequence:
+          - service: number.set_value
+            data:
+              entity_id: !input max_discharge_current_number
+              value: 2
+      
+      # FALL 1c: Limit für Zone 2 setzen (Batterieschonend = 0 A)
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ is_state(cycle_active, 'off') and 
+                 not (is_surplus_mode | bool) and 
+                 states(discharge_current_entity) | float(999) | round(2) != 0 }}
         sequence:
           - service: number.set_value
             data:
               entity_id: !input max_discharge_current_number
               value: 0
 
-  # 2. Timeout-Reset
+  # SCHRITT 2: Timeout-Reset
   - choose: 
         # Timeout-Reset erforderlich
       - conditions:
@@ -881,22 +1020,109 @@ action:
               entity_id: !input remote_timeout_set_number
               value: 3599
               
-  # 3. Integral speichern
-  - service: input_number.set_value
-    data:
-      entity_id: !input integral_helper
-      value: "{{ integral_new }}"
+  # SCHRITT 3: Integral speichern (in Zone 0 einfrieren)
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_surplus_mode }}"
+        sequence:
+          - service: input_number.set_value
+            data:
+              entity_id: !input integral_helper
+              value: "{{ integral_old }}"
+    default:
+      - service: input_number.set_value
+        data:
+          entity_id: !input integral_helper
+          value: "{{ integral_new }}"
       
-  # 4. Power Limit setzen (Nur wenn Toleranz überschritten ist)
-  - condition: template
-    value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
-  
-  - service: number.set_value
-    data:
-      entity_id: !input active_power_number
-      value: "{{ [0, final_power_calculated] | max | round(0) }}"
-  - delay:
-      seconds: '{{wait_time_int}}'
+
+  # SCHRITT 4: Ausgangsleistung setzen + Delay (NUR wenn nötig)
+  #    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
+  #    Surplus Boolean nur zurücksetzen wenn nötig
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_surplus_mode and current_active_power < max_active_power_limit_int }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ surplus_entity_valid and not is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - service: input_boolean.turn_on
+                    data:
+                      entity_id: !input surplus_state_helper
+          - service: number.set_value
+            data:
+              entity_id: !input active_power_number
+              value: "{{ max_active_power_limit_int }}"
+          - delay:
+              seconds: '{{wait_time_int}}'
+
+      - conditions:
+          - condition: template
+            value_template: "{{ not is_surplus_mode and grid_error_for_tolerance > tolerance_int }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ surplus_entity_valid }}"
+                sequence:
+                  - service: input_boolean.turn_off
+                    data:
+                      entity_id: !input surplus_state_helper
+          # PI-Output unverändert:
+          - service: number.set_value
+            data:
+              entity_id: !input active_power_number
+              value: "{{ [0, final_power_calculated] | max | round(0) }}"
+          - delay:
+              seconds: '{{wait_time_int}}'
+              
+    
+  # SCHRITT 5: Surplus-Boolean finalisieren — läuft immer
+  #    Redundant wenn Schritt 4 Output gesetzt hat, aber notwendig wenn Schritt 4 wegen
+  #    Toleranz oder erfülltem Hard-Limit übersprungen wurde (Boolean sonst veraltet)
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_surplus_mode }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ surplus_entity_valid and not is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - service: input_boolean.turn_on
+                    data:
+                      entity_id: !input surplus_state_helper
+    default:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ surplus_entity_valid  and  is_state(surplus_state_entity, 'on') }}"
+            sequence:
+              - service: input_boolean.turn_off
+                data:
+                  entity_id: !input surplus_state_helper
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
