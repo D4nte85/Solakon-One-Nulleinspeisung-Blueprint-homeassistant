@@ -525,7 +525,7 @@ action:
         - condition: template
           value_template: "{{ soc_fast_limit_int <= soc_conservation_limit_int }}"
       sequence:
-        - service: system_log.write
+        - action: system_log.write
           data:
             level: error
             message: "Solakon ONE Blueprint Fehler Die obere SOC-Schwelle ({{ soc_fast_limit_int }}%) muss größer sein als die untere SOC-Schwelle ({{ soc_conservation_limit_int }}%). Automatisierung gestoppt."
@@ -548,7 +548,7 @@ action:
             - condition: template
               value_template: "{{ state_attr(active_power_entity, 'min') is none }}"
       sequence:
-        - service: system_log.write
+        - action: system_log.write
           data:
             level: error
             message: "Solakon ONE Blueprint Fehler Eine oder mehrere kritische Entitäten (SOC, Timeout-Sensor, Ausgangsleistungsregler) sind UNVERFÜGBAR oder haben ungültige Werte. Automatisierung gestoppt."
@@ -568,18 +568,18 @@ action:
                 state: 'off'
             sequence:
               # Logging
-              - service: logbook.log
+              - action: logbook.log
                 data:
                   name: Solakon Zonenwechsel
                   message: "🔋 Zone 1 aktiviert (Aggressive Entladung) - SOC: {{ states(soc) }}%"
                   entity_id: !input soc_sensor
               # Integral zurücksetzen bei Zonenwechsel
-              - service: input_number.set_value
+              - action: input_number.set_value
                 data:
                   entity_id: !input integral_helper
                   value: 0
               # 1. Zyklus auf 'on' setzen
-              - service: input_select.select_option
+              - action: input_select.select_option
                 data:
                   entity_id: !input cycle_active_input_select
                   option: 'on'
@@ -587,23 +587,23 @@ action:
               - choose:
                   - conditions: "{{ surplus_export_enabled_bool }}"
                     sequence:
-                      - service: input_boolean.turn_off
+                      - action: input_boolean.turn_off
                         data:
                           entity_id: !input surplus_state_helper
               # 3. Modus-Wechsel zu 'INV Discharge PV Priority'
               - choose:
                   - conditions: "{{ states(solakon_mode) != '1' }}"
                     sequence:
-                      - service: number.set_value
+                      - action: number.set_value
                         data:
                           entity_id: !input remote_timeout_set_number
                           value: 10
                       - delay: '00:00:01' 
-                      - service: number.set_value
+                      - action: number.set_value
                         data:
                           entity_id: !input remote_timeout_set_number
                           value: 3599
-                      - service: select.select_option
+                      - action: select.select_option
                         data:
                           entity_id: !input mode_select
                           option: '1'
@@ -617,18 +617,18 @@ action:
                 state: 'on'
             sequence:
               # Logging
-              - service: logbook.log
+              - action: logbook.log
                 data:
                   name: Solakon Zonenwechsel
                   message: "🛑 Zone 3 aktiviert (Sicherheits-Stopp) - SOC: {{ states(soc) }}%"
                   entity_id: !input soc_sensor
               # Integral zurücksetzen
-              - service: input_number.set_value
+              - action: input_number.set_value
                 data:
                   entity_id: !input integral_helper
                   value: 0
               # 1. Zyklus auf 'off' setzen
-              - service: input_select.select_option
+              - action: input_select.select_option
                 data:
                   entity_id: !input cycle_active_input_select
                   option: 'off'
@@ -636,19 +636,19 @@ action:
               - choose:
                   - conditions: "{{ surplus_export_enabled_bool }}"
                     sequence:
-                      - service: input_boolean.turn_off
+                      - action: input_boolean.turn_off
                         data:
                           entity_id: !input surplus_state_helper
               # 3. Modus-Wechsel zu 'Disabled'
               - choose:
                   - conditions: "{{ states(solakon_mode) != '0' }}"
                     sequence:
-                      - service: select.select_option
+                      - action: select.select_option
                         data:
                           entity_id: !input mode_select
                           option: '0'
               # 4. Power Limit auf 0 W setzen (Soft Stopp)
-              - service: number.set_value
+              - action: number.set_value
                 data:
                   entity_id: !input active_power_number
                   value: 0
@@ -667,7 +667,7 @@ action:
               - choose:
                   - conditions: "{{ states(solakon_mode) != '0' }}"
                     sequence:
-                      - service: select.select_option
+                      - action: select.select_option
                         data:
                           entity_id: !input mode_select
                           option: '0'
@@ -675,11 +675,11 @@ action:
               - choose:
                   - conditions: "{{ surplus_export_enabled_bool }}"
                     sequence:
-                      - service: input_boolean.turn_off
+                      - action: input_boolean.turn_off
                         data:
                           entity_id: !input surplus_state_helper
               # 3. Power Limit auf 0 W setzen
-              - service: number.set_value
+              - action: number.set_value
                 data:
                   entity_id: !input active_power_number
                   value: 0
@@ -694,16 +694,16 @@ action:
               - condition: template
                 value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int }}"
             sequence:
-              - service: number.set_value
+              - action: number.set_value
                 data:
                   entity_id: !input remote_timeout_set_number
                   value: 10
               - delay: '00:00:01'
-              - service: number.set_value
+              - action: number.set_value
                 data:
                   entity_id: !input remote_timeout_set_number
                   value: 3599
-              - service: select.select_option
+              - action: select.select_option
                 data:
                   entity_id: !input mode_select
                   option: '1'
@@ -724,13 +724,13 @@ action:
                      (states(solar_power_for_night_check) | float(0)) >= night_pv_threshold }}
             sequence:
               # Logging
-              - service: logbook.log
+              - action: logbook.log
                 data:
                   name: Solakon Zonenwechsel
                   message: "🔋 Zone 2 aktiviert (Batterieschonend) - SOC: {{ states(soc) }}%"
                   entity_id: !input soc_sensor
               # Integral zurücksetzen bei Zonenwechsel
-              - service: input_number.set_value
+              - action: input_number.set_value
                 data:
                   entity_id: !input integral_helper
                   value: 0
@@ -738,16 +738,16 @@ action:
               - choose:
                   - conditions: "{{ states(solakon_mode) != '1' }}"
                     sequence:
-                      - service: number.set_value
+                      - action: number.set_value
                         data:
                           entity_id: !input remote_timeout_set_number
                           value: 10
                       - delay: '00:00:01'
-                      - service: number.set_value
+                      - action: number.set_value
                         data:
                           entity_id: !input remote_timeout_set_number
                           value: 3599
-                      - service: select.select_option
+                      - action: select.select_option
                         data:
                           entity_id: !input mode_select
                           option: '1'
@@ -769,23 +769,23 @@ action:
                 value_template: "{{ states(solakon_mode) == '1' }}"
             sequence:
               # Logging
-              - service: logbook.log
+              - action: logbook.log
                 data:
                   name: Solakon Nachtmodus
                   message: "🌙 Nachtabschaltung aktiviert (Zone 2) - PV: {{ states(solar_power_for_night_check) }}W"
                   entity_id: !input solar_power_sensor
               # Integral zurücksetzen
-              - service: input_number.set_value
+              - action: input_number.set_value
                 data:
                   entity_id: !input integral_helper
                   value: 0
               # Modus auf 'Disabled' setzen
-              - service: select.select_option
+              - action: select.select_option
                 data:
                   entity_id: !input mode_select
                   option: '0'
               # Power Limit auf 0 W
-              - service: number.set_value
+              - action: number.set_value
                 data:
                   entity_id: !input active_power_number
                   value: 0
@@ -973,7 +973,7 @@ action:
               {# Prüfe, ob der aktuelle Wert NICHT dem Maximalwert entspricht und der Surplus modus inaktiv ist #}
               {{ not (is_surplus_mode | bool) and states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
         sequence:
-          - service: number.set_value
+          - action: number.set_value
             data:
               entity_id: !input max_discharge_current_number
               value: "{{ discharge_current_max }}"
@@ -985,7 +985,7 @@ action:
               {{ (is_surplus_mode | bool) and 
                  states(discharge_current_entity) | float(999) | round(2) != 2 }}
         sequence:
-          - service: number.set_value
+          - action: number.set_value
             data:
               entity_id: !input max_discharge_current_number
               value: 2
@@ -998,7 +998,7 @@ action:
                  not (is_surplus_mode | bool) and 
                  states(discharge_current_entity) | float(999) | round(2) != 0 }}
         sequence:
-          - service: number.set_value
+          - action: number.set_value
             data:
               entity_id: !input max_discharge_current_number
               value: 0
@@ -1010,12 +1010,12 @@ action:
           - condition: template
             value_template: "{{ states(timeout_countdown) | int(9999) < 120 }}"
         sequence:
-          - service: number.set_value
+          - action: number.set_value
             data:
               entity_id: !input remote_timeout_set_number
               value: 10
           - delay: '00:00:01'
-          - service: number.set_value
+          - action: number.set_value
             data:
               entity_id: !input remote_timeout_set_number
               value: 3599
@@ -1026,12 +1026,12 @@ action:
           - condition: template
             value_template: "{{ is_surplus_mode }}"
         sequence:
-          - service: input_number.set_value
+          - action: input_number.set_value
             data:
               entity_id: !input integral_helper
               value: "{{ integral_old }}"
     default:
-      - service: input_number.set_value
+      - action: input_number.set_value
         data:
           entity_id: !input integral_helper
           value: "{{ integral_new }}"
@@ -1050,10 +1050,10 @@ action:
                   - condition: template
                     value_template: "{{ surplus_entity_valid and not is_state(surplus_state_entity, 'on') }}"
                 sequence:
-                  - service: input_boolean.turn_on
+                  - action: input_boolean.turn_on
                     data:
                       entity_id: !input surplus_state_helper
-          - service: number.set_value
+          - action: number.set_value
             data:
               entity_id: !input active_power_number
               value: "{{ max_active_power_limit_int }}"
@@ -1069,11 +1069,11 @@ action:
                   - condition: template
                     value_template: "{{ surplus_entity_valid }}"
                 sequence:
-                  - service: input_boolean.turn_off
+                  - action: input_boolean.turn_off
                     data:
                       entity_id: !input surplus_state_helper
           # PI-Output unverändert:
-          - service: number.set_value
+          - action: number.set_value
             data:
               entity_id: !input active_power_number
               value: "{{ [0, final_power_calculated] | max | round(0) }}"
@@ -1094,7 +1094,7 @@ action:
                   - condition: template
                     value_template: "{{ surplus_entity_valid and not is_state(surplus_state_entity, 'on') }}"
                 sequence:
-                  - service: input_boolean.turn_on
+                  - action: input_boolean.turn_on
                     data:
                       entity_id: !input surplus_state_helper
     default:
@@ -1103,9 +1103,10 @@ action:
               - condition: template
                 value_template: "{{ surplus_entity_valid  and  is_state(surplus_state_entity, 'on') }}"
             sequence:
-              - service: input_boolean.turn_off
+              - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
