@@ -875,21 +875,6 @@ actions:
                         data:
                           entity_id: !input remote_timeout_set_number
                           value: 3599
-              # Ladeleistung berechnen und setzen
-              - variables:
-                  ac_charge_power: >
-                    {{ [ac_charge_power_limit_int, [0, (active_offset | float(0) - grid) | round(0)] | max] | min }}
-              - choose:
-                  - conditions:
-                      - condition: template
-                        value_template: "{{ ac_charge_power > 0 }}"
-                    sequence:
-                      - action: number.set_value
-                        data:
-                          entity_id: !input active_power_number
-                          value: "{{ ac_charge_power }}"
-                      - delay:
-                          seconds: '{{ wait_time_int }}'
                           
           # FALL H: AC Laden beenden
           - conditions:
@@ -1047,7 +1032,7 @@ actions:
   # -------------------------------------------------------------------------------------------------
   - condition: template
     value_template: >
-      {{ states(solakon_mode) == '1' and
+      {{ states(solakon_mode) in ['1', '3'] and
          (is_state(cycle_active, 'on') or 
           not night_shutdown_enabled_bool or
           (states(solar_power_for_night_check) | float(0)) >= night_pv_threshold) }}
@@ -1129,14 +1114,17 @@ actions:
 
       # 1. Aktueller Fehler 
       error: >
-        {% if is_state(cycle_active, 'on') %}
+        {% if states(solakon_mode) == '3' %}
+          {# AC LADEN: Ziel = Grid auf active_offset bringen #}
+          {{ [(ac_charge_power_limit_int - current_active_power), (target_offset - grid_power_float)] | min | float(0) }}
+        {% elif is_state(cycle_active, 'on') %}
           {# ZONE 1: Min(verfügbare Kapazität, Grid − Offset) #}
           {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_1_int)] | min | float(0) }}
         {% else %}
           {# ZONE 2: Min(verfügbare Kapazität, Grid - Offset, PV-Kapazität) #}
           {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_2_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
         {% endif %}
-      
+        
       # 2. Integral mit Anti-Windup
       integral_old: "{{ states(integral_entity) | float(0) }}"
       integral_new: >
@@ -1165,7 +1153,10 @@ actions:
       # 5. Finale Power: Logik in einem Template zusammengefasst
       final_power_calculated: >
         {% set p_regler_power = new_power_unlimited | float(0) %}
-        {% if is_state(cycle_active, 'on') %}
+        {% if states(solakon_mode) == '3' %}
+          {# AC LADEN: Begrenzt auf Lade-Limit #}
+          {{ [ac_charge_power_limit_int | float(0), [0, p_regler_power] | max] | min | float(0) }}
+        {% elif is_state(cycle_active, 'on') %}
           {# ZONE 1: Hard Limit #}
           {{ [max_active_power_limit_int, p_regler_power] | min | float(0) }}
         {% else %}
@@ -1183,8 +1174,9 @@ actions:
             state: 'on'
           - condition: template
             value_template: >
-              {# Prüfe, ob der aktuelle Wert NICHT dem Maximalwert entspricht und der Surplus modus inaktiv ist #}
-              {{ not (is_surplus_mode | bool) and states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
+              {{ not (is_surplus_mode | bool) and 
+                 states(solakon_mode) != '3' and
+                 states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
         sequence:
           - action: number.set_value
             data:
@@ -1203,11 +1195,11 @@ actions:
               entity_id: !input max_discharge_current_number
               value: 2
       
-      # FALL 1c: Limit für Zone 2 setzen (Batterieschonend = 0 A)
+      # FALL 1c: Limit für Zone 2 oder AC Laden setzen (Batterieschonend / Laden = 0 A)
       - conditions:
           - condition: template
             value_template: >
-              {{ is_state(cycle_active, 'off') and 
+              {{ (is_state(cycle_active, 'off') or states(solakon_mode) == '3') and 
                  not (is_surplus_mode | bool) and 
                  states(discharge_current_entity) | float(999) | round(2) != 0 }}
         sequence:
@@ -1319,6 +1311,7 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
