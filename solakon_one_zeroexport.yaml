@@ -1,316 +1,451 @@
 blueprint:
-  name: Solakon ONE Zero Export (EN) - Dynamic & SOC-Controlled (V202)
+  name: Solakon ONE Zero Export (EN) - Dynamic & SOC-Controlled (V208)
   description: |
-    **Detailed Function Description: Dynamic Zero Export with SOC Zone Logic**
-
-    This Home Assistant Blueprint implements **dynamic zero export** for the Solakon ONE inverter. It uses a **PI controller (Proportional-Integral Controller)** for precise control of AC output power and a **three-stage State-of-Charge (SOC) logic** for efficient battery storage management.
-
+    ### Dynamic Zero Export with SOC Zone Logic
+      This Home Assistant Blueprint implements dynamic zero export for the Solakon ONE inverter.
+      It uses a PI controller (Proportional-Integral controller) for precise control of AC output power and a three-level State-of-Charge (SOC) logic for efficient battery management.
+      The goal of this blueprint is to output PV energy directly without routing it through the battery, preventing the "flickering" caused by the app's (charge one percent → discharge one percent → repeat) behavior and protecting the battery.
+    
     ---
+    
     ### 🧠 PI Controller & Control Logic
-    The core of the blueprint is a **PI controller (Proportional-Integral Controller)** that dynamically adjusts the **AC Output Limit** (discharge power).
+    The core of the blueprint is a PI controller (Proportional-Integral controller) that dynamically adjusts the AC output limit (discharge power).
+    * **Measurement principle:** Control is based on the Shelly/grid power sensor. **IMPORTANT:** Positive values = import, NEGATIVE VALUES = export.
+    * **P-part (Proportional):** Responds to current deviation with configurable aggressiveness (regulation factor).
+    * **I-part (Integral):** Accumulates deviations over time and eliminates steady-state errors. Reset on zone changes (Anti-Windup).
     
-    * **Measurement Principle:** Control is based on the **Shelly/Grid Power Sensor**. **IMPORTANT:** Positive values = consumption, NEGATIVE VALUES = export.
-    
-    * **P-Component (Proportional):** Responds to current deviation with configurable aggressiveness (control factor).
-    
-    * **I-Component (Integral):** Accumulates deviations over time and eliminates steady-state errors. Reset on zone changes (Anti-Windup).
-    
-    * **Power Limiting:** Secured by an **upper hard limit** and a **hardcoded lower limit of 0 W**.
-
     ---
-    ### 🔋 Three-Stage SOC Zone Logic
-    The logic divides the battery state of charge (SOC) into three zones:
-
+    
+    ### 🔋 SOC Zone Logic (3 or 4 zones depending on configuration)
+    
+    #### Zone 0: Surplus Export (Optional - activatable)
+    * **Entry condition:** SOC ≥ configured threshold AND grid ≤ offset + tolerance AND PV active (≥ night threshold) AND PV > current output power + grid power.
+    * **Action:** AC output limit is set to maximum, max. discharge current to 2 A (stability buffer for the inverter). Predominantly PV current flows to the grid.
+    * **Return:** After the 60s hold time expires, as soon as no real PV surplus exists (PV ≤ output + grid AND PV < hard limit) or SOC drops below the threshold.
+    * **⚠️ Disabled:** When this feature is disabled, classic zero export applies.
+        
     #### Zone 1: Aggressive Control (Discharge Cycle / High SOC)
-    * **Condition:** SOC > **Upper Threshold** (`soc_fast_limit`) **OR** discharge cycle active.
-    * **Action:** **Max. Discharge Current** is set to standard value (e.g., 40 A).
-    * **Control:** PI controller with **zero-point offset of 0 W** for exact zero export.
+    * **Condition:** SOC > upper threshold (`soc_fast_limit`) OR discharge cycle active.
+    * **Action:** Max. discharge current is set to the default value (e.g. 40 A).
+    * **Control:** PI controller with zero-point offset (e.g. 30 W) to shift the control target towards slight grid import or exact zero export.
     * **Behavior:** Once activated, Zone 1 runs until SOC ≤ 20% (no yo-yo effect).
-
-    #### Zone 2: Battery-Conserving Control (Mid-SOC)
-    * **Condition:** SOC between Lower (`soc_conservation_limit`) and Upper threshold, AND discharge cycle inactive.
-    * **Action:** **Max. Discharge Current** is set to **0 A** (discharge only via AC limit).
-    * **Control:** PI controller with **zero-point offset** (e.g., 30 W) to shift control target toward slight **grid consumption** (charging).
-    * **Dynamic Upper Limit:** Discharge power is capped by **Max(0, PV - Reserve)**.
-    * **Night Shutdown:** Optionally, Zone 2 can be disabled when PV < threshold (Zone 1 remains active).
-
+    
+    #### Zone 2: Battery-Friendly Control (Mid-SOC)
+    * **Condition:** SOC between lower (`soc_conservation_limit`) and upper threshold, AND discharge cycle inactive.
+    * **Action:** Max. discharge current is set to 0 A, no influence on battery heating, limits Solakon output power more safely to PV power.
+    * **Control:** PI controller with zero-point offset (e.g. 30 W) to shift the control target towards slight grid import or exact zero export.
+    * **Dynamic upper limit:** Discharge power is capped at Max(0, PV - reserve).
+    * **Night shutdown:** Optionally, Zone 2 can be disabled when PV < threshold (Zone 1 remains active).
+    
     #### Zone 3: Safety Stop (Low SOC)
-    * **Condition:** SOC falls to or below the **Lower Threshold**.
-    * **Action:** Immediate switch to **"Disabled"** and setting **AC Output Limit to 0 W**.
-
-    ---
-    ### ⚙️ Additional Control Mechanisms
-    * **Two-Stage Mode Change:** A pulse sequence (10s pulse, then 3599s) is used to secure mode commands.
-    * **Timeout Refresh:** Remote Timeout is automatically reset to 3599s when countdown falls below 120s.
-    * **Integral Reset:** I-component is reset to 0 on each zone change to prevent windup.
-    * **Anti-Windup:** Integral value is limited to ±1000 points.
-      
+    * **Condition:** SOC drops to or below the lower threshold.
+    * **Action:** Immediate switch to "Disabled" and setting the AC output limit to 0 W.
+    
   domain: automation
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/Solakon-ONE-Zero-Export/solakon_one_zeroexport.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/Solakon-ONE-Zero-Export//solakon_one_nulleinspeisung.yaml
   input:
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    # 🔌 GRID SENSOR (External - e.g., Shelly 3EM)
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    
-    grid_power_sensor:
-      name: 🔌 Shelly/Grid Power Sensor (REQUIRED)
-      description: |
-        Sensor for current grid power (e.g., Shelly 3EM).
-        ⚠️ IMPORTANT: Positive values = consumption, NEGATIVE VALUES = export.
-      selector:
-        entity:
-          domain: sensor
-          device_class: power
-    
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    # ⚡ SOLAKON ONE - ENTITIES
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    
-    solar_power_sensor:
-      name: ☀️ Solakon ONE - Solar Power (PV Generation)
-      description: Current total PV generation in Watts.
-      default: sensor.solakon_one_total_pv_power
-      selector:
-        entity:
-          domain: sensor
-          device_class: power
-    
-    soc_sensor:
-      name: 🔋 Solakon ONE - Battery State of Charge (SOC)
-      description: Current battery state of charge in %.
-      default: sensor.solakon_one_battery_soc
-      selector:
-        entity:
-          domain: sensor
-          device_class: battery
-    
-    remote_timeout_countdown_sensor:
-      name: ⏱️ Solakon ONE - Remote Timeout Countdown
-      description: Sensor displaying the remaining timeout countdown.
-      default: sensor.solakon_one_remote_timeout_countdown
-      selector:
-        entity:
-          domain: sensor
-    
-    active_power_number:
-      name: ⚙️ Solakon ONE - Output Power Controller
-      description: Entity for setting the power setpoint (Remote Active Power).
-      default: number.solakon_one_remote_active_power
-      selector:
-        entity:
-          domain: number
-    
-    max_discharge_current_number:
-      name: 🔋 Solakon ONE - Max. Discharge Current
-      description: Entity for controlling the maximum discharge current (A).
-      default: number.solakon_one_battery_max_discharge_current
-      selector:
-        entity:
-          domain: number
-    
-    remote_timeout_set_number:
-      name: ⏲️ Solakon ONE - Mode Reset Timer
-      description: Used to set/reset the remote timeout (max. 3599 s).
-      default: number.solakon_one_remote_timeout_set
-      selector:
-        entity:
-          domain: number
-    
-    mode_select:
-      name: 🔄 Solakon ONE - Operating Mode Selection
-      description: Entity for switching the operating mode (Remote Control Mode).
-      default: select.solakon_one_remote_control_mode
-      selector:
-        entity:
-          domain: select
-    
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    # 🛠️ HOME ASSISTANT HELPER (REQUIRED!)
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    
-    cycle_active_input_select:
-      name: 🛠️ Discharge Cycle State Storage (input_select - REQUIRED!)
-      description: |
-        ⚠️ IMPORTANT: Create an Input Select Helper with options 'on' and 'off'.
-        Settings → Devices & Services → Helpers → Create Helper → Dropdown
-        - Name: e.g., 'SOC Discharge Cycle Status'
-        - Options: 'on' and 'off' (exactly like this!)
+      
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 🔌 GRID SENSOR (External - e.g. Shelly 3EM)
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      grid_entities:
+        name: "🔌 GRID SENSOR (External - e.g. Shelly 3EM):"
+        description: "Here you find the required grid power sensor."
+        collapsed: true 
+        input:    
+          grid_power_sensor:
+            name: 🔌 Shelly/Grid Power Sensor (REQUIRED)
+            description: |
+              Sensor for the current grid power (e.g. Shelly 3EM).
+              ⚠️ IMPORTANT: Positive values = import, NEGATIVE VALUES = export.
+            selector:
+              entity:
+                domain: sensor
+                device_class: power
         
-        This stores whether the discharge cycle is active (Zone 1).
-      default: input_select.soc_discharge_cycle_status
-      selector:
-        entity:
-          domain: input_select
-    
-    integral_helper:
-      name: 🛠️ Integral Storage (input_number - REQUIRED!)
-      description: |
-        ⚠️ IMPORTANT: Create an input_number Helper for the PI controller:
-        Settings → Devices & Services → Helpers → Create Helper → Number
-        - Name: e.g., 'Solakon Integral'
-        - Min: -1000
-        - Max: 1000
-        - Step: 1
-        - Initial: 0
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # ⚡ SOLAKON ONE - ENTITIES
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      solakon_entities:
+        name: "⚡ SOLAKON ONE - ENTITIES:"
+        description: "Here you find the required Solakon One entities with selected defaults."
+        collapsed: true 
+        input:
+          actual_power_sensor:
+            name: ⚡ Solakon ONE - Actual Output Power
+            description: The actual AC output power of the inverter.
+            default: sensor.solakon_one_leistung
+            selector:
+              entity:
+                domain: sensor
+                device_class: power
+
+          solar_power_sensor:
+            name: ☀️ Solakon ONE - Solar Power (PV Generation)
+            description: The current total PV generation in watts.
+            default: sensor.solakon_one_pv_leistung
+            selector:
+              entity:
+                domain: sensor
+                device_class: power
         
-        This stores the I-component of the PI controller.
-      default: input_number.solakon_integral
-      selector:
-        entity:
-          domain: input_number
-    
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    # 🎚️ CONTROL PARAMETERS
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    
-    regulator_factor:
-      name: 🎛️ P-Factor (Proportional Gain)
-      description: |
-        P-component of PI controller: Responds to current deviation (e.g., 1.5).
-        Higher = faster, more aggressive response | Lower = gentler response
-      default: 1.5
-      selector:
-        number:
-          min: 0.1
-          max: 5
-          step: 0.1
-    
-    ki_factor:
-      name: 🎛️ I-Factor (Integral Gain)
-      description: |
-        I-component of PI controller: Eliminates steady-state errors (e.g., 0.05).
-        Higher = faster correction, but less stable | Lower = slower, more stable
-      default: 0.05
-      selector:
-        number:
-          min: 0.01
-          max: 0.2
-          step: 0.01
-    
-    tolerance:
-      name: 📏 Tolerance Range (Deadband)
-      description: |
-        Range in Watts around zero point where NO correction occurs (e.g., ±25 W).
-        Prevents permanent micro-corrections during stable control.
-      default: 25
-      selector:
-        number:
-          min: 0
-          max: 200
-          unit_of_measurement: W
-    
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    # 🔋 SOC ZONE PARAMETERS
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    
-    soc_fast_limit:
-      name: 🔋 SOC Threshold "Zone 1 Start" (Aggressive Discharge)
-      description: |
-        Upper threshold (e.g., 50%).
-        Exceeding activates Zone 1 (aggressive discharge with 40A).
-        Zone 1 then runs until SOC ≤ 20% (no yo-yo effect).
-      default: 50
-      selector:
-        number:
-          min: 1
-          max: 99
-          unit_of_measurement: "%"
-    
-    soc_conservation_limit:
-      name: 🔋 SOC Threshold "Zone 3 Stop" (Safety Limit)
-      description: |
-        Lower threshold (e.g., 20%).
-        Falling below stops discharge completely (Zone 3 = Disabled).
-      default: 20
-      selector:
-        number:
-          min: 1
-          max: 49
-          unit_of_measurement: "%"
-    
-    default_discharge_current:
-      name: 🔋 Max. Discharge Current in Zone 1 (Ampere)
-      description: |
-        Maximum discharge current in Zone 1 (aggressive discharge, e.g., 40 A).
-        In Zone 2, automatically set to 0 A (battery-conserving).
-      default: 40
-      selector:
-        number:
-          min: 0
-          max: 40
-          unit_of_measurement: A
-    
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    # ⚙️ ZONE 2 - PARAMETERS (Battery-Conserving Mode)
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    
-    offset:
-      name: ⚙️ Zone 2 - Zero-Point Offset (Control Target)
-      description: |
-        Target value for grid power in Zone 2 (e.g., 30 W).
-        Positive value = slight grid consumption desired → battery is charged.
-        0 W = Exact zero export (like Zone 1).
-      default: 30
-      selector:
-        number:
-          min: 0
-          max: 100
-          unit_of_measurement: W
-    
-    pv_charge_reserve:
-      name: ⚙️ Zone 2 - PV Charge Reserve
-      description: |
-        PV power reserved for charging in Zone 2 (e.g., 50 W).
-        Dynamic upper limit: Max. discharge = PV - Reserve.
-        Ensures battery is charged even with trickle charge.
-      default: 50
-      selector:
-        number:
-          min: 0
-          max: 1000
-          unit_of_measurement: W
-    
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    # 🔒 SAFETY PARAMETERS
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    
-    max_active_power_limit:
-      name: 🔒 Maximum Output Power (Hard Limit)
-      description: |
-        Absolute upper limit of AC output power (e.g., 800 W).
-        Protects against inverter overload.
-      default: 800
-      selector:
-        number:
-          min: 0
-          max: 1200
-          unit_of_measurement: W
-    
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    # 🌙 NIGHT SHUTDOWN (Optional)
-    # ═══════════════════════════════════════════════════════════════════════════════════════════════
-    
-    night_shutdown_enabled:
-      name: 🌙 Enable Night Shutdown
-      description: |
-        Automatically disables Zone 2 at night (when PV < threshold).
-        ⚠️ Zone 1 (aggressive discharge) continues to run at night!
-        Useful for battery conservation at 0 PV.
-      default: false
-      selector:
-        boolean:
-    
-    night_shutdown_pv_threshold:
-      name: 🌙 PV Threshold for "Night"
-      description: |
-        Below this PV power it is considered night (e.g., 10 W).
-        Only relevant if night shutdown is enabled.
-      default: 10
-      selector:
-        number:
-          min: 0
-          max: 100
-          unit_of_measurement: W
+          soc_sensor:
+            name: 🔋 Solakon ONE - Battery State of Charge (SOC)
+            description: The current battery state of charge in %.
+            default: sensor.solakon_one_batterie_ladestand
+            selector:
+              entity:
+                domain: sensor
+                device_class: battery
+        
+          remote_timeout_countdown_sensor:
+            name: ⏱️ Solakon ONE - Remote Timeout Countdown
+            description: Sensor showing the remaining timeout countdown.
+            default: sensor.solakon_one_fernsteuerung_zeituberschreitung
+            selector:
+              entity:
+                domain: sensor
+        
+          active_power_number:
+            name: ⚙️ Solakon ONE - Output Power Controller
+            description: The entity for setting the power setpoint (Remote Active Power).
+            default: number.solakon_one_fernsteuerung_leistung
+            selector:
+              entity:
+                domain: number
+        
+          max_discharge_current_number:
+            name: 🔋 Solakon ONE - Max. Discharge Current
+            description: The entity for controlling the maximum discharge current (A).
+            default: number.solakon_one_maximaler_entladestrom
+            selector:
+              entity:
+                domain: number
+        
+          remote_timeout_set_number:
+            name: ⏲️ Solakon ONE - Mode Reset Timer
+            description: Used to set/reset the remote timeout (max. 3599 s).
+            default: number.solakon_one_fernsteuerung_zeituberschreitung
+            selector:
+              entity:
+                domain: number
+        
+          mode_select:
+            name: 🔄 Solakon ONE - Operating Mode Select
+            description: The entity for switching the operating mode (Remote Control Mode).
+            default: select.solakon_one_modus_fernsteuern
+            selector:
+              entity:
+                domain: select
+        
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 🛠️ HOME ASSISTANT HELPERS (REQUIRED!)
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      homeassistant_helper:
+        name: "🛠️ HOME ASSISTANT HELPERS (REQUIRED!):"
+        description: "Here you find the required helpers that you MUST create for this blueprint to work correctly."
+        collapsed: true 
+        input:     
+          cycle_active_input_select:
+            name: 🛠️ Discharge Cycle State Storage (input_select - REQUIRED!)
+            description: |
+              ⚠️ IMPORTANT: Create an Input Select helper with the options 'on' and 'off'.
+              Settings → Devices & Services → Helpers → Create Helper → Dropdown
+              - Name: e.g. 'SOC Discharge Cycle Status'
+              - Options: 'on' and 'off' (exactly like this!)
+            
+              This stores whether the discharge cycle is active (Zone 1).
+            default: input_select.soc_entladezyklus_status
+            selector:
+              entity:
+                domain: input_select
+        
+          integral_helper:
+            name: 🛠️ Integral Storage (input_number - REQUIRED!)
+            description: |
+              ⚠️ IMPORTANT: Create an input_number helper for the PI controller:
+              Settings → Devices & Services → Helpers → Create Helper → Number
+              - Name: e.g. 'Solakon Integral'
+              - Min: -1000
+              - Max: 1000
+              - Step: 1
+              - Initial: 0
+            
+              This stores the I-part of the PI controller.
+            default: input_number.solakon_integral
+            selector:
+              entity:
+                domain: input_number
+        
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 🎚️ CONTROL PARAMETERS
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      PI_parameter:
+        name: "🎚️ CONTROL PARAMETERS (PI):"
+        description: "Here you find the parameters for PI control. You should not need to touch these, but you can."
+        collapsed: true 
+        input:    
+          regulator_factor:
+            name: 🎛️ P-Factor (Proportional Gain)
+            description: |
+              P-part of the PI controller: Responds to current deviation (e.g. 1.5).
+              Higher = faster, more aggressive response | Lower = smoother response
+            default: 1.5
+            selector:
+              number:
+                min: 0.1
+                max: 5
+                step: 0.1
+        
+          ki_factor:
+            name: 🎛️ I-Factor (Integral Gain)
+            description: |
+              I-part of the PI controller: Eliminates steady-state errors (e.g. 0.05).
+              Higher = faster correction, but more unstable | Lower = slower, more stable
+            default: 0.05
+            selector:
+              number:
+                min: 0.01
+                max: 0.2
+                step: 0.01
+     
+          tolerance:
+            name: 📏 Tolerance Range (Dead Band)
+            description: |
+              Range in watts around the zero point where NO correction occurs (e.g. ±25 W).
+              Prevents permanent micro-corrections when regulation is stable.
+            default: 25
+            selector:
+              number:
+                min: 0
+                max: 200
+                unit_of_measurement: W
+        
+          wait_time:
+            name: ⏱️ Wait Time After Setting Output
+            description: |
+              Delay (in seconds) after setting the output power.
+              Prevents too-rapid successive adjustments and gives the inverter and sensors (grid and Solakon) time to process and update the new values.
+              ⚠️ IMPORTANT: Consider modbus update settings!
+            default: 3
+            selector:
+              number:
+                min: 0
+                max: 30
+                step: 1
+                unit_of_measurement: s
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 🔋 SOC ZONE PARAMETERS
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      soc_parameter:
+        name: "🔋 SOC ZONE PARAMETERS:"
+        description: "Here you find the parameters for SOC zone control."
+        collapsed: true 
+        input:    
+          soc_fast_limit:
+            name: 🔋 SOC Threshold "Zone 1 Start" (Aggressive Discharge)
+            description: |
+              Upper threshold (e.g. 50 %).
+              Exceeding this activates Zone 1 (aggressive discharge with 40A).
+              Zone 1 then runs until SOC ≤ 20% (no yo-yo effect).
+            default: 50
+            selector:
+              number:
+                min: 1
+                max: 99
+                unit_of_measurement: "%"
+        
+          soc_conservation_limit:
+            name: 🔋 SOC Threshold "Zone 3 Stop" (Safety Limit)
+            description: |
+              Lower threshold (e.g. 20 %).
+              Falling below this stops discharge completely (Zone 3 = Disabled).
+            default: 20
+            selector:
+              number:
+                min: 1
+                max: 49
+                unit_of_measurement: "%"
+        
+          default_discharge_current:
+            name: 🔋 Max. Discharge Current in Zone 1 (Ampere)
+            description: |
+              Maximum discharge current in Zone 1 (aggressive discharge, e.g. 40 A).
+              In Zone 2, 0 A is automatically set (battery-friendly).
+            default: 40
+            selector:
+              number:
+                min: 0
+                max: 40
+                unit_of_measurement: A
+        
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # ⚙️ ZONE 1/2 - PARAMETERS/OFFSETS
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      zone_parameter:
+        name: "⚙️ ZONE 1/2 - PARAMETERS/OFFSETS:"
+        description: "Here you find the parameters for SOC zone control. The offset can be configured statically or dynamically (via an input_number entity)."
+        collapsed: true
+        input:   
+          offset_1:
+            name: ⚙️ Zone 1 - Static Zero-Point Offset (Fallback)
+            description: |
+              Static target value for grid power in Zone 1 (e.g. 30 W).
+              Used when NO dynamic offset entity is configured.
+              Positive value = slight grid import desired.
+              0 W = Exact zero export.
+            default: 30
+            selector:
+              number:
+                min: 0
+                max: 100
+                unit_of_measurement: W
+
+          offset_1_entity:
+            name: ⚙️ Zone 1 - Dynamic Zero-Point Offset (Optional)
+            description: |
+              Optional input_number entity for the dynamic offset in Zone 1.
+              When configured, the value of this entity is used instead of the static offset.
+              This allows the offset to be adjusted e.g. via automation
+              (e.g. increase offset when the TV is running).
+              ⚠️ If left empty, the static value above is used.
+            default: {}
+            selector:
+              entity:
+                domain: input_number
+
+          offset_2:
+            name: ⚙️ Zone 2 - Static Zero-Point Offset (Fallback)
+            description: |
+              Static target value for grid power in Zone 2 (e.g. 30 W).
+              Used when NO dynamic offset entity is configured.
+              Positive value = slight grid import desired.
+              0 W = Exact zero export.
+            default: 30
+            selector:
+              number:
+                min: 0
+                max: 100
+                unit_of_measurement: W
+
+          offset_2_entity:
+            name: ⚙️ Zone 2 - Dynamic Zero-Point Offset (Optional)
+            description: |
+              Optional input_number entity for the dynamic offset in Zone 2.
+              When configured, the value of this entity is used instead of the static offset.
+              This allows the offset to be adjusted e.g. via automation
+              (e.g. increase offset when the TV is running).
+              ⚠️ If left empty, the static value above is used.
+            default: {}
+            selector:
+              entity:
+                domain: input_number
+
+          pv_charge_reserve:
+            name: ⚙️ Zone 2 - PV Charge Reserve
+            description: |
+              PV power reserved for charging in Zone 2 (e.g. 50 W).
+              Dynamic upper limit: Max. discharge = PV - reserve.
+              Ensures the battery is charged even at trickle charge.
+            default: 50
+            selector:
+              number:
+                min: 0
+                max: 1000
+                unit_of_measurement: W
+        
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 🔒 SAFETY PARAMETERS
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      safety_parameter:
+        name: "🔒 SAFETY PARAMETERS:"
+        description: "Here you find the parameter for the maximum output power."
+        collapsed: true 
+        input:     
+          max_active_power_limit:
+            name: 🔒 Maximum Output Power (Hard Limit)
+            description: |
+              Absolute upper limit of AC output power (e.g. 800 W).
+              Protects against inverter overload.
+            default: 800
+            selector:
+              number:
+                min: 0
+                max: 1200
+                unit_of_measurement: W
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # ☀️ SURPLUS EXPORT (Optional - Zone 0)
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      surplus_parameter:
+        name: "☀️ SURPLUS EXPORT (Optional - Zone 0):"
+        description: |
+          When enabled: With a full battery and real PV surplus, the surplus is fed directly into the grid.
+          When disabled: Classic zero export, no feeding into the grid.
+        collapsed: true
+        input:
+          surplus_export_enabled:
+            name: ☀️ Enable Surplus Export
+            description: |
+              Activates Zone 0 (Surplus export when battery is full).
+              ✅ ON: When SOC ≥ threshold AND PV > consumption + PV charge reserve → AC limit to maximum, PV surplus to grid.
+              ❌ OFF: Classic zero export. No active grid feed-in.
+            default: false
+            selector:
+              boolean:
+
+          soc_export_limit:
+            name: 🔋 SOC Threshold for Surplus Export
+            description: |
+              When SOC reaches this value (e.g. 90 %) and PV surplus is present,
+              zero export is suspended and PV surplus is pushed to the grid.
+              ⚠️ Only relevant when surplus export is enabled.
+              ⚠️ MUST be genuinely less than the max SOC configured in the Solakon !!!
+            default: 90
+            selector:
+              number:
+                min: 50
+                max: 99
+                unit_of_measurement: "%"
+                
+          surplus_state_helper:
+            name: ☀️ Surplus State Storage (input_boolean - Optional, only for Zone 0)
+            description: |
+              input_boolean helper to persistently track the surplus state.
+              Prevents premature exit during MPPT ramping.
+              ⚠️ Only required when surplus export is enabled. If Zone 0 is disabled, this field can be left empty.
+            default: input_boolean.solakon_surplus_aktiv
+            selector:
+              entity:
+                domain: input_boolean  
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 🌙 NIGHT SHUTDOWN (Optional)
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      night_parameter:
+        name: "🌙 NIGHT SHUTDOWN (Optional):"
+        description: "Here you find the parameters for the optional night shutdown (currently minor effect / placeholder for possible future inverter shutdown)."
+        collapsed: true 
+        input:    
+          night_shutdown_enabled:
+            name: 🌙 Enable Night Shutdown
+            description: |
+              Automatically disables Zone 2 at night (when PV < threshold).
+              ⚠️ Zone 1 (aggressive discharge) continues to run at night!
+              Useful for battery protection at 0 PV.
+            default: false
+            selector:
+              boolean:
+        
+          night_shutdown_pv_threshold:
+            name: 🌙 PV Threshold for "Night"
+            description: |
+              Below this PV power it is considered night (e.g. 10 W).
+              Only relevant when night shutdown is enabled.
+            default: 10
+            selector:
+              number:
+                min: 0
+                max: 100
+                unit_of_measurement: W
     
 mode: queued
 max_exceeded: silent
@@ -346,10 +481,11 @@ variables:
   
   # Parameters
   discharge_current_max: !input default_discharge_current
+  surplus_export_enabled_bool: !input surplus_export_enabled
 
 triggers:
   # -------------------------------------------------------------------------------------------------
-  # 1. Power Changes (No delay for fast PI control)
+  # 1. Power changes (No delay for fast PI control)
   # -------------------------------------------------------------------------------------------------
   - trigger: state
     entity_id: !input grid_power_sensor
@@ -360,7 +496,7 @@ triggers:
     id: solar_power_change
 
   # -------------------------------------------------------------------------------------------------
-  # 2. SOC Threshold Reached (Controls zone changes)
+  # 2. SOC threshold reached (Controls zone changes)
   # -------------------------------------------------------------------------------------------------
   - trigger: numeric_state
     entity_id: !input soc_sensor
@@ -373,7 +509,7 @@ triggers:
     id: soc_low
 
   # -------------------------------------------------------------------------------------------------
-  # 3. Mode Change (Reacts to manual/external change)
+  # 3. Mode change (Responds to manual/external change)
   # -------------------------------------------------------------------------------------------------
   - trigger: state
     entity_id: !input mode_select
@@ -381,10 +517,10 @@ triggers:
 
 action:
   # -------------------------------------------------------------------------------------------------
-  # VALIDATION: Check for critical errors (values and entities)
+  # CHECK: Check for critical errors (values and entities)
   # -------------------------------------------------------------------------------------------------
   - choose:
-    # CHECK A: SOC Limits
+    # CHECK A: SOC limits
     - conditions:
         - condition: template
           value_template: "{{ soc_fast_limit_int <= soc_conservation_limit_int }}"
@@ -392,7 +528,7 @@ action:
         - service: system_log.write
           data:
             level: error
-            message: "Solakon ONE Blueprint Error: Upper SOC threshold ({{ soc_fast_limit_int }}%) must be greater than lower SOC threshold ({{ soc_conservation_limit_int }}%). Automation stopped."
+            message: "Solakon ONE Blueprint Error: The upper SOC threshold ({{ soc_fast_limit_int }}%) must be greater than the lower SOC threshold ({{ soc_conservation_limit_int }}%). Automation stopped."
         - stop: SOC limits are incorrectly configured.
           
     # CHECK B: Critical entities available
@@ -404,7 +540,7 @@ action:
               value_template: >
                 {{ is_state(soc, 'unknown') or is_state(soc, 'unavailable') or
                    is_state(timeout_countdown, 'unknown') or is_state(timeout_countdown, 'unavailable') }}
-            # Grid Power: Will be checked later (after Variables)
+            # Grid Power: Checked later (after Variables)
             # Mode selector
             - condition: template
               value_template: "{{ is_state(solakon_mode, 'unknown') or is_state(solakon_mode, 'unavailable') }}"
@@ -415,15 +551,15 @@ action:
         - service: system_log.write
           data:
             level: error
-            message: "Solakon ONE Blueprint Error: One or more critical entities (SOC, Timeout sensor, Output power controller) are UNAVAILABLE or have invalid values. Automation stopped."
+            message: "Solakon ONE Blueprint Error: One or more critical entities (SOC, timeout sensor, output power controller) are UNAVAILABLE or have invalid values. Automation stopped."
         - stop: Critical entities are faulty.
           
     default:
       # -------------------------------------------------------------------------------------------------
-      # MAIN LOGIC: Mode and Cycle Control (Zone 1, 2, 3)
+      # MAIN LOGIC: Mode and cycle control (Zone 1, 2, 3)
       # -------------------------------------------------------------------------------------------------
       - choose:
-          # CASE A: ZONE 1 - Aggressive Discharge START (SOC > Upper threshold AND Cycle OFF)
+          # CASE A: ZONE 1 - Aggressive Discharge START (SOC > upper threshold AND cycle OFF)
           - conditions:
               - condition: template
                 value_template: "{{ states(soc) | float(0) > soc_fast_limit_int }}"
@@ -447,7 +583,14 @@ action:
                 data:
                   entity_id: !input cycle_active_input_select
                   option: 'on'
-              # 2. Mode change to 'Inverter export (PV priority)' (with pulse sequence for safety)
+              # 2. Set surplus mode to off (only if Zone 0 active)
+              - choose:
+                  - conditions: "{{ surplus_export_enabled_bool }}"
+                    sequence:
+                      - service: input_boolean.turn_off
+                        data:
+                          entity_id: !input surplus_state_helper
+              # 3. Mode change to 'INV Discharge PV Priority'
               - choose:
                   - conditions: "{{ states(solakon_mode) != '1' }}"
                     sequence:
@@ -465,7 +608,7 @@ action:
                           entity_id: !input mode_select
                           option: '1'
           
-          # CASE B: ZONE 3 - Safety STOP (SOC <= Lower threshold AND Cycle ON)
+          # CASE B: ZONE 3 - Safety STOP (SOC <= lower threshold AND cycle ON)
           - conditions:
               - condition: template
                 value_template: "{{ states(soc) | float(0) <= soc_conservation_limit_int }}"
@@ -489,7 +632,14 @@ action:
                 data:
                   entity_id: !input cycle_active_input_select
                   option: 'off'
-              # 2. Mode change to 'Disabled'
+              # 2. Set surplus mode to off (only if Zone 0 active)
+              - choose:
+                  - conditions: "{{ surplus_export_enabled_bool }}"
+                    sequence:
+                      - service: input_boolean.turn_off
+                        data:
+                          entity_id: !input surplus_state_helper
+              # 3. Mode change to 'Disabled'
               - choose:
                   - conditions: "{{ states(solakon_mode) != '0' }}"
                     sequence:
@@ -497,13 +647,13 @@ action:
                         data:
                           entity_id: !input mode_select
                           option: '0'
-              # 3. Set power limit to 0 W (soft stop)
+              # 4. Set power limit to 0 W (soft stop)
               - service: number.set_value
                 data:
                   entity_id: !input active_power_number
                   value: 0
                   
-          # CASE C: ZONE 3 - Safety STOP (Additional safeguard if cycle already OFF but mode active)
+          # CASE C: ZONE 3 - Safety STOP (Additional guard, if cycle already OFF but mode active)
           - conditions:
               - condition: template
                 value_template: "{{ states(soc) | float(0) < soc_conservation_limit_int }}"
@@ -511,9 +661,9 @@ action:
                 entity_id: !input cycle_active_input_select
                 state: 'off'
               - condition: template
-                value_template: "{{ states(solakon_mode) != '1' }}"
+                value_template: "{{ states(solakon_mode) != '0' }}"
             sequence:
-              # Set mode to 'Disabled'
+              # 1. Set mode to 'Disabled'
               - choose:
                   - conditions: "{{ states(solakon_mode) != '0' }}"
                     sequence:
@@ -521,13 +671,44 @@ action:
                         data:
                           entity_id: !input mode_select
                           option: '0'
-              # Set power limit to 0 W
+              # 2. Set surplus mode to off (only if Zone 0 active)
+              - choose:
+                  - conditions: "{{ surplus_export_enabled_bool }}"
+                    sequence:
+                      - service: input_boolean.turn_off
+                        data:
+                          entity_id: !input surplus_state_helper
+              # 3. Set power limit to 0 W
               - service: number.set_value
                 data:
                   entity_id: !input active_power_number
                   value: 0
                   
-          # CASE D: ZONE 2 - Battery-Conserving START (P-controller active, but 0 A discharge)
+          # CASE D: Recovery - Mode dropped, but cycle is still active
+          - conditions:
+              - condition: state
+                entity_id: !input cycle_active_input_select
+                state: 'on'
+              - condition: template
+                value_template: "{{ states(solakon_mode) != '1' }}"
+              - condition: template
+                value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int }}"
+            sequence:
+              - service: number.set_value
+                data:
+                  entity_id: !input remote_timeout_set_number
+                  value: 10
+              - delay: '00:00:01'
+              - service: number.set_value
+                data:
+                  entity_id: !input remote_timeout_set_number
+                  value: 3599
+              - service: select.select_option
+                data:
+                  entity_id: !input mode_select
+                  option: '1'
+        
+          # CASE E: ZONE 2 - Battery-friendly START (PI controller active, but 0 A discharge)
           - conditions:
               - condition: template
                 value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int and states(soc) | float(0) <= soc_fast_limit_int }}"
@@ -535,8 +716,8 @@ action:
                 entity_id: !input cycle_active_input_select
                 state: 'off'
               - condition: template
-                value_template: "{{ states(solakon_mode) != '1' }}"
-              # Night check: Only start if NOT night OR function disabled
+                value_template: "{{ states(solakon_mode) == '0' }}"
+              # Night check: Only start if NOT night OR feature disabled
               - condition: template
                 value_template: >
                   {{ not night_shutdown_enabled_bool or 
@@ -546,14 +727,14 @@ action:
               - service: logbook.log
                 data:
                   name: Solakon Zone Change
-                  message: "🔋 Zone 2 activated (Battery-Conserving) - SOC: {{ states(soc) }}%"
+                  message: "🔋 Zone 2 activated (Battery-friendly) - SOC: {{ states(soc) }}%"
                   entity_id: !input soc_sensor
               # Reset integral on zone change
               - service: input_number.set_value
                 data:
                   entity_id: !input integral_helper
                   value: 0
-              # Mode change to 'Inverter export (PV priority)'
+              # Mode change to 'INV Discharge PV Priority'
               - choose:
                   - conditions: "{{ states(solakon_mode) != '1' }}"
                     sequence:
@@ -570,7 +751,8 @@ action:
                         data:
                           entity_id: !input mode_select
                           option: '1'
-          
+
+          # CASE F: Night Shutdown (Zone 2 when PV < threshold)
           - conditions:
               # Night shutdown enabled
               - condition: template
@@ -609,8 +791,7 @@ action:
                   value: 0
                           
   # -------------------------------------------------------------------------------------------------
-  # ACTION E: PI Controller Logic, Timeout Refresh AND Discharge Limit Protection
-  # ONLY execute when mode is active AND (Zone 1 OR Day)!
+  # CHECK: Only execute when mode is active AND (Zone 1 OR daytime)!
   # -------------------------------------------------------------------------------------------------
   - condition: template
     value_template: >
@@ -620,7 +801,7 @@ action:
           (states(solar_power_for_night_check) | float(0)) >= night_pv_threshold) }}
     
   # ===========================================
-  # BLOCK 2: Variables ONLY for PI Controller
+  # BLOCK 2: Variables ONLY for PI controller
   # (Only calculated when mode is active)
   # ===========================================
   - variables:
@@ -636,14 +817,55 @@ action:
       tolerance_int: !input tolerance
       regulator_factor_float: !input regulator_factor
       ki_factor_float: !input ki_factor
-      offset_int: !input offset
+      offset_1_static: !input offset_1
+      offset_1_entity_id: !input offset_1_entity
+      offset_2_static: !input offset_2
+      offset_2_entity_id: !input offset_2_entity
+
+      # Dynamic offset: Entity value if configured, otherwise static fallback
+      offset_1_int: >
+        {% if offset_1_entity_id is string and offset_1_entity_id | length > 0 and states(offset_1_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+          {{ states(offset_1_entity_id) | float(offset_1_static) }}
+        {% else %}
+          {{ offset_1_static }}
+        {% endif %}
+      offset_2_int: >
+        {% if offset_2_entity_id is string and offset_2_entity_id | length > 0 and states(offset_2_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+          {{ states(offset_2_entity_id) | float(offset_2_static) }}
+        {% else %}
+          {{ offset_2_static }}
+        {% endif %}
       max_active_power_limit_int: !input max_active_power_limit
       pv_charge_reserve_int: !input pv_charge_reserve
+      soc_export_limit_int: !input soc_export_limit
+      
+      # Surplus
+      actual_power_sensor: !input actual_power_sensor
+      actual_power_float: "{{ states(actual_power_sensor) | float(0) }}"
+      surplus_state_entity: !input surplus_state_helper
+      surplus_entity_valid: >
+        {{ surplus_export_enabled_bool and
+           surplus_state_entity is string and 
+           surplus_state_entity | length > 0 and
+           states(surplus_state_entity) not in ['unknown', 'unavailable'] }}
+      surplus_helper_last_changed: >
+        {% if surplus_entity_valid %}
+          {{ (as_timestamp(states[surplus_state_entity].last_changed) | default(0)) }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+      surplus_hold_active: >
+        {% if surplus_entity_valid %}
+          {{ is_state(surplus_state_entity, 'on') and
+             (as_timestamp(now()) - surplus_helper_last_changed) <= 60 }}
+        {% else %}
+          {{ false }}
+        {% endif %}
       
       # PI controller variables
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
         
-      # Max Power Limit in Zone 2 = Max(0, PV - Reserve)
+      # Max power limit in Zone 2 = Max(0, PV - reserve)
       max_zone_2_limit: >
         {% set pv_minus_reserve = solar_power_float - pv_charge_reserve_int %}
         {% if pv_minus_reserve > 0 %}
@@ -652,26 +874,54 @@ action:
           0
         {% endif %}
 
-      # Target Offset based on zone (0 W in Zone 1, Offset_Int in Zone 2)
+      # Target offset based on zone (offset_1_int in Zone 1, offset_2_int in Zone 2)
       target_offset: >
         {% if is_state(cycle_active, 'on') %}
-          0
+          {{ offset_1_int }}
         {% else %}
-          {{ offset_int }}
+          {{ offset_2_int }}
         {% endif %}
       
-      # Tolerance check based on actual grid error (not limited)
+      # Tolerance check based on actual grid error (unclamped)
       grid_error_for_tolerance: "{{ (grid_power_float - target_offset) | abs }}"
       
-     # PI Controller Calculation
+      # Wait time
+      wait_time_int: !input wait_time
+            
+      # -----------------------------------------------------------------------
+      # SURPLUS MODE (Zone 0): Only calculate when feature is enabled
+      # -----------------------------------------------------------------------
+      is_surplus_mode: >
+        {% if not surplus_entity_valid %}
+          {{ false }}
+        {% else %}
+          {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
+          {% if currently_in_surplus %}
+            {{ surplus_hold_active 
+               or ((states(soc) | float(0) >= soc_export_limit_int)
+               and (solar_power_float > (actual_power_float + grid_power_float)
+                    or solar_power_float >= max_active_power_limit_int)) }}
+          {% else %}
+            {# ENTRY: SOC full AND grid balanced AND PV active #}
+            {{ (states(soc) | float(0) >= soc_export_limit_int)
+               and (grid_power_float <= (target_offset + tolerance_int))
+               and (solar_power_float >= night_pv_threshold)
+               and (solar_power_float > (actual_power_float + grid_power_float))}}
+          {% endif %}
+        {% endif %}
+      
+      # -----------------------------------------------------------------------
+      # PI Controller Calculation
+      # -----------------------------------------------------------------------
+
       # 1. Current error 
       error: >
         {% if is_state(cycle_active, 'on') %}
-          {# ZONE 1: Min(available capacity, Grid) #}
-          {{ [(max_active_power_limit_int - current_active_power), grid_power_float] | min | float(0) }}
+          {# ZONE 1: Min(available capacity, Grid − Offset) #}
+          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_1_int)] | min | float(0) }}
         {% else %}
           {# ZONE 2: Min(available capacity, Grid - Offset, PV capacity) #}
-          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
+          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_2_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
         {% endif %}
       
       # 2. Integral with Anti-Windup
@@ -686,7 +936,7 @@ action:
           {{ integral_old | float(0) }}
         {% endif %}
       
-      # 3. PI correction (P-component + I-component)
+      # 3. PI correction (P-part + I-part)
       power_correction_pi: >
         {% set error_float = error | float(0) %}
         {% set integral_float = integral_new | float(0) %}
@@ -699,50 +949,61 @@ action:
         {% set correction = power_correction_pi | float(0) %}
         {{ (current_active_power + correction) | float(0) }}
         
-      # 5. Final Power: Logic combined in one template
+      # 5. Final power: Logic consolidated in one template
       final_power_calculated: >
         {% set p_regler_power = new_power_unlimited | float(0) %}
         {% if is_state(cycle_active, 'on') %}
           {# ZONE 1: Hard Limit #}
           {{ [max_active_power_limit_int, p_regler_power] | min | float(0) }}
         {% else %}
-          {# ZONE 2: Dynamic PV Limit #}
+          {# ZONE 2: Dynamic PV limit #}
           {% set max_zone_2 = max_zone_2_limit | float(0) %}
           {{ [max_zone_2, p_regler_power] | min | float(0) }}
         {% endif %}
         
+# STEP 1: Set discharge current
   - choose:
-      # CASE E.1: Set limit for Zone 1 (Aggressive)
+      # CASE 1a: Set limit for Zone 1 (Aggressive)
       - conditions:
           - condition: state
             entity_id: !input cycle_active_input_select
             state: 'on'
           - condition: template
             value_template: >
-              {# Check if current value does NOT match maximum value #}
-              {{ states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
+              {# Check whether the current value does NOT equal the maximum value and surplus mode is inactive #}
+              {{ not (is_surplus_mode | bool) and states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
         sequence:
           - service: number.set_value
             data:
               entity_id: !input max_discharge_current_number
               value: "{{ discharge_current_max }}"
               
-      # CASE E.2: Set limit for Zone 2 (Battery-conserving = 0 A)
+      # CASE 1b: Set limit for Zone 0 (Surplus buffer = 2 A)
       - conditions:
-          - condition: state
-            entity_id: !input cycle_active_input_select
-            state: 'off'
           - condition: template
             value_template: >
-              {# Check if current value does NOT equal 0 A #}
-              {{ states(discharge_current_entity) | float(999) | round(2) != 0 }}
+              {{ (is_surplus_mode | bool) and 
+                 states(discharge_current_entity) | float(999) | round(2) != 2 }}
+        sequence:
+          - service: number.set_value
+            data:
+              entity_id: !input max_discharge_current_number
+              value: 2
+      
+      # CASE 1c: Set limit for Zone 2 (Battery-friendly = 0 A)
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ is_state(cycle_active, 'off') and 
+                 not (is_surplus_mode | bool) and 
+                 states(discharge_current_entity) | float(999) | round(2) != 0 }}
         sequence:
           - service: number.set_value
             data:
               entity_id: !input max_discharge_current_number
               value: 0
 
-  # 2. Timeout Reset
+  # STEP 2: Timeout reset
   - choose: 
         # Timeout reset required
       - conditions:
@@ -759,23 +1020,89 @@ action:
               entity_id: !input remote_timeout_set_number
               value: 3599
               
-  # 3. Save integral
-  - service: input_number.set_value
-    data:
-      entity_id: !input integral_helper
-      value: "{{ integral_new }}"
+  # STEP 3: Save integral (freeze in Zone 0)
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_surplus_mode }}"
+        sequence:
+          - service: input_number.set_value
+            data:
+              entity_id: !input integral_helper
+              value: "{{ integral_old }}"
+    default:
+      - service: input_number.set_value
+        data:
+          entity_id: !input integral_helper
+          value: "{{ integral_new }}"
       
-  # 4. Set power limit (Only when tolerance is exceeded)
-  - condition: template
-    value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
-  
-  - service: number.set_value
-    data:
-      entity_id: !input active_power_number
-      value: "{{ [0, final_power_calculated] | max | round(0) }}"
-  - delay: '00:00:03'
 
+  # STEP 4: Set output power + delay (ONLY when necessary)
+  #    No output needed (within tolerance) → no delay, continue to Step 5
+  #    Only reset surplus boolean when necessary
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_surplus_mode and current_active_power < max_active_power_limit_int }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ surplus_entity_valid and not is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - service: input_boolean.turn_on
+                    data:
+                      entity_id: !input surplus_state_helper
+          - service: number.set_value
+            data:
+              entity_id: !input active_power_number
+              value: "{{ max_active_power_limit_int }}"
+          - delay:
+              seconds: '{{wait_time_int}}'
 
-
-
-
+      - conditions:
+          - condition: template
+            value_template: "{{ not is_surplus_mode and grid_error_for_tolerance > tolerance_int }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ surplus_entity_valid }}"
+                sequence:
+                  - service: input_boolean.turn_off
+                    data:
+                      entity_id: !input surplus_state_helper
+          # PI output unchanged:
+          - service: number.set_value
+            data:
+              entity_id: !input active_power_number
+              value: "{{ [0, final_power_calculated] | max | round(0) }}"
+          - delay:
+              seconds: '{{wait_time_int}}'
+              
+    
+  # STEP 5: Finalize surplus boolean — always runs
+  #    Redundant if Step 4 set output, but necessary if Step 4 was skipped due to
+  #    tolerance or fulfilled hard limit (boolean would otherwise be stale)
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_surplus_mode }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ surplus_entity_valid and not is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - service: input_boolean.turn_on
+                    data:
+                      entity_id: !input surplus_state_helper
+    default:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ surplus_entity_valid  and  is_state(surplus_state_entity, 'on') }}"
+            sequence:
+              - service: input_boolean.turn_off
+                data:
+                  entity_id: !input surplus_state_helper
