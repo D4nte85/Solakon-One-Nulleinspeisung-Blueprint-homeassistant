@@ -406,6 +406,19 @@ blueprint:
                 min: 50
                 max: 99
                 unit_of_measurement: "%"
+
+                
+          surplus_exit_hysteresis:
+            name: 🔋 Überschuss-Einspeisung Hysterese (SOC)
+            description: |
+              SOC muss um diesen Wert unter die Eintritts-Schwelle fallen bevor Zone 0 verlassen wird.
+              Verhindert Flackern bei nachlassender PV (z.B. 5 % → Austritt bei SOC < 85% wenn Schwelle = 90%).
+            default: 5
+            selector:
+              number:
+                min: 1
+                max: 20
+                unit_of_measurement: "%"
                 
           surplus_state_helper:
             name: ☀️ Surplus-Zustand Speicher (input_boolean - Optional, nur für Zone 0)
@@ -844,6 +857,7 @@ actions:
       max_active_power_limit_int: !input max_active_power_limit
       pv_charge_reserve_int: !input pv_charge_reserve
       soc_export_limit_int: !input soc_export_limit
+      surplus_exit_hysteresis_int: !input surplus_exit_hysteresis
       
       # Surplus
       actual_power_sensor: !input actual_power_sensor
@@ -897,10 +911,7 @@ actions:
         {% else %}
           {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
           {% if currently_in_surplus %}
-            {{ surplus_hold_active 
-               or ((states(soc) | float(0) >= soc_export_limit_int)
-               and (solar_power_float > (actual_power_float + grid_power_float)
-                    or solar_power_float >= max_active_power_limit_int)) }}
+            {{ states(soc) | float(0) >= (soc_export_limit_int - surplus_exit_hysteresis_int) }}
           {% else %}
             {# ENTRY: SOC voll UND Netz eingeregelt UND PV aktiv #}
             {{ (states(soc) | float(0) >= soc_export_limit_int)
@@ -1106,6 +1117,7 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
