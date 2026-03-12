@@ -459,6 +459,60 @@ blueprint:
                 min: 0
                 max: 100
                 unit_of_measurement: W
+
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # ⚡ AC Modus
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════      
+      ac_charge_parameter:
+        name: "⚡ AC LADEN (Optional):"
+        description: |
+          Laden der Batterie wenn externe Einspeisung ins Netz erkannt wird (Grid negativ).
+          Aktiv in Zone 1 und Zone 2 (kein Zyklus-Lock). SOC-Schutz bleibt vollständig aktiv.
+        collapsed: true
+        input:
+          ac_charge_enabled:
+            name: ⚡ AC Laden aktivieren
+            description: |
+              ✅ EIN: Bei Grid < Offset − Toleranz → Modus 3 (INV Charge PV Priority)
+              ❌ AUS: Funktion deaktiviert
+            default: false
+            selector:
+              boolean:
+ 
+          soc_ac_charge_limit:
+            name: 🔋 SOC-Ladeziel (%)
+            description: |
+              Laden stoppt wenn SOC diesen Wert erreicht.
+              ⚠️ Empfohlen: ≤ Zone-1-Schwelle, damit nach dem Laden Zone 1 nahtlos übernimmt.
+            default: 90
+            selector:
+              number:
+                min: 10
+                max: 99
+                unit_of_measurement: "%"
+ 
+          ac_charge_power_limit:
+            name: 🔒 Max. Ladeleistung (W)
+            description: |
+              Absolute Obergrenze der AC-Ladeleistung (z.B. 800 W).
+            default: 800
+            selector:
+              number:
+                min: 50
+                max: 1200
+                unit_of_measurement: W
+ 
+          ac_charge_hysteresis:
+            name: 📏 Hysterese Ladeabbruch (W)
+            description: |
+              Laden wird erst beendet wenn Grid wieder über (Offset − Toleranz + Hysterese) steigt.
+              Verhindert Flackern bei wechselnder Einspeisung (z.B. 50 W).
+            default: 50
+            selector:
+              number:
+                min: 0
+                max: 300
+                unit_of_measurement: W
     
 mode: queued
 max_exceeded: silent
@@ -501,6 +555,35 @@ variables:
        surplus_state_entity is string and 
        surplus_state_entity | length > 0 and
        states(surplus_state_entity) not in ['unknown', 'unavailable'] }}
+  
+  # --- Offset-Variablen ---
+  offset_1_static: !input offset_1
+  offset_1_entity_id: !input offset_1_entity
+  offset_1_int: >
+    {% if offset_1_entity_id is string and offset_1_entity_id | length > 0
+       and states(offset_1_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+      {{ states(offset_1_entity_id) | float(offset_1_static) }}
+    {% else %}
+      {{ offset_1_static }}
+    {% endif %}
+ 
+  offset_2_static: !input offset_2
+  offset_2_entity_id: !input offset_2_entity
+  offset_2_int: >
+    {% if offset_2_entity_id is string and offset_2_entity_id | length > 0
+       and states(offset_2_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+      {{ states(offset_2_entity_id) | float(offset_2_static) }}
+    {% else %}
+      {{ offset_2_static }}
+    {% endif %}
+ 
+  # --- AC Laden ---
+  ac_charge_enabled_bool: !input ac_charge_enabled
+  soc_ac_charge_limit_int: !input soc_ac_charge_limit
+  ac_charge_power_limit_int: !input ac_charge_power_limit
+  ac_charge_hysteresis_int: !input ac_charge_hysteresis
+  grid_power_entity: !input grid_power_sensor
+  charge_tolerance: !input tolerance
 
 triggers:
   # -------------------------------------------------------------------------------------------------
@@ -702,7 +785,147 @@ actions:
                 data:
                   entity_id: !input active_power_number
                   value: 0
-                  
+                     
+          # FALL G: AC Laden — Einspeisung ins Netz erkannt (Grid negativ)
+          - conditions:
+              - condition: template
+                value_template: "{{ ac_charge_enabled_bool }}"
+              - condition: template
+                value_template: "{{ states(soc) | float(0) < soc_ac_charge_limit_int }}"
+              - condition: template
+                value_template: >
+                  {% set active_offset = offset_1_int if is_state(cycle_active, 'on') else offset_2_int %}
+                  {% set grid = states(grid_power_entity) | float(0) %}
+                  {% set threshold = active_offset | float(0) - charge_tolerance | float(0) %}
+                  {% if states(solakon_mode) == '3' %}
+                    {# Stay: Hysterese — erst beenden wenn Überschuss wirklich weg #}
+                    {{ grid < (threshold + ac_charge_hysteresis_int) }}
+                  {% else %}
+                    {# Entry: klarer Überschuss nötig #}
+                    {{ grid < threshold }}
+                  {% endif %}
+            sequence:
+              # Logging nur bei Moduswechsel
+              - choose:
+                  - conditions: "{{ states(solakon_mode) != '3' }}"
+                    sequence:
+                      - action: logbook.log
+                        data:
+                          name: Solakon AC Laden
+                          message: >
+                            ⚡ AC Laden aktiviert
+                            (Zone {{ '1' if is_state(cycle_active, 'on') else '2' }})
+                            — Grid: {{ states(grid_power_entity) }}W, SOC: {{ states(soc) }}%
+                          entity_id: !input soc_sensor
+              # Entladestrom auf 0 (kein Entladen während Ladens)
+              - choose:
+                  - conditions:
+                      - condition: template
+                        value_template: >
+                          {{ states(discharge_current_entity) | float(999) | round(2) != 0 }}
+                    sequence:
+                      - action: number.set_value
+                        data:
+                          entity_id: !input max_discharge_current_number
+                          value: 0
+              # Modus → INV Charge (PV Priority) = '3'
+              - choose:
+                  - conditions: "{{ states(solakon_mode) != '3' }}"
+                    sequence:
+                      - action: number.set_value
+                        data:
+                          entity_id: !input remote_timeout_set_number
+                          value: 10
+                      - delay: '00:00:01'
+                      - action: number.set_value
+                        data:
+                          entity_id: !input remote_timeout_set_number
+                          value: 3599
+                      - action: select.select_option
+                        data:
+                          entity_id: !input mode_select
+                          option: '3'
+              # Timeout-Reset (< 120s)
+              - choose:
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ states(timeout_countdown) | int(9999) < 120 }}"
+                    sequence:
+                      - action: number.set_value
+                        data:
+                          entity_id: !input remote_timeout_set_number
+                          value: 10
+                      - delay: '00:00:01'
+                      - action: number.set_value
+                        data:
+                          entity_id: !input remote_timeout_set_number
+                          value: 3599
+              # Ladeleistung berechnen und setzen
+              - variables:
+                  ac_charge_power: >
+                    {% set active_offset = offset_1_int if is_state(cycle_active, 'on') else offset_2_int %}
+                    {% set grid = states(grid_power_entity) | float(0) %}
+                    {{ [ac_charge_power_limit_int, [0, (active_offset | float(0) - grid) | round(0)] | max] | min }}
+              - choose:
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ ac_charge_power > 0 }}"
+                    sequence:
+                      - action: number.set_value
+                        data:
+                          entity_id: !input active_power_number
+                          value: "{{ ac_charge_power }}"
+                      - delay:
+                          seconds: '{{ wait_time_int }}'
+                          
+          # FALL H: AC Laden beenden
+          - conditions:
+              - condition: template
+                value_template: "{{ ac_charge_enabled_bool and states(solakon_mode) == '3' }}"
+              - condition: template
+                value_template: >
+                  {% set active_offset = offset_1_int if is_state(cycle_active, 'on') else offset_2_int %}
+                  {% set grid = states(grid_power_entity) | float(0) %}
+                  {% set threshold = active_offset | float(0) - charge_tolerance | float(0) %}
+                  {{ states(soc) | float(0) >= soc_ac_charge_limit_int or
+                     grid >= (threshold + ac_charge_hysteresis_int) }}
+            sequence:
+              - action: logbook.log
+                data:
+                  name: Solakon AC Laden
+                  message: >
+                    ⚡ AC Laden beendet
+                    (Zone {{ '1' if is_state(cycle_active, 'on') else '2' }})
+                    — Grid: {{ states(grid_power_entity) }}W, SOC: {{ states(soc) }}%
+                  entity_id: !input soc_sensor
+              # Zone 1 → zurück zu discharge_mode + Puls-Sequenz
+              # Zone 2 → Disabled
+              - choose:
+                  - conditions: "{{ is_state(cycle_active, 'on') }}"
+                    sequence:
+                      - action: number.set_value
+                        data:
+                          entity_id: !input remote_timeout_set_number
+                          value: 10
+                      - delay: '00:00:01'
+                      - action: number.set_value
+                        data:
+                          entity_id: !input remote_timeout_set_number
+                          value: 3599
+                      - action: select.select_option
+                        data:
+                          entity_id: !input mode_select
+                          option: '{{ discharge_mode }}'
+                default:
+                  - action: select.select_option
+                    data:
+                      entity_id: !input mode_select
+                      option: '0'
+                  - action: number.set_value
+                    data:
+                      entity_id: !input active_power_number
+                      value: 0
+          
           # FALL D: Recovery - Modus fiel ab, aber Zyklus ist noch aktiv
           - conditions:
               - condition: state
@@ -836,24 +1059,6 @@ actions:
       tolerance_int: !input tolerance
       regulator_factor_float: !input regulator_factor
       ki_factor_float: !input ki_factor
-      offset_1_static: !input offset_1
-      offset_1_entity_id: !input offset_1_entity
-      offset_2_static: !input offset_2
-      offset_2_entity_id: !input offset_2_entity
-
-      # Dynamischer Offset: Entity-Wert wenn konfiguriert, sonst statischer Fallback
-      offset_1_int: >
-        {% if offset_1_entity_id is string and offset_1_entity_id | length > 0 and states(offset_1_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
-          {{ states(offset_1_entity_id) | float(offset_1_static) }}
-        {% else %}
-          {{ offset_1_static }}
-        {% endif %}
-      offset_2_int: >
-        {% if offset_2_entity_id is string and offset_2_entity_id | length > 0 and states(offset_2_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
-          {{ states(offset_2_entity_id) | float(offset_2_static) }}
-        {% else %}
-          {{ offset_2_static }}
-        {% endif %}
       max_active_power_limit_int: !input max_active_power_limit
       pv_charge_reserve_int: !input pv_charge_reserve
       soc_export_limit_int: !input soc_export_limit
@@ -1104,6 +1309,7 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
