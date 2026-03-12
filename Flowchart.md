@@ -13,7 +13,7 @@
         Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Surplus-Boolean → off (nur wenn Zone 0 aktiv)   Modus → INV Discharge PV Priority   (Puls-Sequenz: 10s → 3599s)"]
 
         %% ── Zone 3 (Zyklus on) ──────────────────────────────────────
-        ZONE_CHECK -- "SOC ≤ Zone-3-Schwelle UND Zyklus = on" --> Z3_A
+        ZONE_CHECK -- "SOC < Zone-3-Schwelle UND Zyklus = on" --> Z3_A
         Z3_A["🛑 Zone 3 aktivieren   Zyklus = off   Integral = 0   Surplus-Boolean → off (nur wenn Zone 0 aktiv)   Modus → Disabled   Output → 0 W"]
 
         %% ── Zone 3 (Absicherung) ────────────────────────────────────
