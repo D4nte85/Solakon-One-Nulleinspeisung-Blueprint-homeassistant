@@ -656,7 +656,7 @@ action:
           # FALL C: ZONE 3 - Sicherheits-STOPP (Zusätzliche Absicherung, falls Zyklus bereits OFF aber Modus aktiv)
           - conditions:
               - condition: template
-                value_template: "{{ states(soc) | float(0) < soc_conservation_limit_int }}"
+                value_template: "{{ states(soc) | float(0) <= soc_conservation_limit_int }}"
               - condition: state
                 entity_id: !input cycle_active_input_select
                 state: 'off'
@@ -1106,4 +1106,5 @@ action:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
