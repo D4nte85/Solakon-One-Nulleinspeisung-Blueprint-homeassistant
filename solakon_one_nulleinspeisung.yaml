@@ -28,7 +28,7 @@ blueprint:
     * **Bedingung:** SOC > Oberer Schwellenwert (`soc_fast_limit`) ODER Entladezyklus aktiv.
     * **Aktion:** Max. Entladestrom wird auf den Standardwert (z.B. 40 A) gesetzt.
     * **Regelung:** PI-Regler mit Nullpunkt-Offset (z.B. 30 W) zur Verschiebung des Regelziels hin zu leichtem Netzbezug oder exacter Nulleinspeisung.
-    * **Verhalten:** Einmal aktiviert, läuft Zone 1 bis SOC ≤ 20% fällt (kein Yo-Yo-Effekt).
+    * **Verhalten:** Zone 1 läuft dann bis SOC < Zone-3-Schwelle fällt (kein Yo-Yo-Effekt).
     
     #### 2. Zone: Batterieschonende Regelung (Zwischen-SOC)
     * **Bedingung:** SOC zwischen Unterer (`soc_conservation_limit`) und Oberer Schwelle, UND Entladezyklus inaktiv.
@@ -247,7 +247,7 @@ blueprint:
             description: |
               Obere Schwelle (z.B. 50 %).
               Überschreiten aktiviert Zone 1 (aggressive Entladung mit 40A).
-              Zone 1 läuft dann bis SOC ≤ 20% fällt (kein Yo-Yo-Effekt).
+              Zone 1 läuft dann bis SOC < Zone-3-Schwelle fällt (kein Yo-Yo-Effekt).
             default: 50
             selector:
               number:
@@ -1106,6 +1106,7 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
