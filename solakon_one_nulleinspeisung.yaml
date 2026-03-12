@@ -1043,7 +1043,7 @@ action:
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ is_surplus_mode and current_active_power < max_active_power_limit_int }}"
+            value_template: "{{ (is_surplus_mode | bool) and current_active_power < max_active_power_limit_int }}"
         sequence:
           - choose:
               - conditions:
@@ -1062,7 +1062,7 @@ action:
 
       - conditions:
           - condition: template
-            value_template: "{{ not is_surplus_mode and grid_error_for_tolerance > tolerance_int }}"
+            value_template: "{{ not (is_surplus_mode | bool) and grid_error_for_tolerance > tolerance_int }}"
         sequence:
           - choose:
               - conditions:
@@ -1106,6 +1106,7 @@ action:
               - service: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
