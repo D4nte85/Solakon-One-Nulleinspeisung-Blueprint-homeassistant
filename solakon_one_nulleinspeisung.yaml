@@ -893,6 +893,10 @@ actions:
                     (Zone {{ '1' if is_state(cycle_active, 'on') else '2' }})
                     — Grid: {{ states(grid_power_entity) }}W, SOC: {{ states(soc) }}%
                   entity_id: !input soc_sensor
+              - action: input_number.set_value
+                data:
+                  entity_id: !input integral_helper
+                  value: 0
               # Zone 1 → zurück zu discharge_mode + Puls-Sequenz
               # Zone 2 → Disabled
               - choose:
@@ -1311,6 +1315,7 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
