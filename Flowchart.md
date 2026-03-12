@@ -67,13 +67,10 @@
         CALC_NORMAL --> DISCHARGE_SET
 
         %% ── Entladestrom setzen ─────────────────────────────────────
-        DISCHARGE_SET{{"Surplus aktiv? → 2 A   Zyklus = on? → Max-Wert   Sonst → 0 A"}}
-        DISCHARGE_SET -- "Surplus aktiv: 2 A" --> SET_2A["🔋 Entladestrom → 2 A Stabilitätspuffer (nur wenn Wert abweicht)"]
-        DISCHARGE_SET -- "Zone 1: konfigurierter Max-Wert" --> SET_40A
-        DISCHARGE_SET -- "Zone 2: 0 A" --> SET_0A
-        SET_2A --> TIMEOUT_CHECK
-        SET_40A --> TIMEOUT_CHECK
-        SET_0A --> TIMEOUT_CHECK
+        DISCHARGE_SET{{"Entladestrom setzen?"}}
+        DISCHARGE_SET -- "Surplus aktiv → 2 A" --> TIMEOUT_CHECK
+        DISCHARGE_SET -- "Zyklus = on → Max-Wert" --> TIMEOUT_CHECK
+        DISCHARGE_SET -- "Sonst → 0 A" --> TIMEOUT_CHECK
 
         %% ── Timeout ─────────────────────────────────────────────────
         TIMEOUT_CHECK{{"Countdown < 120s?"}}
@@ -110,6 +107,6 @@
         class Z3_A,Z3_B zone3
         class NIGHT night
         class RECOVERY recovery
-        class CALC_NORMAL,DISCHARGE_SET,SET_40A,SET_0A,SET_2A pi
+        class CALC_NORMAL,DISCHARGE_SET,pi
         class END_STOP,END_SKIP,END_TOL,END_OK,BOOL_UPDATE end_node
 ```
