@@ -15,7 +15,7 @@ For the intended functionality described below, a 0W schedule for 24h should be 
 
 Install the blueprint directly via this button in your Home Assistant instance:
 
-[![Open your Home Assistant instance and show the blueprint import dialog with a pre-filled URL.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2FSolakon-ONE-Zero-Export%2Fsolakon_one_nulleinspeisung.yaml)
+[![Open your Home Assistant instance and show the blueprint import dialog with a pre-filled URL.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2FSolakon-ONE-Zero-Export%2Fsolakon_one_zeroexport.yaml)
 
 ## 🛠️ Preparation: Creating the Required Helpers
 
@@ -198,14 +198,14 @@ To ensure communication stability with the Solakon ONE:
 | Category | Variable | Default Entity | Description |
 |:---------|:---------|:--------------|:------------|
 | **External** | Grid power sensor | *(no default)* | E.g. Shelly 3EM. **Positive = import, Negative = export** |
-| **Solakon** | Solar power | `sensor.solakon_one_pv_leistung` | Current PV generation in watts |
-| **Solakon** | Actual output power | `sensor.solakon_one_leistung` | Current AC output power of the inverter in watts |
-| **Solakon** | Battery state of charge (SOC) | `sensor.solakon_one_batterie_ladestand` | State of charge in % |
-| **Solakon** | Remote timeout countdown | `sensor.solakon_one_fernsteuerung_zeituberschreitung` | Remaining countdown |
-| **Solakon** | Output power controller | `number.solakon_one_fernsteuerung_leistung` | Sets power setpoint |
-| **Solakon** | Max. discharge current | `number.solakon_one_maximaler_entladestrom` | Sets discharge current limit |
-| **Solakon** | Mode reset timer | `number.solakon_one_fernsteuerung_zeituberschreitung` | Sets/resets timeout (max. 3599s) |
-| **Solakon** | Operating mode select | `select.solakon_one_modus_fernsteuern` | Switches operating mode |
+| **Solakon** | Solar power | `sensor.solakon_one_pv_power` | Current PV generation in watts |
+| **Solakon** | Actual output power | `sensor.solakon_one_active_power` | Current AC output power of the inverter in watts |
+| **Solakon** | Battery state of charge (SOC) | `sensor.solakon_one_battery_state_of_charge` | State of charge in % |
+| **Solakon** | Remote timeout countdown | `sensor.solakon_one_remote_timeout_countdown` | Remaining countdown |
+| **Solakon** | Output power controller | `number.solakon_one_remote_control_power` | Sets power setpoint |
+| **Solakon** | Max. discharge current | `number.solakon_one_maximum_discharge_current` | Sets discharge current limit |
+| **Solakon** | Mode reset timer | `number.solakon_one_remote_control_timeout` | Sets/resets timeout (max. 3599s) |
+| **Solakon** | Operating mode select | `select.solakon_one_remote_control_mode` | Switches operating mode |
 | **Helper** | Discharge cycle storage | `input_select.soc_entladezyklus_status` | Input Select: `on`/`off` |
 | **Helper** | Integral storage | `input_number.solakon_integral` | Input Number: -1000 to 1000 |
 | **Helper** | Surplus state storage | `input_boolean.solakon_surplus_aktiv` | Only required when surplus export is enabled (Zone 0). If Zone 0 disabled: n/a |
