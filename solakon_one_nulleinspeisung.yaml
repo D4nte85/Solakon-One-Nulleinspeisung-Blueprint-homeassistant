@@ -910,7 +910,7 @@ actions:
                       - action: select.select_option
                         data:
                           entity_id: !input mode_select
-                          option: '{{ discharge_mode }}'
+                          option: '1'
                 default:
                   - action: select.select_option
                     data:
@@ -1311,6 +1311,7 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
