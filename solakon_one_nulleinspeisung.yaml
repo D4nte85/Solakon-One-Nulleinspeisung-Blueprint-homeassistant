@@ -1024,7 +1024,7 @@ action:
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ is_surplus_mode }}"
+            value_template: "{{ is_surplus_mode | bool }}"
         sequence:
           - action: input_number.set_value
             data:
@@ -1087,7 +1087,7 @@ action:
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ is_surplus_mode }}"
+            value_template: "{{ is_surplus_mode | bool }}"
         sequence:
           - choose:
               - conditions:
@@ -1106,6 +1106,7 @@ action:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
