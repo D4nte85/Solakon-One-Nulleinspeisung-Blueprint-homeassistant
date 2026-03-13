@@ -903,7 +903,7 @@ actions:
       # ÜBERSCHUSS-MODUS (Zone 0): Gibt false zurück wenn Feature/Helper ungültig; sonst Two-State-Hysterese-Logik
       # -----------------------------------------------------------------------
       is_surplus_mode: >
-        {% if not surplus_entity_valid %}
+        {% if not (surplus_entity_valid | bool) %}
           {{ false }}
         {% else %}
           {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
@@ -1113,6 +1113,7 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
