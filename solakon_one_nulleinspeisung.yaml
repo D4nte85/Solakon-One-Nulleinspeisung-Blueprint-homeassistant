@@ -707,7 +707,7 @@ actions:
                   option: 'on'
               # 2. Surplusmode auf off setzen (nur wenn Zone 0 aktiv)
               - choose:
-                  - conditions: "{{ (surplus_entity_valid | bool) and is_state(surplus_state_entity, 'on') }}"
+                  - conditions: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
                     sequence:
                       - action: input_boolean.turn_off
                         data:
@@ -756,7 +756,7 @@ actions:
                   option: 'off'
               # 2. Surplusmode auf off setzen (nur wenn Zone 0 aktiv)
               - choose:
-                  - conditions: "{{ (surplus_entity_valid | bool) and is_state(surplus_state_entity, 'on') }}"
+                  - conditions: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
                     sequence:
                       - action: input_boolean.turn_off
                         data:
@@ -795,7 +795,7 @@ actions:
                           option: '0'
               # 2. Surplusmode auf off setzen (nur wenn Zone 0 aktiv)
               - choose:
-                  - conditions: "{{ (surplus_entity_valid | bool) and is_state(surplus_state_entity, 'on') }}"
+                  - conditions: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
                     sequence:
                       - action: input_boolean.turn_off
                         data:
@@ -1098,7 +1098,7 @@ actions:
       # ÜBERSCHUSS-MODUS (Zone 0): Gibt false zurück wenn Feature/Helper ungültig; sonst Two-State-Hysterese-Logik
       # -----------------------------------------------------------------------
       is_surplus_mode: >
-        {% if not (surplus_entity_valid | bool) or states(solakon_mode) == '3' %}
+        {% if not (surplus_entity_valid | bool(false)) or states(solakon_mode) == '3' %}
           {{ false }}
         {% else %}
           {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
@@ -1180,7 +1180,7 @@ actions:
             state: 'on'
           - condition: template
             value_template: >
-              {{ not (is_surplus_mode | bool) and 
+              {{ not (is_surplus_mode | bool(false)) and 
                  states(solakon_mode) != '3' and
                  states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
         sequence:
@@ -1193,7 +1193,7 @@ actions:
       - conditions:
           - condition: template
             value_template: >
-              {{ (is_surplus_mode | bool) and 
+              {{ (is_surplus_mode | bool(false)) and 
                  states(discharge_current_entity) | float(999) | round(2) != 2 }}
         sequence:
           - action: number.set_value
@@ -1206,7 +1206,7 @@ actions:
           - condition: template
             value_template: >
               {{ (is_state(cycle_active, 'off') or states(solakon_mode) == '3') and 
-                 not (is_surplus_mode | bool) and 
+                 not (is_surplus_mode | bool(false)) and 
                  states(discharge_current_entity) | float(999) | round(2) != 0 }}
         sequence:
           - action: number.set_value
@@ -1235,7 +1235,7 @@ actions:
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ is_surplus_mode | bool }}"
+            value_template: "{{ is_surplus_mode | bool(false) }}"
         sequence:
           - action: input_number.set_value
             data:
@@ -1254,12 +1254,12 @@ actions:
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ (is_surplus_mode | bool) and current_active_power < max_active_power_limit_int }}"
+            value_template: "{{ (is_surplus_mode | bool(false)) and current_active_power < max_active_power_limit_int }}"
         sequence:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ (surplus_entity_valid | bool) and not is_state(surplus_state_entity, 'on') }}"
+                    value_template: "{{ (surplus_entity_valid | bool(false)) and not is_state(surplus_state_entity, 'on') }}"
                 sequence:
                   - action: input_boolean.turn_on
                     data:
@@ -1273,12 +1273,12 @@ actions:
 
       - conditions:
           - condition: template
-            value_template: "{{ not (is_surplus_mode | bool) and grid_error_for_tolerance > tolerance_int }}"
+            value_template: "{{ not (is_surplus_mode | bool(false)) and grid_error_for_tolerance > tolerance_int }}"
         sequence:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ (surplus_entity_valid | bool) }}"
+                    value_template: "{{ (surplus_entity_valid | bool(false)) }}"
                 sequence:
                   - action: input_boolean.turn_off
                     data:
@@ -1298,12 +1298,12 @@ actions:
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ is_surplus_mode | bool }}"
+            value_template: "{{ is_surplus_mode | bool(false) }}"
         sequence:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ (surplus_entity_valid | bool) and not is_state(surplus_state_entity, 'on') }}"
+                    value_template: "{{ (surplus_entity_valid | bool(false)) and not is_state(surplus_state_entity, 'on') }}"
                 sequence:
                   - action: input_boolean.turn_on
                     data:
@@ -1312,7 +1312,7 @@ actions:
       - choose:
           - conditions:
               - condition: template
-                value_template: "{{ (surplus_entity_valid | bool)  and  is_state(surplus_state_entity, 'on') }}"
+                value_template: "{{ (surplus_entity_valid | bool(false))  and  is_state(surplus_state_entity, 'on') }}"
             sequence:
               - action: input_boolean.turn_off
                 data:
