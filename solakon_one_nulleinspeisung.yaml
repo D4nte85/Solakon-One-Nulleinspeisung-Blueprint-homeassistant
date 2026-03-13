@@ -602,7 +602,8 @@ variables:
   soc_ac_charge_limit_int: !input soc_ac_charge_limit
   ac_charge_power_limit_int: !input ac_charge_power_limit
   ac_charge_hysteresis_int: !input ac_charge_hysteresis
-  charge_tolerance: !input tolerance
+  tolerance_int: !input tolerance
+  tolerance_float: "{{ states(tolerance_int) | float(0) }}"
   actual_power_sensor: !input actual_power_sensor
   actual_power_float: "{{ states(actual_power_sensor) | float(0) }}"
 
@@ -815,9 +816,9 @@ actions:
               - condition: template
                 value_template: >
                   {% if states(solakon_mode) == '3' %}
-                    {{ grid < ac_charge_hysteresis_int | float(0) }}
+                    {{ grid < (tolerance_float + ac_charge_hysteresis_int | float(0)) }}
                   {% else %}
-                    {{ (grid + actual_power_float) < -(charge_tolerance | float(0)) }}
+                    {{ (grid + actual_power_float) < -(tolerance_float) }}
                   {% endif %}
             sequence:
               # Logging nur bei Moduswechsel
@@ -1058,7 +1059,6 @@ actions:
   - variables:     
      
       # Konfiguration
-      tolerance_int: !input tolerance
       regulator_factor_float: !input regulator_factor
       ki_factor_float: !input ki_factor
       max_active_power_limit_int: !input max_active_power_limit
@@ -1108,7 +1108,7 @@ actions:
                and (solar_power_float > (actual_power_float + grid - surplus_pv_hysteresis_int)) }}
           {% else %}
             {{ (states(soc) | float(0) >= soc_export_limit_int)
-               and (grid <= (target_offset + tolerance_int))
+               and (grid <= (target_offset + tolerance_float))
                and (solar_power_float >= night_pv_threshold)
                and (solar_power_float > (actual_power_float + grid + surplus_pv_hysteresis_int)) }}
           {% endif %}
@@ -1136,7 +1136,7 @@ actions:
       integral_old: "{{ states(integral_entity) | float(0) }}"
       integral_new: >
         {% set error_float = error | float(0) %}
-        {% if grid_error_for_tolerance > tolerance_int %}
+        {% if grid_error_for_tolerance > tolerance_float %}
           {{ [[-1000, integral_old + error_float] | max, 1000] | min | float(0) }}
         {% elif integral_old | abs > 10 %}
           {{ (integral_old * 0.95) | float(0) }}
@@ -1274,7 +1274,7 @@ actions:
 
       - conditions:
           - condition: template
-            value_template: "{{ not (is_surplus_mode | bool) and grid_error_for_tolerance > tolerance_int }}"
+            value_template: "{{ not (is_surplus_mode | bool) and grid_error_for_tolerance > tolerance_float }}"
         sequence:
           - choose:
               - conditions:
@@ -1318,6 +1318,7 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
