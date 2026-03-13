@@ -860,6 +860,15 @@ actions:
                         data:
                           entity_id: !input mode_select
                           option: '3'
+              # Output auf 0 W nullen bei Eintritt (PI startet sauber)
+              - choose:
+                  - conditions: "{{ states(solakon_mode) != '3' }}"
+                    sequence:
+                      - action: number.set_value
+                        data:
+                          entity_id: !input active_power_number
+                          value: 0
+
               # Timeout-Reset (< 120s)
               - choose:
                   - conditions:
@@ -883,7 +892,8 @@ actions:
               - condition: template
                 value_template: >
                   {{ states(soc) | float(0) >= soc_ac_charge_limit_int or
-                     grid >= ac_charge_hysteresis_int | float(0) }}
+                     (grid + actual_power_float) >= ac_charge_hysteresis_int | float(0) }}
+
             sequence:
               - action: logbook.log
                 data:
