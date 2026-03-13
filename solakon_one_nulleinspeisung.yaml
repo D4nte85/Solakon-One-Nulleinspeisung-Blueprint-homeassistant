@@ -482,9 +482,9 @@ variables:
 
   # Grid Power
   grid_power_entity: !input grid_power_sensor
-  grid_power_float: "{{ states(grid_power_entity) | float(0) }}"  # Netzleistung als Float (W)
+  grid_power_float: "{{ states(grid_power_entity) | float(0) }}"
 
-  # Solar Power (DC-PV-Eingangsleistung — nicht identisch mit AC-Ausgang)
+  # Solar Power
   solar_power: !input solar_power_sensor
   solar_power_float: "{{ states(solar_power) | float(0) }}"
 
@@ -1113,6 +1113,7 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
