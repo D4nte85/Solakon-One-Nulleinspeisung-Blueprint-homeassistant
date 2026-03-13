@@ -599,13 +599,6 @@ variables:
   actual_power_sensor: !input actual_power_sensor
   grid: "{{ states(grid_power_entity) | float(0) }}"
   actual_power_float: "{{ states(actual_power_sensor) | float(0) }}"
-  # Aktiver Offset je nach Zone (Zone 1 → offset_1_int, Zone 2 → offset_2_int); genutzt für AC-Laden-Fehlerberechnung
-  active_offset: >
-    {% if is_state(cycle_active, 'on') %}
-      {{offset_1_int }}
-    {% else %}
-      {{ offset_2_int }}
-    {% endif %}
 
 triggers:
   # -------------------------------------------------------------------------------------------------
@@ -664,7 +657,6 @@ actions:
               value_template: >
                 {{ is_state(soc, 'unknown') or is_state(soc, 'unavailable') or
                    is_state(timeout_countdown, 'unknown') or is_state(timeout_countdown, 'unavailable') }}
-            # Grid Power: Wird später geprüft (nach Variables)
             # Modus-Selektor
             - condition: template
               value_template: "{{ is_state(solakon_mode, 'unknown') or is_state(solakon_mode, 'unavailable') }}"
@@ -961,7 +953,7 @@ actions:
                   entity_id: !input mode_select
                   option: '1'
         
-          # FALL E: ZONE 2 - Batterieschonend START (P-Regler aktiv, aber 0 A Entladung)
+          # FALL E: ZONE 2 START — PI-Regler aktiv, 0 A Entladung — NUR wenn Modus = Disabled (Zyklus = off)
           - conditions:
               - condition: template
                 value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int and states(soc) | float(0) <= soc_fast_limit_int }}"
@@ -1017,7 +1009,7 @@ actions:
               - condition: state
                 entity_id: !input cycle_active_input_select
                 state: 'off'
-              # Modus ist aktuell aktiv
+              # Modus ist aktuell INV Discharge PV Priority (Mode 1)
               - condition: template
                 value_template: "{{ states(solakon_mode) == '1' }}"
             sequence:
@@ -1044,7 +1036,7 @@ actions:
                   value: 0
                           
   # -------------------------------------------------------------------------------------------------
-  # PRÜFUNG: NUR ausführen wenn Modus aktiv ist UND (Zone 1 ODER Tag)!
+  # PRÜFUNG: NUR ausführen wenn Modus = '1' (Discharge) ODER '3' (AC Laden) UND (Zone 1 ODER Tag)!
   # -------------------------------------------------------------------------------------------------
   - condition: template
     value_template: >
@@ -1131,7 +1123,7 @@ actions:
       # 1. Aktueller Fehler 
       error: >
         {% if states(solakon_mode) == '3' %}
-          {# AC LADEN: Ziel = Grid auf active_offset bringen #}
+          {# AC LADEN: Ziel = Grid auf target_offset bringen #}
           {{ [(ac_charge_power_limit_int - current_active_power), (target_offset - grid_power_float)] | min | float(0) }}
         {% elif is_state(cycle_active, 'on') %}
           {# ZONE 1: Min(verfügbare Kapazität, Grid − Offset) #}
@@ -1141,7 +1133,7 @@ actions:
           {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_2_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
         {% endif %}
         
-      # 2. Integral mit Anti-Windup
+      # 2. Integral mit Anti-Windup (Clamp ±1000) und Toleranz-Decay (×0,95 wenn |Integral| > 10)
       integral_old: "{{ states(integral_entity) | float(0) }}"
       integral_new: >
         {% set error_float = error | float(0) %}
@@ -1260,7 +1252,7 @@ actions:
 
   # SCHRITT 4: Ausgangsleistung setzen + Delay (NUR wenn nötig)
   #    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
-  #    Surplus Boolean nur zurücksetzen wenn nötig
+  #    Surplus Boolean nur aktualisieren wenn nötig
   - choose:
       - conditions:
           - condition: template
@@ -1327,6 +1319,7 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
