@@ -905,7 +905,7 @@ actions:
       # ÜBERSCHUSS-MODUS (Zone 0): Nur berechnen wenn Feature aktiviert
       # -----------------------------------------------------------------------
       is_surplus_mode: >
-        {% if not (surplus_entity_valid | bool)%}
+        {% if not (surplus_entity_valid | bool) %}
           {{ false }}
         {% else %}
           {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
