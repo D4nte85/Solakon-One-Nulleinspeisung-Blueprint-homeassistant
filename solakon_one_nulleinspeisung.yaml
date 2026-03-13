@@ -615,7 +615,7 @@ actions:
                   option: 'on'
               # 2. Surplusmode auf off setzen (nur wenn Zone 0 aktiv)
               - choose:
-                  - conditions: "{{ (surplus_entity_valid | bool) and is_state(surplus_state_entity, 'on') }}"
+                  - conditions: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
                     sequence:
                       - action: input_boolean.turn_off
                         data:
@@ -664,7 +664,7 @@ actions:
                   option: 'off'
               # 2. Surplusmode auf off setzen (nur wenn Zone 0 aktiv)
               - choose:
-                  - conditions: "{{ (surplus_entity_valid | bool) and is_state(surplus_state_entity, 'on') }}"
+                  - conditions: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
                     sequence:
                       - action: input_boolean.turn_off
                         data:
@@ -905,7 +905,7 @@ actions:
       # ÜBERSCHUSS-MODUS (Zone 0): Nur berechnen wenn Feature aktiviert
       # -----------------------------------------------------------------------
       is_surplus_mode: >
-        {% if not (surplus_entity_valid | bool) %}
+        {% if not (surplus_entity_valid | bool(false)) %}
           {{ false }}
         {% else %}
           {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
@@ -981,7 +981,7 @@ actions:
           - condition: template
             value_template: >
               {# Prüfe, ob der aktuelle Wert NICHT dem Maximalwert entspricht und der Surplus modus inaktiv ist #}
-              {{ not (is_surplus_mode | bool) and states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
+              {{ not (is_surplus_mode | bool(false)) and states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
         sequence:
           - action: number.set_value
             data:
@@ -992,7 +992,7 @@ actions:
       - conditions:
           - condition: template
             value_template: >
-              {{ (is_surplus_mode | bool) and 
+              {{ (is_surplus_mode | bool(false)) and 
                  states(discharge_current_entity) | float(999) | round(2) != 2 }}
         sequence:
           - action: number.set_value
@@ -1005,7 +1005,7 @@ actions:
           - condition: template
             value_template: >
               {{ is_state(cycle_active, 'off') and 
-                 not (is_surplus_mode | bool) and 
+                 not (is_surplus_mode | bool(false)) and 
                  states(discharge_current_entity) | float(999) | round(2) != 0 }}
         sequence:
           - action: number.set_value
@@ -1034,7 +1034,7 @@ actions:
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ is_surplus_mode | bool }}"
+            value_template: "{{ is_surplus_mode | bool(false) }}"
         sequence:
           - action: input_number.set_value
             data:
@@ -1051,33 +1051,30 @@ actions:
   #    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
   #    Surplus Boolean nur zurücksetzen wenn nötig
   - choose:
-      # ZWEIG A: Logik wenn Surplus-Bedingungen erfüllt sind
+      # Zweig A: Surplus-Bedingungen (Variable ist True)
       - conditions:
           - condition: template
-            value_template: "{{ (is_surplus_mode | bool) and current_active_power < max_active_power_limit_int }}"
+            value_template: "{{ (is_surplus_mode | bool(false)) and current_active_power < max_active_power_limit_int }}"
         sequence:
-          # 1. Helper einschalten falls noch aus
+          # Check ob Helper an muss
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ (surplus_entity_valid | bool) and not is_state(surplus_state_entity, 'on') }}"
+                    value_template: "{{ (surplus_entity_valid | bool(false)) and not is_state(surplus_state_entity, 'on') }}"
                 sequence:
                   - action: input_boolean.turn_on
                     data:
                       entity_id: !input surplus_state_helper
-          
-          # 2. Leistung setzen: 800W nur wenn Helper stabil AN, sonst PI-Fallback
+          # Power setzen (800W nur wenn Helper stabil an)
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ is_state(surplus_state_entity, 'on') and current_active_power < max_active_power_limit_int }}"
+                    value_template: "{{ is_state(surplus_state_entity, 'on') }}"
                 sequence:
                   - action: number.set_value
                     data:
                       entity_id: !input active_power_number
                       value: "{{ max_active_power_limit_int }}"
-                  - delay:
-                      seconds: "{{ wait_time_int }}"
               - conditions:
                   - condition: template
                     value_template: "{{ not is_state(surplus_state_entity, 'on') }}"
@@ -1086,18 +1083,18 @@ actions:
                     data:
                       entity_id: !input active_power_number
                       value: "{{ [0, final_power_calculated] | max | round(0) }}"
-                  - delay:
-                      seconds: "{{ wait_time_int }}"
+          - delay:
+              seconds: "{{ wait_time_int }}"
 
-      # ZWEIG B: Normaler PI-Regler Betrieb
+      # Zweig B: Normaler PI-Regler
       - conditions:
           - condition: template
-            value_template: "{{ not (is_surplus_mode | bool) and grid_error_for_tolerance > tolerance_int }}"
+            value_template: "{{ not (is_surplus_mode | bool(false)) and grid_error_for_tolerance > tolerance_int }}"
         sequence:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ (surplus_entity_valid | bool) and is_state(surplus_state_entity, 'on') }}"
+                    value_template: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
                 sequence:
                   - action: input_boolean.turn_off
                     data:
@@ -1108,19 +1105,20 @@ actions:
               value: "{{ [0, final_power_calculated] | max | round(0) }}"
           - delay:
               seconds: "{{ wait_time_int }}"
-                  
+              
+    
   # SCHRITT 5: Surplus-Boolean finalisieren — läuft immer
   #    Redundant wenn Schritt 4 Output gesetzt hat, aber notwendig wenn Schritt 4 wegen
   #    Toleranz oder erfülltem Hard-Limit übersprungen wurde (Boolean sonst veraltet)
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ is_surplus_mode | bool }}"
+            value_template: "{{ is_surplus_mode | bool(false) }}"
         sequence:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ (surplus_entity_valid | bool) and not is_state(surplus_state_entity, 'on') }}"
+                    value_template: "{{ (surplus_entity_valid | bool(false)) and not is_state(surplus_state_entity, 'on') }}"
                 sequence:
                   - action: input_boolean.turn_on
                     data:
@@ -1129,7 +1127,7 @@ actions:
       - choose:
           - conditions:
               - condition: template
-                value_template: "{{ (surplus_entity_valid | bool)  and  is_state(surplus_state_entity, 'on') }}"
+                value_template: "{{ (surplus_entity_valid | bool(false))  and  is_state(surplus_state_entity, 'on') }}"
             sequence:
               - action: input_boolean.turn_off
                 data:
