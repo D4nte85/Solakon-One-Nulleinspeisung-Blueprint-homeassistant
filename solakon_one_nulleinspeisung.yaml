@@ -533,16 +533,7 @@ variables:
   # BLOCK 1: Variablen für Conditions & Modus-Logik
   # (Werden IMMER benötigt)
   # ===========================================
-
-  # Grid Power
-  grid_power_entity: !input grid_power_sensor
-  grid: "{{ states(grid_power_entity) | float(0) }}"
   
-  
-  # Solar Power
-  solar_power: !input solar_power_sensor
-  solar_power_float: "{{ states(solar_power) | float(0) }}"
-
   # Zonen-Schwellwerte
   soc_fast_limit_int: !input soc_fast_limit
   soc_conservation_limit_int: !input soc_conservation_limit
@@ -556,7 +547,7 @@ variables:
   # Nachtabschaltung Config
   night_shutdown_enabled_bool: !input night_shutdown_enabled
   night_pv_threshold: !input night_shutdown_pv_threshold
-  
+  solar_power_for_night_check: !input solar_power_sensor
   
   # PI-Regler Helper
   integral_entity: !input integral_helper
@@ -564,6 +555,7 @@ variables:
   # Entitäten
   active_power_entity: !input active_power_number
   discharge_current_entity: !input max_discharge_current_number
+  timeout_set_entity: !input remote_timeout_set_number
   
   # Parameter
   discharge_current_max: !input default_discharge_current
@@ -602,10 +594,18 @@ variables:
   soc_ac_charge_limit_int: !input soc_ac_charge_limit
   ac_charge_power_limit_int: !input ac_charge_power_limit
   ac_charge_hysteresis_int: !input ac_charge_hysteresis
-  tolerance_int: !input tolerance
-  tolerance_float: "{{ states(tolerance_int) | float(0) }}"
+  grid_power_entity: !input grid_power_sensor
+  charge_tolerance: !input tolerance
   actual_power_sensor: !input actual_power_sensor
+  grid: "{{ states(grid_power_entity) | float(0) }}"
   actual_power_float: "{{ states(actual_power_sensor) | float(0) }}"
+  # Aktiver Offset je nach Zone (Zone 1 → offset_1_int, Zone 2 → offset_2_int); genutzt für AC-Laden-Fehlerberechnung
+  active_offset: >
+    {% if is_state(cycle_active, 'on') %}
+      {{offset_1_int }}
+    {% else %}
+      {{ offset_2_int }}
+    {% endif %}
 
 triggers:
   # -------------------------------------------------------------------------------------------------
@@ -664,6 +664,7 @@ actions:
               value_template: >
                 {{ is_state(soc, 'unknown') or is_state(soc, 'unavailable') or
                    is_state(timeout_countdown, 'unknown') or is_state(timeout_countdown, 'unavailable') }}
+            # Grid Power: Wird später geprüft (nach Variables)
             # Modus-Selektor
             - condition: template
               value_template: "{{ is_state(solakon_mode, 'unknown') or is_state(solakon_mode, 'unavailable') }}"
@@ -816,9 +817,9 @@ actions:
               - condition: template
                 value_template: >
                   {% if states(solakon_mode) == '3' %}
-                    {{ grid < (tolerance_float + ac_charge_hysteresis_int | float(0)) }}
+                    {{ grid < ac_charge_hysteresis_int | float(0) }}
                   {% else %}
-                    {{ (grid + actual_power_float) < -(tolerance_float) }}
+                    {{ (grid + actual_power_float) < -(charge_tolerance | float(0)) }}
                   {% endif %}
             sequence:
               # Logging nur bei Moduswechsel
@@ -960,7 +961,7 @@ actions:
                   entity_id: !input mode_select
                   option: '1'
         
-          # FALL E: ZONE 2 START — PI-Regler aktiv, 0 A Entladung — NUR wenn Modus = Disabled (Zyklus = off)
+          # FALL E: ZONE 2 - Batterieschonend START (P-Regler aktiv, aber 0 A Entladung)
           - conditions:
               - condition: template
                 value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int and states(soc) | float(0) <= soc_fast_limit_int }}"
@@ -973,7 +974,7 @@ actions:
               - condition: template
                 value_template: >
                   {{ not night_shutdown_enabled_bool or 
-                     solar_power_float >= night_pv_threshold }}
+                     (states(solar_power_for_night_check) | float(0)) >= night_pv_threshold }}
             sequence:
               # Logging
               - action: logbook.log
@@ -1011,12 +1012,12 @@ actions:
                 value_template: "{{ night_shutdown_enabled_bool }}"
               # Es ist Nacht (PV unter Schwelle)
               - condition: template
-                value_template: "{{ solar_power_float < night_pv_threshold }}"
+                value_template: "{{ (states(solar_power_for_night_check) | float(0)) < night_pv_threshold }}"
               # Nur in Zone 2 (cycle = off)
               - condition: state
                 entity_id: !input cycle_active_input_select
                 state: 'off'
-              # Modus ist aktuell INV Discharge PV Priority (Mode 1)
+              # Modus ist aktuell aktiv
               - condition: template
                 value_template: "{{ states(solakon_mode) == '1' }}"
             sequence:
@@ -1024,7 +1025,7 @@ actions:
               - action: logbook.log
                 data:
                   name: Solakon Nachtmodus
-                  message: "🌙 Nachtabschaltung aktiviert (Zone 2) - PV: {{ solar_power_float }}W"
+                  message: "🌙 Nachtabschaltung aktiviert (Zone 2) - PV: {{ states(solar_power_for_night_check) }}W"
                   entity_id: !input solar_power_sensor
               # Integral zurücksetzen
               - action: input_number.set_value
@@ -1043,22 +1044,30 @@ actions:
                   value: 0
                           
   # -------------------------------------------------------------------------------------------------
-  # PRÜFUNG: NUR ausführen wenn Modus = '1' (Discharge) ODER '3' (AC Laden) UND (Zone 1 ODER Tag)!
+  # PRÜFUNG: NUR ausführen wenn Modus aktiv ist UND (Zone 1 ODER Tag)!
   # -------------------------------------------------------------------------------------------------
   - condition: template
     value_template: >
       {{ states(solakon_mode) in ['1', '3'] and
          (is_state(cycle_active, 'on') or 
           not night_shutdown_enabled_bool or
-          solar_power_float >= night_pv_threshold) }}
+          (states(solar_power_for_night_check) | float(0)) >= night_pv_threshold) }}
     
   # ===========================================
   # BLOCK 2: Variablen NUR für PI-Regler
   # (Werden nur bei aktivem Modus berechnet)
   # ===========================================
-  - variables:     
-     
+  - variables:
+      # Grid Power
+      grid_power: !input grid_power_sensor
+      grid_power_float: "{{ states(grid_power) | float(0) }}"
+      
+      # Solar Power
+      solar_power: !input solar_power_sensor
+      solar_power_float: "{{ states(solar_power) | float(0) }}"
+      
       # Konfiguration
+      tolerance_int: !input tolerance
       regulator_factor_float: !input regulator_factor
       ki_factor_float: !input ki_factor
       max_active_power_limit_int: !input max_active_power_limit
@@ -1090,7 +1099,7 @@ actions:
         {% endif %}
       
       # Toleranzprüfung basiert auf tatsächlichem Grid-Fehler (nicht begrenzt)
-      grid_error_for_tolerance: "{{ (grid - target_offset) | abs }}"
+      grid_error_for_tolerance: "{{ (grid_power_float - target_offset) | abs }}"
       
       # Wartezeit
       wait_time_int: !input wait_time
@@ -1105,12 +1114,12 @@ actions:
           {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
           {% if currently_in_surplus %}
             {{ (states(soc) | float(0) >= (soc_export_limit_int - surplus_exit_hysteresis_int))
-               and (solar_power_float > (actual_power_float + grid - surplus_pv_hysteresis_int)) }}
+               and (solar_power_float > (actual_power_float + grid_power_float - surplus_pv_hysteresis_int)) }}
           {% else %}
             {{ (states(soc) | float(0) >= soc_export_limit_int)
-               and (grid <= (target_offset + tolerance_float))
+               and (grid_power_float <= (target_offset + tolerance_int))
                and (solar_power_float >= night_pv_threshold)
-               and (solar_power_float > (actual_power_float + grid + surplus_pv_hysteresis_int)) }}
+               and (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int)) }}
           {% endif %}
         {% endif %}
       
@@ -1122,21 +1131,21 @@ actions:
       # 1. Aktueller Fehler 
       error: >
         {% if states(solakon_mode) == '3' %}
-          {# AC LADEN: Ziel = Grid auf target_offset bringen #}
-          {{ [(ac_charge_power_limit_int - current_active_power), (target_offset - grid)] | min | float(0) }}
+          {# AC LADEN: Ziel = Grid auf active_offset bringen #}
+          {{ [(ac_charge_power_limit_int - current_active_power), (target_offset - grid_power_float)] | min | float(0) }}
         {% elif is_state(cycle_active, 'on') %}
           {# ZONE 1: Min(verfügbare Kapazität, Grid − Offset) #}
-          {{ [(max_active_power_limit_int - current_active_power), (grid - offset_1_int)] | min | float(0) }}
+          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_1_int)] | min | float(0) }}
         {% else %}
           {# ZONE 2: Min(verfügbare Kapazität, Grid - Offset, PV-Kapazität) #}
-          {{ [(max_active_power_limit_int - current_active_power), (grid - offset_2_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
+          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_2_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
         {% endif %}
         
-      # 2. Integral mit Anti-Windup (Clamp ±1000) und Toleranz-Decay (×0,95 wenn |Integral| > 10)
+      # 2. Integral mit Anti-Windup
       integral_old: "{{ states(integral_entity) | float(0) }}"
       integral_new: >
         {% set error_float = error | float(0) %}
-        {% if grid_error_for_tolerance > tolerance_float %}
+        {% if grid_error_for_tolerance > tolerance_int %}
           {{ [[-1000, integral_old + error_float] | max, 1000] | min | float(0) }}
         {% elif integral_old | abs > 10 %}
           {{ (integral_old * 0.95) | float(0) }}
@@ -1251,7 +1260,7 @@ actions:
 
   # SCHRITT 4: Ausgangsleistung setzen + Delay (NUR wenn nötig)
   #    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
-  #    Surplus Boolean nur aktualisieren wenn nötig
+  #    Surplus Boolean nur zurücksetzen wenn nötig
   - choose:
       - conditions:
           - condition: template
@@ -1274,7 +1283,7 @@ actions:
 
       - conditions:
           - condition: template
-            value_template: "{{ not (is_surplus_mode | bool) and grid_error_for_tolerance > tolerance_float }}"
+            value_template: "{{ not (is_surplus_mode | bool) and grid_error_for_tolerance > tolerance_int }}"
         sequence:
           - choose:
               - conditions:
@@ -1284,7 +1293,7 @@ actions:
                   - action: input_boolean.turn_off
                     data:
                       entity_id: !input surplus_state_helper
-          # PI-Output setzen (Max(0, final_power_calculated)):
+          # PI-Output unverändert:
           - action: number.set_value
             data:
               entity_id: !input active_power_number
@@ -1318,28 +1327,3 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
