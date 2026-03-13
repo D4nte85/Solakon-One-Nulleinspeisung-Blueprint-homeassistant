@@ -801,315 +801,315 @@ actions:
                 entity_id: !input active_power_number
                 value: 0
                         
-# -------------------------------------------------------------------------------------------------
-# PRÜFUNG: NUR ausführen wenn Modus aktiv ist UND (Zone 1 ODER Tag)!
-# -------------------------------------------------------------------------------------------------
-- condition: template
-  value_template: >
-    {{ states(solakon_mode) == '1' and
-       (is_state(cycle_active, 'on') or 
-        not night_shutdown_enabled_bool or
-        (states(solar_power_for_night_check) | float(0)) >= night_pv_threshold) }}
-  
-# ===========================================
-# BLOCK 2: Variablen NUR für PI-Regler
-# (Werden nur bei aktivem Modus berechnet)
-# ===========================================
-- variables:
-    # Grid Power
-    grid_power: !input grid_power_sensor
-    grid_power_float: "{{ states(grid_power) | float(0) }}"
+  # -------------------------------------------------------------------------------------------------
+  # PRÜFUNG: NUR ausführen wenn Modus aktiv ist UND (Zone 1 ODER Tag)!
+  # -------------------------------------------------------------------------------------------------
+  - condition: template
+    value_template: >
+      {{ states(solakon_mode) == '1' and
+         (is_state(cycle_active, 'on') or 
+          not night_shutdown_enabled_bool or
+          (states(solar_power_for_night_check) | float(0)) >= night_pv_threshold) }}
     
-    # Solar Power
-    solar_power: !input solar_power_sensor
-    solar_power_float: "{{ states(solar_power) | float(0) }}"
-    
-    # Konfiguration
-    tolerance_int: !input tolerance
-    regulator_factor_float: !input regulator_factor
-    ki_factor_float: !input ki_factor
-    offset_1_static: !input offset_1
-    offset_1_entity_id: !input offset_1_entity
-    offset_2_static: !input offset_2
-    offset_2_entity_id: !input offset_2_entity
-
-    # Dynamischer Offset: Entity-Wert wenn konfiguriert, sonst statischer Fallback
-    offset_1_int: >
-      {% if offset_1_entity_id is string and offset_1_entity_id | length > 0 and states(offset_1_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
-        {{ states(offset_1_entity_id) | float(offset_1_static) }}
-      {% else %}
-        {{ offset_1_static }}
-      {% endif %}
-    offset_2_int: >
-      {% if offset_2_entity_id is string and offset_2_entity_id | length > 0 and states(offset_2_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
-        {{ states(offset_2_entity_id) | float(offset_2_static) }}
-      {% else %}
-        {{ offset_2_static }}
-      {% endif %}
-    max_active_power_limit_int: !input max_active_power_limit
-    pv_charge_reserve_int: !input pv_charge_reserve
-    soc_export_limit_int: !input soc_export_limit
-    surplus_exit_hysteresis_int: !input surplus_exit_hysteresis
-    
-    # Surplus
-    actual_power_sensor: !input actual_power_sensor
-    actual_power_float: "{{ states(actual_power_sensor) | float(0) }}"
-    surplus_pv_hysteresis_int: !input surplus_pv_hysteresis
-    
-    # PI-Regler-Variablen
-    current_active_power: "{{ states(active_power_entity) | float(0) }}"
+  # ===========================================
+  # BLOCK 2: Variablen NUR für PI-Regler
+  # (Werden nur bei aktivem Modus berechnet)
+  # ===========================================
+  - variables:
+      # Grid Power
+      grid_power: !input grid_power_sensor
+      grid_power_float: "{{ states(grid_power) | float(0) }}"
       
-    # Max Power Limit in Zone 2 = Max(0, PV - Reserve)
-    max_zone_2_limit: >
-      {% set pv_minus_reserve = solar_power_float - pv_charge_reserve_int %}
-      {% if pv_minus_reserve > 0 %}
-        {{ pv_minus_reserve }}
-      {% else %}
-        0
-      {% endif %}
-
-    # Target Offset basiert auf Zone (offset_1_int in Zone 1, offset_2_int in Zone 2)
-    target_offset: >
-      {% if is_state(cycle_active, 'on') %}
-        {{ offset_1_int }}
-      {% else %}
-        {{ offset_2_int }}
-      {% endif %}
-    
-    # Toleranzprüfung basiert auf tatsächlichem Grid-Fehler (nicht begrenzt)
-    grid_error_for_tolerance: "{{ (grid_power_float - target_offset) | abs }}"
-    
-    # Wartezeit
-    wait_time_int: !input wait_time
-          
-    # -----------------------------------------------------------------------
-    # ÜBERSCHUSS-MODUS (Zone 0): Nur berechnen wenn Feature aktiviert
-    # -----------------------------------------------------------------------
-    is_surplus_mode: >
-      {% if not (surplus_entity_valid | bool(false)) %}
-        {{ false }}
-      {% else %}
-        {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
-        {% if currently_in_surplus %}
-          {{ (states(soc) | float(0) >= (soc_export_limit_int - surplus_exit_hysteresis_int))
-             and (solar_power_float > (actual_power_float + grid_power_float - surplus_pv_hysteresis_int)) }}
+      # Solar Power
+      solar_power: !input solar_power_sensor
+      solar_power_float: "{{ states(solar_power) | float(0) }}"
+      
+      # Konfiguration
+      tolerance_int: !input tolerance
+      regulator_factor_float: !input regulator_factor
+      ki_factor_float: !input ki_factor
+      offset_1_static: !input offset_1
+      offset_1_entity_id: !input offset_1_entity
+      offset_2_static: !input offset_2
+      offset_2_entity_id: !input offset_2_entity
+  
+      # Dynamischer Offset: Entity-Wert wenn konfiguriert, sonst statischer Fallback
+      offset_1_int: >
+        {% if offset_1_entity_id is string and offset_1_entity_id | length > 0 and states(offset_1_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+          {{ states(offset_1_entity_id) | float(offset_1_static) }}
         {% else %}
-          {{ (states(soc) | float(0) >= soc_export_limit_int)
-             and (grid_power_float <= (target_offset + tolerance_int))
-             and (solar_power_float >= night_pv_threshold)
-             and (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int)) }}
+          {{ offset_1_static }}
         {% endif %}
-      {% endif %}
-    
-    # -----------------------------------------------------------------------
-    # PI-Regler Berechnung
-    # -----------------------------------------------------------------------
-
-    # 1. Aktueller Fehler 
-    error: >
-      {% if is_state(cycle_active, 'on') %}
-        {# ZONE 1: Min(verfügbare Kapazität, Grid − Offset) #}
-        {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_1_int)] | min | float(0) }}
-      {% else %}
-        {# ZONE 2: Min(verfügbare Kapazität, Grid - Offset, PV-Kapazität) #}
-        {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_2_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
-      {% endif %}
-    
-    # 2. Integral mit Anti-Windup
-    integral_old: "{{ states(integral_entity) | float(0) }}"
-    integral_new: >
-      {% set error_float = error | float(0) %}
-      {% if grid_error_for_tolerance > tolerance_int %}
-        {{ [[-1000, integral_old + error_float] | max, 1000] | min | float(0) }}
-      {% elif integral_old | abs > 10 %}
-        {{ (integral_old * 0.95) | float(0) }}
-      {% else %}
-        {{ integral_old | float(0) }}
-      {% endif %}
-    
-    # 3. PI-Korrektur (P-Anteil + I-Anteil)
-    power_correction_pi: >
-      {% set error_float = error | float(0) %}
-      {% set integral_float = integral_new | float(0) %}
-      {% set p_part = error_float * regulator_factor_float %}
-      {% set i_part = integral_float * ki_factor_float %}
-      {{ (p_part + i_part) | float(0) }}
-    
-    # 4. Neuer Power-Sollwert
-    new_power_unlimited: >
-      {% set correction = power_correction_pi | float(0) %}
-      {{ (current_active_power + correction) | float(0) }}
+      offset_2_int: >
+        {% if offset_2_entity_id is string and offset_2_entity_id | length > 0 and states(offset_2_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+          {{ states(offset_2_entity_id) | float(offset_2_static) }}
+        {% else %}
+          {{ offset_2_static }}
+        {% endif %}
+      max_active_power_limit_int: !input max_active_power_limit
+      pv_charge_reserve_int: !input pv_charge_reserve
+      soc_export_limit_int: !input soc_export_limit
+      surplus_exit_hysteresis_int: !input surplus_exit_hysteresis
       
-    # 5. Finale Power: Logik in einem Template zusammengefasst
-    final_power_calculated: >
-      {% set p_regler_power = new_power_unlimited | float(0) %}
-      {% if is_state(cycle_active, 'on') %}
-        {# ZONE 1: Hard Limit #}
-        {{ [max_active_power_limit_int, p_regler_power] | min | float(0) }}
-      {% else %}
-        {# ZONE 2: Dynamisches PV-Limit #}
-        {% set max_zone_2 = max_zone_2_limit | float(0) %}
-        {{ [max_zone_2, p_regler_power] | min | float(0) }}
-      {% endif %}
+      # Surplus
+      actual_power_sensor: !input actual_power_sensor
+      actual_power_float: "{{ states(actual_power_sensor) | float(0) }}"
+      surplus_pv_hysteresis_int: !input surplus_pv_hysteresis
       
-# SCHRITT 1: Entladestrom setzen
-- choose:
-    # FALL 1a: Limit für Zone 1 setzen (Aggressiv)
-    - conditions:
-        - condition: state
-          entity_id: !input cycle_active_input_select
-          state: 'on'
-        - condition: template
-          value_template: >
-            {# Prüfe, ob der aktuelle Wert NICHT dem Maximalwert entspricht und der Surplus modus inaktiv ist #}
-            {{ not (is_surplus_mode | bool(false)) and states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
-      sequence:
-        - action: number.set_value
-          data:
-            entity_id: !input max_discharge_current_number
-            value: "{{ discharge_current_max }}"
-            
-    # FALL 1b: Limit für Zone 0 setzen (Surplus-Puffer = 2 A)
-    - conditions:
-        - condition: template
-          value_template: >
-            {{ (is_surplus_mode | bool(false)) and 
-               states(discharge_current_entity) | float(999) | round(2) != 2 }}
-      sequence:
-        - action: number.set_value
-          data:
-            entity_id: !input max_discharge_current_number
-            value: 2
-    
-    # FALL 1c: Limit für Zone 2 setzen (Batterieschonend = 0 A)
-    - conditions:
-        - condition: template
-          value_template: >
-            {{ is_state(cycle_active, 'off') and 
-               not (is_surplus_mode | bool(false)) and 
-               states(discharge_current_entity) | float(999) | round(2) != 0 }}
-      sequence:
-        - action: number.set_value
-          data:
-            entity_id: !input max_discharge_current_number
-            value: 0
-
-# SCHRITT 2: Timeout-Reset
-- choose: 
-      # Timeout-Reset erforderlich
-    - conditions:
-        - condition: template
-          value_template: "{{ states(timeout_countdown) | int(9999) < 120 }}"
-      sequence:
-        - action: number.set_value
-          data:
-            entity_id: !input remote_timeout_set_number
-            value: 10
-        - delay: '00:00:01'
-        - action: number.set_value
-          data:
-            entity_id: !input remote_timeout_set_number
-            value: 3599
-            
-# SCHRITT 3: Integral speichern (in Zone 0 einfrieren)
-- choose:
-    - conditions:
-        - condition: template
-          value_template: "{{ is_surplus_mode | bool(false) }}"
-      sequence:
-        - action: input_number.set_value
-          data:
-            entity_id: !input integral_helper
-            value: "{{ integral_old }}"
-  default:
-    - action: input_number.set_value
-      data:
-        entity_id: !input integral_helper
-        value: "{{ integral_new }}"
-    
-
-# SCHRITT 4: Ausgangsleistung setzen + Delay (NUR wenn nötig)
-#    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
-#    Surplus Boolean nur zurücksetzen wenn nötig
-- choose:
-    # Zweig A: Surplus-Bedingungen (Variable ist True)
-    - conditions:
-        - condition: template
-          value_template: "{{ (is_surplus_mode | bool(false)) and current_active_power < max_active_power_limit_int }}"
-      sequence:
-        # Check ob Helper an muss
-        - choose:
-            - conditions:
-                - condition: template
-                  value_template: "{{ (surplus_entity_valid | bool(false)) and not is_state(surplus_state_entity, 'on') }}"
-              sequence:
-                - action: input_boolean.turn_on
-                  data:
-                    entity_id: !input surplus_state_helper
-        # Power setzen (800W nur wenn Helper stabil an)
-        - choose:
-            - conditions:
-                - condition: template
-                  value_template: "{{ is_state(surplus_state_entity, 'on') }}"
-              sequence:
-                - action: number.set_value
-                  data:
-                    entity_id: !input active_power_number
-                    value: "{{ max_active_power_limit_int }}"
-            - conditions:
-                - condition: template
-                  value_template: "{{ not is_state(surplus_state_entity, 'on') }}"
-              sequence:
-                - action: number.set_value
-                  data:
-                    entity_id: !input active_power_number
-                    value: "{{ [0, final_power_calculated] | max | round(0) }}"
-        - delay:
-            seconds: "{{ wait_time_int }}"
-
-    # Zweig B: Normaler PI-Regler
-    - conditions:
-        - condition: template
-          value_template: "{{ not (is_surplus_mode | bool(false)) and grid_error_for_tolerance > tolerance_int }}"
-      sequence:
-        - choose:
-            - conditions:
-                - condition: template
-                  value_template: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
-              sequence:
-                - action: input_boolean.turn_off
-                  data:
-                    entity_id: !input surplus_state_helper
-        - action: number.set_value
-          data:
-            entity_id: !input active_power_number
-            value: "{{ [0, final_power_calculated] | max | round(0) }}"
-        - delay:
-            seconds: "{{ wait_time_int }}"
-            
+      # PI-Regler-Variablen
+      current_active_power: "{{ states(active_power_entity) | float(0) }}"
+        
+      # Max Power Limit in Zone 2 = Max(0, PV - Reserve)
+      max_zone_2_limit: >
+        {% set pv_minus_reserve = solar_power_float - pv_charge_reserve_int %}
+        {% if pv_minus_reserve > 0 %}
+          {{ pv_minus_reserve }}
+        {% else %}
+          0
+        {% endif %}
   
-# SCHRITT 5: Surplus-Boolean finalisieren — läuft immer
-#    Redundant wenn Schritt 4 Output gesetzt hat, aber notwendig wenn Schritt 4 wegen
-#    Toleranz oder erfülltem Hard-Limit übersprungen wurde (Boolean sonst veraltet)
-- choose:
-    - conditions:
-        - condition: template
-          value_template: "{{ is_surplus_mode | bool(false) }}"
-      sequence:
-        - choose:
-            - conditions:
-                - condition: template
-                  value_template: "{{ (surplus_entity_valid | bool(false)) and not is_state(surplus_state_entity, 'on') }}"
-              sequence:
-                - action: input_boolean.turn_on
-                  data:
-                    entity_id: !input surplus_state_helper
-  default:
-    - choose:
-        - conditions:
-            - condition: template
-              value_template: "{{ (surplus_entity_valid | bool(false))  and  is_state(surplus_state_entity, 'on') }}"
-          sequence:
-            - action: input_boolean.turn_off
-              data:
-                entity_id: !input surplus_state_helper
+      # Target Offset basiert auf Zone (offset_1_int in Zone 1, offset_2_int in Zone 2)
+      target_offset: >
+        {% if is_state(cycle_active, 'on') %}
+          {{ offset_1_int }}
+        {% else %}
+          {{ offset_2_int }}
+        {% endif %}
+      
+      # Toleranzprüfung basiert auf tatsächlichem Grid-Fehler (nicht begrenzt)
+      grid_error_for_tolerance: "{{ (grid_power_float - target_offset) | abs }}"
+      
+      # Wartezeit
+      wait_time_int: !input wait_time
+            
+      # -----------------------------------------------------------------------
+      # ÜBERSCHUSS-MODUS (Zone 0): Nur berechnen wenn Feature aktiviert
+      # -----------------------------------------------------------------------
+      is_surplus_mode: >
+        {% if not (surplus_entity_valid | bool(false)) %}
+          {{ false }}
+        {% else %}
+          {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
+          {% if currently_in_surplus %}
+            {{ (states(soc) | float(0) >= (soc_export_limit_int - surplus_exit_hysteresis_int))
+               and (solar_power_float > (actual_power_float + grid_power_float - surplus_pv_hysteresis_int)) }}
+          {% else %}
+            {{ (states(soc) | float(0) >= soc_export_limit_int)
+               and (grid_power_float <= (target_offset + tolerance_int))
+               and (solar_power_float >= night_pv_threshold)
+               and (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int)) }}
+          {% endif %}
+        {% endif %}
+      
+      # -----------------------------------------------------------------------
+      # PI-Regler Berechnung
+      # -----------------------------------------------------------------------
+  
+      # 1. Aktueller Fehler 
+      error: >
+        {% if is_state(cycle_active, 'on') %}
+          {# ZONE 1: Min(verfügbare Kapazität, Grid − Offset) #}
+          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_1_int)] | min | float(0) }}
+        {% else %}
+          {# ZONE 2: Min(verfügbare Kapazität, Grid - Offset, PV-Kapazität) #}
+          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_2_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
+        {% endif %}
+      
+      # 2. Integral mit Anti-Windup
+      integral_old: "{{ states(integral_entity) | float(0) }}"
+      integral_new: >
+        {% set error_float = error | float(0) %}
+        {% if grid_error_for_tolerance > tolerance_int %}
+          {{ [[-1000, integral_old + error_float] | max, 1000] | min | float(0) }}
+        {% elif integral_old | abs > 10 %}
+          {{ (integral_old * 0.95) | float(0) }}
+        {% else %}
+          {{ integral_old | float(0) }}
+        {% endif %}
+      
+      # 3. PI-Korrektur (P-Anteil + I-Anteil)
+      power_correction_pi: >
+        {% set error_float = error | float(0) %}
+        {% set integral_float = integral_new | float(0) %}
+        {% set p_part = error_float * regulator_factor_float %}
+        {% set i_part = integral_float * ki_factor_float %}
+        {{ (p_part + i_part) | float(0) }}
+      
+      # 4. Neuer Power-Sollwert
+      new_power_unlimited: >
+        {% set correction = power_correction_pi | float(0) %}
+        {{ (current_active_power + correction) | float(0) }}
+        
+      # 5. Finale Power: Logik in einem Template zusammengefasst
+      final_power_calculated: >
+        {% set p_regler_power = new_power_unlimited | float(0) %}
+        {% if is_state(cycle_active, 'on') %}
+          {# ZONE 1: Hard Limit #}
+          {{ [max_active_power_limit_int, p_regler_power] | min | float(0) }}
+        {% else %}
+          {# ZONE 2: Dynamisches PV-Limit #}
+          {% set max_zone_2 = max_zone_2_limit | float(0) %}
+          {{ [max_zone_2, p_regler_power] | min | float(0) }}
+        {% endif %}
+        
+  # SCHRITT 1: Entladestrom setzen
+  - choose:
+      # FALL 1a: Limit für Zone 1 setzen (Aggressiv)
+      - conditions:
+          - condition: state
+            entity_id: !input cycle_active_input_select
+            state: 'on'
+          - condition: template
+            value_template: >
+              {# Prüfe, ob der aktuelle Wert NICHT dem Maximalwert entspricht und der Surplus modus inaktiv ist #}
+              {{ not (is_surplus_mode | bool(false)) and states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
+        sequence:
+          - action: number.set_value
+            data:
+              entity_id: !input max_discharge_current_number
+              value: "{{ discharge_current_max }}"
+              
+      # FALL 1b: Limit für Zone 0 setzen (Surplus-Puffer = 2 A)
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ (is_surplus_mode | bool(false)) and 
+                 states(discharge_current_entity) | float(999) | round(2) != 2 }}
+        sequence:
+          - action: number.set_value
+            data:
+              entity_id: !input max_discharge_current_number
+              value: 2
+      
+      # FALL 1c: Limit für Zone 2 setzen (Batterieschonend = 0 A)
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ is_state(cycle_active, 'off') and 
+                 not (is_surplus_mode | bool(false)) and 
+                 states(discharge_current_entity) | float(999) | round(2) != 0 }}
+        sequence:
+          - action: number.set_value
+            data:
+              entity_id: !input max_discharge_current_number
+              value: 0
+  
+  # SCHRITT 2: Timeout-Reset
+  - choose: 
+        # Timeout-Reset erforderlich
+      - conditions:
+          - condition: template
+            value_template: "{{ states(timeout_countdown) | int(9999) < 120 }}"
+        sequence:
+          - action: number.set_value
+            data:
+              entity_id: !input remote_timeout_set_number
+              value: 10
+          - delay: '00:00:01'
+          - action: number.set_value
+            data:
+              entity_id: !input remote_timeout_set_number
+              value: 3599
+              
+  # SCHRITT 3: Integral speichern (in Zone 0 einfrieren)
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_surplus_mode | bool(false) }}"
+        sequence:
+          - action: input_number.set_value
+            data:
+              entity_id: !input integral_helper
+              value: "{{ integral_old }}"
+    default:
+      - action: input_number.set_value
+        data:
+          entity_id: !input integral_helper
+          value: "{{ integral_new }}"
+      
+  
+  # SCHRITT 4: Ausgangsleistung setzen + Delay (NUR wenn nötig)
+  #    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
+  #    Surplus Boolean nur zurücksetzen wenn nötig
+  - choose:
+      # Zweig A: Surplus-Bedingungen (Variable ist True)
+      - conditions:
+          - condition: template
+            value_template: "{{ (is_surplus_mode | bool(false)) and current_active_power < max_active_power_limit_int }}"
+        sequence:
+          # Check ob Helper an muss
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ (surplus_entity_valid | bool(false)) and not is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - action: input_boolean.turn_on
+                    data:
+                      entity_id: !input surplus_state_helper
+          # Power setzen (800W nur wenn Helper stabil an)
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - action: number.set_value
+                    data:
+                      entity_id: !input active_power_number
+                      value: "{{ max_active_power_limit_int }}"
+              - conditions:
+                  - condition: template
+                    value_template: "{{ not is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - action: number.set_value
+                    data:
+                      entity_id: !input active_power_number
+                      value: "{{ [0, final_power_calculated] | max | round(0) }}"
+          - delay:
+              seconds: "{{ wait_time_int }}"
+  
+      # Zweig B: Normaler PI-Regler
+      - conditions:
+          - condition: template
+            value_template: "{{ not (is_surplus_mode | bool(false)) and grid_error_for_tolerance > tolerance_int }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - action: input_boolean.turn_off
+                    data:
+                      entity_id: !input surplus_state_helper
+          - action: number.set_value
+            data:
+              entity_id: !input active_power_number
+              value: "{{ [0, final_power_calculated] | max | round(0) }}"
+          - delay:
+              seconds: "{{ wait_time_int }}"
+              
+    
+  # SCHRITT 5: Surplus-Boolean finalisieren — läuft immer
+  #    Redundant wenn Schritt 4 Output gesetzt hat, aber notwendig wenn Schritt 4 wegen
+  #    Toleranz oder erfülltem Hard-Limit übersprungen wurde (Boolean sonst veraltet)
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_surplus_mode | bool(false) }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ (surplus_entity_valid | bool(false)) and not is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - action: input_boolean.turn_on
+                    data:
+                      entity_id: !input surplus_state_helper
+    default:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ (surplus_entity_valid | bool(false))  and  is_state(surplus_state_entity, 'on') }}"
+            sequence:
+              - action: input_boolean.turn_off
+                data:
+                  entity_id: !input surplus_state_helper
