@@ -1063,16 +1063,28 @@ actions:
                   - action: input_boolean.turn_on
                     data:
                       entity_id: !input surplus_state_helper
-          - action: number.set_value
-            data:
-              entity_id: !input active_power_number
-              value: "{{ max_active_power_limit_int }}"
-          - delay:
-              seconds: '{{wait_time_int}}'
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ is_state(surplus_state_entity, 'on') and current_active_power < max_active_power_limit_int }}"
+                sequence:
+                  - action: number.set_value
+                    data:
+                      entity_id: !input active_power_number
+                      value: "{{ max_active_power_limit_int }}"
+                  - delay:
+                      seconds: '{{wait_time_int}}'
+              default:
+                - action: number.set_value
+                  data:
+                    entity_id: !input active_power_number
+                    value: "{{ [0, final_power_calculated] | max | round(0) }}"
+                - delay:
+                    seconds: '{{wait_time_int}}'
 
       - conditions:
           - condition: template
-            value_template: "{{ not (is_surplus_mode | bool(false)) and grid_error_for_tolerance > tolerance_int }}"
+            value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
         sequence:
           - choose:
               - conditions:
