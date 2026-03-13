@@ -1290,12 +1290,12 @@ actions:
       # Zweig B: Normaler PI-Regler
       - conditions:
           - condition: template
-            value_template: "{{ not (is_surplus_mode | bool(false)) and grid_error_for_tolerance > tolerance_int }}"
+            value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
         sequence:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
+                    value_template: "{{ is_state(surplus_state_entity, 'on') }}"
                 sequence:
                   - action: input_boolean.turn_off
                     data:
