@@ -1252,12 +1252,12 @@ actions:
   #    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
   #    Surplus Boolean nur zurücksetzen wenn nötig
   - choose:
-      # ZWEIG A: Logik wenn Surplus-Bedingungen erfüllt sind
+      # Zweig A: Surplus-Bedingungen (Variable ist True)
       - conditions:
           - condition: template
             value_template: "{{ (is_surplus_mode | bool(false)) and current_active_power < max_active_power_limit_int }}"
         sequence:
-          # 1. Helper einschalten falls noch aus
+          # Check ob Helper an muss
           - choose:
               - conditions:
                   - condition: template
@@ -1266,19 +1266,16 @@ actions:
                   - action: input_boolean.turn_on
                     data:
                       entity_id: !input surplus_state_helper
-          
-          # 2. Leistung setzen: 800W nur wenn Helper stabil AN, sonst PI-Fallback
+          # Power setzen (800W nur wenn Helper stabil an)
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ is_state(surplus_state_entity, 'on') and current_active_power < max_active_power_limit_int }}"
+                    value_template: "{{ is_state(surplus_state_entity, 'on') }}"
                 sequence:
                   - action: number.set_value
                     data:
                       entity_id: !input active_power_number
                       value: "{{ max_active_power_limit_int }}"
-                  - delay:
-                      seconds: "{{ wait_time_int }}"
               - conditions:
                   - condition: template
                     value_template: "{{ not is_state(surplus_state_entity, 'on') }}"
@@ -1287,10 +1284,10 @@ actions:
                     data:
                       entity_id: !input active_power_number
                       value: "{{ [0, final_power_calculated] | max | round(0) }}"
-                  - delay:
-                      seconds: "{{ wait_time_int }}"
-
-      # ZWEIG B: Normaler PI-Regler Betrieb
+          - delay:
+              seconds: "{{ wait_time_int }}"
+  
+      # Zweig B: Normaler PI-Regler
       - conditions:
           - condition: template
             value_template: "{{ not (is_surplus_mode | bool(false)) and grid_error_for_tolerance > tolerance_int }}"
@@ -1308,8 +1305,8 @@ actions:
               entity_id: !input active_power_number
               value: "{{ [0, final_power_calculated] | max | round(0) }}"
           - delay:
-              seconds: "{{ wait_time_int }}"             
-    
+              seconds: "{{ wait_time_int }}"
+              
   # SCHRITT 5: Surplus-Boolean finalisieren — läuft immer
   #    Redundant wenn Schritt 4 Output gesetzt hat, aber notwendig wenn Schritt 4 wegen
   #    Toleranz oder erfülltem Hard-Limit übersprungen wurde (Boolean sonst veraltet)
