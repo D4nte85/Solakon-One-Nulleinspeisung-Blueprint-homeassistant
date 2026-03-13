@@ -479,41 +479,34 @@ variables:
   # BLOCK 1: Variablen für Conditions & Modus-Logik
   # (Werden IMMER benötigt)
   # ===========================================
-
-  # Grid Power
-  grid_power_entity: !input grid_power_sensor
-  grid_power_float: "{{ states(grid_power_entity) | float(0) }}"
-
-  # Solar Power
-  solar_power: !input solar_power_sensor
-  solar_power_float: "{{ states(solar_power) | float(0) }}"
-
+  
   # Zonen-Schwellwerte
   soc_fast_limit_int: !input soc_fast_limit
   soc_conservation_limit_int: !input soc_conservation_limit
-
+  
   # Aktuelle Sensorwerte für Conditions
   soc: !input soc_sensor
   timeout_countdown: !input remote_timeout_countdown_sensor
   solakon_mode: !input mode_select
   cycle_active: !input cycle_active_input_select
-
+  
   # Nachtabschaltung Config
   night_shutdown_enabled_bool: !input night_shutdown_enabled
   night_pv_threshold: !input night_shutdown_pv_threshold
-
+  solar_power_for_night_check: !input solar_power_sensor
+  
   # PI-Regler Helper
   integral_entity: !input integral_helper
-
+  
   # Entitäten
   active_power_entity: !input active_power_number
   discharge_current_entity: !input max_discharge_current_number
-
+  timeout_set_entity: !input remote_timeout_set_number
+  
   # Parameter
   discharge_current_max: !input default_discharge_current
   surplus_export_enabled_bool: !input surplus_export_enabled
   surplus_state_entity: !input surplus_state_helper
-  # Guard: true nur wenn Zone 0 aktiviert, Helper konfiguriert und Zustand verfügbar
   surplus_entity_valid: >
     {{ surplus_export_enabled_bool and
        surplus_state_entity is string and 
@@ -577,6 +570,7 @@ actions:
               value_template: >
                 {{ is_state(soc, 'unknown') or is_state(soc, 'unavailable') or
                    is_state(timeout_countdown, 'unknown') or is_state(timeout_countdown, 'unavailable') }}
+            # Grid Power: Wird später geprüft (nach Variables)
             # Modus-Selektor
             - condition: template
               value_template: "{{ is_state(solakon_mode, 'unknown') or is_state(solakon_mode, 'unavailable') }}"
@@ -744,7 +738,7 @@ actions:
                   entity_id: !input mode_select
                   option: '1'
         
-          # FALL E: ZONE 2 START — PI-Regler aktiv, 0 A Entladung — NUR wenn Modus = Disabled (Zyklus = off)
+          # FALL E: ZONE 2 - Batterieschonend START (P-Regler aktiv, aber 0 A Entladung)
           - conditions:
               - condition: template
                 value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int and states(soc) | float(0) <= soc_fast_limit_int }}"
@@ -757,7 +751,7 @@ actions:
               - condition: template
                 value_template: >
                   {{ not night_shutdown_enabled_bool or 
-                     solar_power_float >= night_pv_threshold }}
+                     (states(solar_power_for_night_check) | float(0)) >= night_pv_threshold }}
             sequence:
               # Logging
               - action: logbook.log
@@ -795,12 +789,12 @@ actions:
                 value_template: "{{ night_shutdown_enabled_bool }}"
               # Es ist Nacht (PV unter Schwelle)
               - condition: template
-                value_template: "{{ solar_power_float < night_pv_threshold }}"
+                value_template: "{{ (states(solar_power_for_night_check) | float(0)) < night_pv_threshold }}"
               # Nur in Zone 2 (cycle = off)
               - condition: state
                 entity_id: !input cycle_active_input_select
                 state: 'off'
-              # Modus ist aktuell INV Discharge PV Priority (Mode 1)
+              # Modus ist aktuell aktiv
               - condition: template
                 value_template: "{{ states(solakon_mode) == '1' }}"
             sequence:
@@ -808,7 +802,7 @@ actions:
               - action: logbook.log
                 data:
                   name: Solakon Nachtmodus
-                  message: "🌙 Nachtabschaltung aktiviert (Zone 2) - PV: {{ solar_power_float }}W"
+                  message: "🌙 Nachtabschaltung aktiviert (Zone 2) - PV: {{ states(solar_power_for_night_check) }}W"
                   entity_id: !input solar_power_sensor
               # Integral zurücksetzen
               - action: input_number.set_value
@@ -834,13 +828,21 @@ actions:
       {{ states(solakon_mode) == '1' and
          (is_state(cycle_active, 'on') or 
           not night_shutdown_enabled_bool or
-          solar_power_float >= night_pv_threshold) }}
+          (states(solar_power_for_night_check) | float(0)) >= night_pv_threshold) }}
     
   # ===========================================
   # BLOCK 2: Variablen NUR für PI-Regler
   # (Werden nur bei aktivem Modus berechnet)
   # ===========================================
   - variables:
+      # Grid Power
+      grid_power: !input grid_power_sensor
+      grid_power_float: "{{ states(grid_power) | float(0) }}"
+      
+      # Solar Power
+      solar_power: !input solar_power_sensor
+      solar_power_float: "{{ states(solar_power) | float(0) }}"
+      
       # Konfiguration
       tolerance_int: !input tolerance
       regulator_factor_float: !input regulator_factor
@@ -867,15 +869,15 @@ actions:
       pv_charge_reserve_int: !input pv_charge_reserve
       soc_export_limit_int: !input soc_export_limit
       surplus_exit_hysteresis_int: !input surplus_exit_hysteresis
-
+      
       # Surplus
       actual_power_sensor: !input actual_power_sensor
       actual_power_float: "{{ states(actual_power_sensor) | float(0) }}"
       surplus_pv_hysteresis_int: !input surplus_pv_hysteresis
-
+      
       # PI-Regler-Variablen
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
-
+        
       # Max Power Limit in Zone 2 = Max(0, PV - Reserve)
       max_zone_2_limit: >
         {% set pv_minus_reserve = solar_power_float - pv_charge_reserve_int %}
@@ -892,15 +894,15 @@ actions:
         {% else %}
           {{ offset_2_int }}
         {% endif %}
-
+      
       # Toleranzprüfung basiert auf tatsächlichem Grid-Fehler (nicht begrenzt)
       grid_error_for_tolerance: "{{ (grid_power_float - target_offset) | abs }}"
-
+      
       # Wartezeit
       wait_time_int: !input wait_time
-
+            
       # -----------------------------------------------------------------------
-      # ÜBERSCHUSS-MODUS (Zone 0): Gibt false zurück wenn Feature/Helper ungültig; sonst Two-State-Hysterese-Logik
+      # ÜBERSCHUSS-MODUS (Zone 0): Nur berechnen wenn Feature aktiviert
       # -----------------------------------------------------------------------
       is_surplus_mode: >
         {% if not surplus_entity_valid %}
@@ -909,7 +911,7 @@ actions:
           {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
           {% if currently_in_surplus %}
             {{ (states(soc) | float(0) >= (soc_export_limit_int - surplus_exit_hysteresis_int))
-               and (solar_power_float > (actual_power_float + grid - surplus_pv_hysteresis_int)) }}
+               and (solar_power_float > (actual_power_float + grid_power_float - surplus_pv_hysteresis_int)) }}
           {% else %}
             {{ (states(soc) | float(0) >= soc_export_limit_int)
                and (grid_power_float <= (target_offset + tolerance_int))
@@ -917,22 +919,22 @@ actions:
                and (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int)) }}
           {% endif %}
         {% endif %}
-
+      
       # -----------------------------------------------------------------------
       # PI-Regler Berechnung
       # -----------------------------------------------------------------------
 
-      # 1. Aktueller Fehler
+      # 1. Aktueller Fehler 
       error: >
         {% if is_state(cycle_active, 'on') %}
-          {# ZONE 1: Min(verfügbare Kapazität, grid_power_float − Offset) #}
+          {# ZONE 1: Min(verfügbare Kapazität, Grid − Offset) #}
           {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_1_int)] | min | float(0) }}
         {% else %}
-          {# ZONE 2: Min(verfügbare Kapazität, grid_power_float - Offset, PV-Kapazität) #}
+          {# ZONE 2: Min(verfügbare Kapazität, Grid - Offset, PV-Kapazität) #}
           {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_2_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
         {% endif %}
-
-      # 2. Integral mit Anti-Windup (Clamp ±1000) und Toleranz-Decay (×0,95 wenn |Integral| > 10)
+      
+      # 2. Integral mit Anti-Windup
       integral_old: "{{ states(integral_entity) | float(0) }}"
       integral_new: >
         {% set error_float = error | float(0) %}
@@ -943,7 +945,7 @@ actions:
         {% else %}
           {{ integral_old | float(0) }}
         {% endif %}
-
+      
       # 3. PI-Korrektur (P-Anteil + I-Anteil)
       power_correction_pi: >
         {% set error_float = error | float(0) %}
@@ -951,13 +953,13 @@ actions:
         {% set p_part = error_float * regulator_factor_float %}
         {% set i_part = integral_float * ki_factor_float %}
         {{ (p_part + i_part) | float(0) }}
-
-      # 4. Neuer Power-Sollwert (vor Zonen-Begrenzung)
+      
+      # 4. Neuer Power-Sollwert
       new_power_unlimited: >
         {% set correction = power_correction_pi | float(0) %}
         {{ (current_active_power + correction) | float(0) }}
-
-      # 5. Finale Power: zonenabhängig begrenzt (Zone 0 wird separat in Schritt 4 behandelt)
+        
+      # 5. Finale Power: Logik in einem Template zusammengefasst
       final_power_calculated: >
         {% set p_regler_power = new_power_unlimited | float(0) %}
         {% if is_state(cycle_active, 'on') %}
@@ -968,7 +970,7 @@ actions:
           {% set max_zone_2 = max_zone_2_limit | float(0) %}
           {{ [max_zone_2, p_regler_power] | min | float(0) }}
         {% endif %}
-     
+        
 # SCHRITT 1: Entladestrom setzen
   - choose:
       # FALL 1a: Limit für Zone 1 setzen (Aggressiv)
@@ -978,6 +980,7 @@ actions:
             state: 'on'
           - condition: template
             value_template: >
+              {# Prüfe, ob der aktuelle Wert NICHT dem Maximalwert entspricht und der Surplus modus inaktiv ist #}
               {{ not (is_surplus_mode | bool) and states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
         sequence:
           - action: number.set_value
@@ -1043,10 +1046,10 @@ actions:
           entity_id: !input integral_helper
           value: "{{ integral_new }}"
       
+
   # SCHRITT 4: Ausgangsleistung setzen + Delay (NUR wenn nötig)
   #    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
-  #    Surplus Boolean nur aktualisieren wenn nötig
-  
+  #    Surplus Boolean nur zurücksetzen wenn nötig
   - choose:
       - conditions:
           - condition: template
@@ -1113,21 +1116,3 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
