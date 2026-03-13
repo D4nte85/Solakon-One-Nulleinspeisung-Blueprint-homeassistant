@@ -1285,7 +1285,7 @@ actions:
 
       - conditions:
           - condition: template
-            value_template: "{{ not (is_surplus_mode | bool(false)) and grid_error_for_tolerance > tolerance_int }}"
+            value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
         sequence:
           - choose:
               - conditions:
@@ -1295,7 +1295,7 @@ actions:
                   - action: input_boolean.turn_off
                     data:
                       entity_id: !input surplus_state_helper
-          # PI-Output setzen (Max(0, final_power_calculated)):
+          # PI-Ausgangsleistung setzen:
           - action: number.set_value
             data:
               entity_id: !input active_power_number
