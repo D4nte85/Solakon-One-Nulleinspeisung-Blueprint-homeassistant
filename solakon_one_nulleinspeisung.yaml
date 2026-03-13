@@ -796,7 +796,7 @@ actions:
                 state: 'off'
               # Modus ist aktuell aktiv
               - condition: template
-                value_template: "{{ states(solakon_mode) == '1' }}"
+                value_template: "{{ states(solakon_mode) != '0' }}"
             sequence:
               # Logging
               - action: logbook.log
