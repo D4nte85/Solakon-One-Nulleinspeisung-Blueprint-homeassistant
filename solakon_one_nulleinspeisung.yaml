@@ -561,6 +561,7 @@ variables:
   discharge_current_max: !input default_discharge_current
   surplus_export_enabled_bool: !input surplus_export_enabled
   surplus_state_entity: !input surplus_state_helper
+  # Guard: true nur wenn Zone 0 aktiviert, Helper konfiguriert und Zustand verfügbar
   surplus_entity_valid: >
     {{ surplus_export_enabled_bool and
        surplus_state_entity is string and 
@@ -596,14 +597,15 @@ variables:
   grid_power_entity: !input grid_power_sensor
   charge_tolerance: !input tolerance
   actual_power_sensor: !input actual_power_sensor
+  grid: "{{ states(grid_power_entity) | float(0) }}"
   actual_power_float: "{{ states(actual_power_sensor) | float(0) }}"
+  # Aktiver Offset je nach Zone (Zone 1 → offset_1_int, Zone 2 → offset_2_int); genutzt für AC-Laden-Fehlerberechnung
   active_offset: >
     {% if is_state(cycle_active, 'on') %}
       {{offset_1_int }}
     {% else %}
       {{ offset_2_int }}
     {% endif %}
-  grid: "{{ states(grid_power_entity) | float(0) }}"
 
 triggers:
   # -------------------------------------------------------------------------------------------------
@@ -806,7 +808,7 @@ actions:
                   entity_id: !input active_power_number
                   value: 0
                      
-          # FALL G: AC Laden — Einspeisung ins Netz erkannt (Grid negativ)
+          # FALL G: AC Laden — Eintritt (Grid + Output < −Toleranz) ODER Verbleib im Lademodus (Modus='3' UND Grid < Hysterese)
           - conditions:
               - condition: template
                 value_template: "{{ ac_charge_enabled_bool }}"
@@ -1103,7 +1105,7 @@ actions:
       wait_time_int: !input wait_time
             
       # -----------------------------------------------------------------------
-      # ÜBERSCHUSS-MODUS (Zone 0): Nur berechnen wenn Feature aktiviert
+      # ÜBERSCHUSS-MODUS (Zone 0): Gibt false zurück wenn Feature/Helper ungültig; sonst Two-State-Hysterese-Logik
       # -----------------------------------------------------------------------
       is_surplus_mode: >
         {% if not surplus_entity_valid or states(solakon_mode) == '3' %}
@@ -1159,12 +1161,12 @@ actions:
         {% set i_part = integral_float * ki_factor_float %}
         {{ (p_part + i_part) | float(0) }}
       
-      # 4. Neuer Power-Sollwert
+      # 4. Neuer Power-Sollwert (vor Zonen-Begrenzung)
       new_power_unlimited: >
         {% set correction = power_correction_pi | float(0) %}
         {{ (current_active_power + correction) | float(0) }}
         
-      # 5. Finale Power: Logik in einem Template zusammengefasst
+      # 5. Finale Power: zonenabhängig begrenzt (Zone 0 wird separat in Schritt 4 behandelt)
       final_power_calculated: >
         {% set p_regler_power = new_power_unlimited | float(0) %}
         {% if states(solakon_mode) == '3' %}
@@ -1325,6 +1327,7 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
