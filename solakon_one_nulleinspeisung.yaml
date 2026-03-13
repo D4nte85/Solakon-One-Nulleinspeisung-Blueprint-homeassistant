@@ -1278,7 +1278,7 @@ actions:
                       value: "{{ max_active_power_limit_int }}"
               - conditions:
                   - condition: template
-                    value_template: "{{ not is_state(surplus_state_entity, 'on') }}"
+                    value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
                 sequence:
                   - action: number.set_value
                     data:
