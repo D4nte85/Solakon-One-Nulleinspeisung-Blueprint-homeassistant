@@ -482,7 +482,7 @@ variables:
 
   # Grid Power
   grid_power_entity: !input grid_power_sensor
-  grid: "{{ states(grid_power_entity) | float(0) }}"  # Netzleistung als Float (W)
+  grid_power_float: "{{ states(grid_power_entity) | float(0) }}"  # Netzleistung als Float (W)
 
   # Solar Power (DC-PV-Eingangsleistung — nicht identisch mit AC-Ausgang)
   solar_power: !input solar_power_sensor
@@ -894,7 +894,7 @@ actions:
         {% endif %}
 
       # Toleranzprüfung basiert auf tatsächlichem Grid-Fehler (nicht begrenzt)
-      grid_error_for_tolerance: "{{ (grid - target_offset) | abs }}"
+      grid_error_for_tolerance: "{{ (grid_power_float - target_offset) | abs }}"
 
       # Wartezeit
       wait_time_int: !input wait_time
@@ -912,9 +912,9 @@ actions:
                and (solar_power_float > (actual_power_float + grid - surplus_pv_hysteresis_int)) }}
           {% else %}
             {{ (states(soc) | float(0) >= soc_export_limit_int)
-               and (grid <= (target_offset + tolerance_int))
+               and (grid_power_float <= (target_offset + tolerance_int))
                and (solar_power_float >= night_pv_threshold)
-               and (solar_power_float > (actual_power_float + grid + surplus_pv_hysteresis_int)) }}
+               and (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int)) }}
           {% endif %}
         {% endif %}
 
@@ -925,11 +925,11 @@ actions:
       # 1. Aktueller Fehler
       error: >
         {% if is_state(cycle_active, 'on') %}
-          {# ZONE 1: Min(verfügbare Kapazität, Grid − Offset) #}
-          {{ [(max_active_power_limit_int - current_active_power), (grid - offset_1_int)] | min | float(0) }}
+          {# ZONE 1: Min(verfügbare Kapazität, grid_power_float − Offset) #}
+          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_1_int)] | min | float(0) }}
         {% else %}
-          {# ZONE 2: Min(verfügbare Kapazität, Grid - Offset, PV-Kapazität) #}
-          {{ [(max_active_power_limit_int - current_active_power), (grid - offset_2_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
+          {# ZONE 2: Min(verfügbare Kapazität, grid_power_float - Offset, PV-Kapazität) #}
+          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_2_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
         {% endif %}
 
       # 2. Integral mit Anti-Windup (Clamp ±1000) und Toleranz-Decay (×0,95 wenn |Integral| > 10)
@@ -1113,6 +1113,7 @@ actions:
               - action: input_boolean.turn_off
                 data:
                   entity_id: !input surplus_state_helper
+
 
 
 
