@@ -615,7 +615,7 @@ actions:
                   option: 'on'
               # 2. Surplusmode auf off setzen (nur wenn Zone 0 aktiv)
               - choose:
-                  - conditions: "{{ surplus_entity_valid and is_state(surplus_state_entity, 'on') }}"
+                  - conditions: "{{ (surplus_entity_valid | bool) and is_state(surplus_state_entity, 'on') }}"
                     sequence:
                       - action: input_boolean.turn_off
                         data:
@@ -664,7 +664,7 @@ actions:
                   option: 'off'
               # 2. Surplusmode auf off setzen (nur wenn Zone 0 aktiv)
               - choose:
-                  - conditions: "{{ surplus_entity_valid and is_state(surplus_state_entity, 'on') }}"
+                  - conditions: "{{ (surplus_entity_valid | bool) and is_state(surplus_state_entity, 'on') }}"
                     sequence:
                       - action: input_boolean.turn_off
                         data:
@@ -1058,7 +1058,7 @@ actions:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ surplus_entity_valid and not is_state(surplus_state_entity, 'on') }}"
+                    value_template: "{{ (surplus_entity_valid | bool) and not is_state(surplus_state_entity, 'on') }}"
                 sequence:
                   - action: input_boolean.turn_on
                     data:
@@ -1077,7 +1077,7 @@ actions:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ surplus_entity_valid }}"
+                    value_template: "{{ (surplus_entity_valid | bool) }}"
                 sequence:
                   - action: input_boolean.turn_off
                     data:
@@ -1102,7 +1102,7 @@ actions:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ surplus_entity_valid and not is_state(surplus_state_entity, 'on') }}"
+                    value_template: "{{ (surplus_entity_valid | bool) and not is_state(surplus_state_entity, 'on') }}"
                 sequence:
                   - action: input_boolean.turn_on
                     data:
@@ -1111,7 +1111,7 @@ actions:
       - choose:
           - conditions:
               - condition: template
-                value_template: "{{ surplus_entity_valid  and  is_state(surplus_state_entity, 'on') }}"
+                value_template: "{{ (surplus_entity_valid | bool)  and  is_state(surplus_state_entity, 'on') }}"
             sequence:
               - action: input_boolean.turn_off
                 data:
