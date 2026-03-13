@@ -1075,7 +1075,10 @@ actions:
                         value: "{{ max_active_power_limit_int }}"
                     - delay:
                         seconds: "{{ wait_time_int }}"
-                default:
+                - conditions:
+                  - condition: template
+                    value_template: "{{ not is_state(surplus_state_entity, 'on') }}"
+                sequence:
                   - action: number.set_value
                     data:
                       entity_id: !input active_power_number
