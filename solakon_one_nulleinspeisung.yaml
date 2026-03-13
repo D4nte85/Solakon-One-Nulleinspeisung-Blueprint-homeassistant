@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V207)
+  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V208)
   description: |
     ### Dynamische Nulleinspeisung mit SOC-Zonenlogik
       Dieser Home Assistant Blueprint implementiert eine dynamische Nulleinspeisung für den Solakon ONE Wechselrichter.
@@ -16,14 +16,19 @@ blueprint:
     
     ---
     
-    ### 🔋 Dreistufige SOC-Zonenlogik
-    Die Logik unterteilt den Batterieladestand (SOC) in drei Zonen:
+    ### 🔋 SOC-Zonenlogik (3 oder 4 Zonen je nach Konfiguration)
     
+    #### 0. Zone: Überschuss-Einspeisung (Optional - aktivierbar)
+    * **Eintritts-Bedingung:** SOC ≥ konfigurierte Schwelle UND Netz ≤ Offset + Toleranz UND PV aktiv (≥ Nacht-Schwelle) UND PV > aktuelle Ausgangsleistung + Grid-Leistung + PV-Hysterese.
+    * **Aktion:** AC-Output-Limit wird auf Maximum gesetzt, Max. Entladestrom auf 2 A (Stabilitätspuffer für den Wechselrichter).Überwiegend PV-Strom fließt ins Netz.
+    * **Rückkehr:** Sobald SOC unter (Export-Schwelle − SOC-Hysterese) fällt ODER PV-Leistung unter (Ausgangsleistung + Grid − PV-Hysterese) sinkt.
+    * **⚠️ Deaktiviert:** Wenn diese Funktion deaktiviert ist gilt die klassische Nulleinspeisung.
+        
     #### 1. Zone: Aggressive Regelung (Entladezyklus / Hoher SOC)
     * **Bedingung:** SOC > Oberer Schwellenwert (`soc_fast_limit`) ODER Entladezyklus aktiv.
     * **Aktion:** Max. Entladestrom wird auf den Standardwert (z.B. 40 A) gesetzt.
     * **Regelung:** PI-Regler mit Nullpunkt-Offset (z.B. 30 W) zur Verschiebung des Regelziels hin zu leichtem Netzbezug oder exacter Nulleinspeisung.
-    * **Verhalten:** Einmal aktiviert, läuft Zone 1 bis SOC ≤ 20% fällt (kein Yo-Yo-Effekt).
+    * **Verhalten:** Zone 1 läuft dann bis SOC < Zone-3-Schwelle fällt (kein Yo-Yo-Effekt).
     
     #### 2. Zone: Batterieschonende Regelung (Zwischen-SOC)
     * **Bedingung:** SOC zwischen Unterer (`soc_conservation_limit`) und Oberer Schwelle, UND Entladezyklus inaktiv.
@@ -33,11 +38,11 @@ blueprint:
     * **Nachtabschaltung:** Optional kann Zone 2 bei PV < Schwelle deaktiviert werden (Zone 1 bleibt aktiv).
     
     #### 3. Zone: Sicherheits-Stopp (Niedriger SOC)
-    * **Bedingung:** SOC fällt auf oder unter den Unteren Schwellenwert.
+    * **Bedingung:** SOC fällt unter den Unteren Schwellenwert.
     * **Aktion:** Sofortiges Umschalten auf "Disabled" und Setzen des AC-Output-Limits auf 0 W.
     
   domain: automation
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/experimental_surplus-schrott/solakon_one_nulleinspeisung.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/main/solakon_one_nulleinspeisung.yaml
   input:
       
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -65,7 +70,16 @@ blueprint:
         name: "⚡ SOLAKON ONE - ENTITÄTEN:"
         description: "Hier findest du die notwendigen Solakon One Entitäten mit ausgewählten Standarts."
         collapsed: true 
-        input:    
+        input:
+          actual_power_sensor:
+            name: ⚡ Solakon ONE - Tatsächliche Ausgangsleistung
+            description: Die tatsächliche AC-Ausgangsleistung des Wechselrichters.
+            default: sensor.solakon_one_leistung
+            selector:
+              entity:
+                domain: sensor
+                device_class: power
+
           solar_power_sensor:
             name: ☀️ Solakon ONE - Solarleistung (PV-Erzeugung)
             description: Die aktuelle PV-Gesamterzeugung in Watt.
@@ -233,7 +247,7 @@ blueprint:
             description: |
               Obere Schwelle (z.B. 50 %).
               Überschreiten aktiviert Zone 1 (aggressive Entladung mit 40A).
-              Zone 1 läuft dann bis SOC ≤ 20% fällt (kein Yo-Yo-Effekt).
+              Zone 1 läuft dann bis SOC < Zone-3-Schwelle fällt (kein Yo-Yo-Effekt).
             default: 50
             selector:
               number:
@@ -359,7 +373,74 @@ blueprint:
                 min: 0
                 max: 1200
                 unit_of_measurement: W
-        
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # ☀️ ÜBERSCHUSS-EINSPEISUNG (Optional - Zone 0)
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      surplus_parameter:
+        name: "☀️ ÜBERSCHUSS-EINSPEISUNG (Optional - Zone 0):"
+        description: |
+          Wenn aktiviert: Bei vollem Akku und echtem PV-Überschuss wird der Überschuss direkt ins Netz eingespeist.
+          Wenn deaktiviert: Klassische Nulleinspeisung, kein Einspeisen ins Netz.
+        collapsed: true
+        input:
+          surplus_export_enabled:
+            name: ☀️ Überschuss-Einspeisung aktivieren
+            description: |
+              Aktiviert Zone 0 (Überschuss-Einspeisung bei vollem Akku).
+              ✅ EIN: Wenn SOC ≥ Schwelle UND PV > Verbrauch + PV-Ladereserve → AC-Limit auf Maximum, PV-Überschuss ins Netz.
+              ❌ AUS: Klassische Nulleinspeisung. Kein aktives Einspeisen.
+            default: false
+            selector:
+              boolean:
+
+          soc_export_limit:
+            name: 🔋 SOC-Schwelle für Überschuss-Einspeisung
+            description: |
+              Erreicht der SOC diesen Wert (z.B. 90 %) und es liegt PV-Überschuss an,
+              wird die Nulleinspeisung ausgesetzt und PV-Überschuss ins Netz gedrückt.
+              ⚠️ Nur relevant wenn Überschuss-Einspeisung aktiviert ist.
+              ⚠️ MUSS echt kleiner sein als das in der Solakon eingestellte max soc !!!
+            default: 90
+            selector:
+              number:
+                min: 50
+                max: 99
+                unit_of_measurement: "%"
+
+          surplus_exit_hysteresis:
+            name: 🔋 Überschuss-Einspeisung Hysterese (SOC)
+            description: |
+              SOC muss um diesen Wert unter die Eintritts-Schwelle fallen bevor Zone 0 verlassen wird.
+              Verhindert Flackern bei nachlassender PV (z.B. 5 % → Austritt bei SOC < 85% wenn Schwelle = 90%).
+            default: 5
+            selector:
+              number:
+                min: 1
+                max: 20
+                unit_of_measurement: "%"
+
+          surplus_pv_hysteresis:
+            name: ☀️ PV-Überschuss Hysterese
+            description: |
+              Totband um den Hausverbrauch. Eintritt erst wenn PV um diesen Wert über dem Verbrauch liegt,
+              Austritt erst wenn PV um diesen Wert darunter fällt. Verhindert Flackern bei schwankender PV.
+            default: 50
+            selector:
+              number:
+                min: 10
+                max: 200
+                unit_of_measurement: W
+                
+          surplus_state_helper:
+            name: ☀️ Surplus-Zustand Speicher (input_boolean - Optional, nur für Zone 0)
+            description: |
+              input_boolean Helper zum persistenten Tracken des Surplus-Zustands.
+              Verhindert vorzeitigen Exit während MPPT-Ramping.
+              ⚠️ Nur erforderlich wenn Überschuss-Einspeisung aktiviert ist. Bei deaktivierter Zone 0 kann dieses Feld leer gelassen werden.
+            default: input_boolean.solakon_surplus_aktiv
+            selector:
+              entity:
+                domain: input_boolean  
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🌙 NACHTABSCHALTUNG (Optional)
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -424,6 +505,13 @@ variables:
   
   # Parameter
   discharge_current_max: !input default_discharge_current
+  surplus_export_enabled_bool: !input surplus_export_enabled
+  surplus_state_entity: !input surplus_state_helper
+  surplus_entity_valid: >
+    {{ surplus_export_enabled_bool and
+       surplus_state_entity is string and 
+       surplus_state_entity | length > 0 and
+       states(surplus_state_entity) not in ['unknown', 'unavailable'] }}
 
 triggers:
   # -------------------------------------------------------------------------------------------------
@@ -457,238 +545,264 @@ triggers:
     entity_id: !input mode_select
     id: mode_change
 
-action:
+actions:
   # -------------------------------------------------------------------------------------------------
-  # VALIDIERUNG: Check auf kritische Fehler (Werte und Entitäten)
+  # PRÜFUNG: Check auf kritische Fehler (Werte und Entitäten)
   # -------------------------------------------------------------------------------------------------
   - choose:
-    # PRÜFUNG A: SOC-Limits
-    - conditions:
-        - condition: template
-          value_template: "{{ soc_fast_limit_int <= soc_conservation_limit_int }}"
-      sequence:
-        - service: system_log.write
-          data:
-            level: error
-            message: "Solakon ONE Blueprint Fehler Die obere SOC-Schwelle ({{ soc_fast_limit_int }}%) muss größer sein als die untere SOC-Schwelle ({{ soc_conservation_limit_int }}%). Automatisierung gestoppt."
-        - stop: Die SOC-Limits sind falsch gesetzt.
-          
-    # PRÜFUNG B: Kritische Entitäten verfügbar
-    - conditions:
-        - condition: or
-          conditions:
-            # SOC und Timeout-Countdown: Prüfe direkt auf 'unknown'/'unavailable'
-            - condition: template
-              value_template: >
-                {{ is_state(soc, 'unknown') or is_state(soc, 'unavailable') or
-                   is_state(timeout_countdown, 'unknown') or is_state(timeout_countdown, 'unavailable') }}
-            # Grid Power: Wird später geprüft (nach Variables)
-            # Modus-Selektor
-            - condition: template
-              value_template: "{{ is_state(solakon_mode, 'unknown') or is_state(solakon_mode, 'unavailable') }}"
-            # Active Power Number
-            - condition: template
-              value_template: "{{ state_attr(active_power_entity, 'min') is none }}"
-      sequence:
-        - service: system_log.write
-          data:
-            level: error
-            message: "Solakon ONE Blueprint Fehler Eine oder mehrere kritische Entitäten (SOC, Timeout-Sensor, Ausgangsleistungsregler) sind UNVERFÜGBAR oder haben ungültige Werte. Automatisierung gestoppt."
-        - stop: Kritische Entitäten sind fehlerhaft.
-          
-    default:
-      # -------------------------------------------------------------------------------------------------
-      # HAUPT-LOGIK: Modus- und Zyklus-Steuerung (Zone 1, 2, 3)
-      # -------------------------------------------------------------------------------------------------
-      - choose:
-          # FALL A: ZONE 1 - Aggressive Entladung START (SOC > Obere Schwelle UND Zyklus OFF)
-          - conditions:
+      - conditions:
+          - condition: or
+            conditions:
               - condition: template
-                value_template: "{{ states(soc) | float(0) > soc_fast_limit_int }}"
-              - condition: state
-                entity_id: !input cycle_active_input_select
-                state: 'off'
-            sequence:
-              # Logging
-              - service: logbook.log
-                data:
-                  name: Solakon Zonenwechsel
-                  message: "🔋 Zone 1 aktiviert (Aggressive Entladung) - SOC: {{ states(soc) }}%"
-                  entity_id: !input soc_sensor
-              # Integral zurücksetzen bei Zonenwechsel
-              - service: input_number.set_value
-                data:
-                  entity_id: !input integral_helper
-                  value: 0
-              # 1. Zyklus auf 'on' setzen
-              - service: input_select.select_option
-                data:
-                  entity_id: !input cycle_active_input_select
-                  option: 'on'
-              # 2. Modus-Wechsel zu 'INV Discharge PV Priority' (mit Puls-Sequenz zur Sicherheit)
-              - choose:
-                  - conditions: "{{ states(solakon_mode) != '1' }}"
-                    sequence:
-                      - service: number.set_value
-                        data:
-                          entity_id: !input remote_timeout_set_number
-                          value: 10
-                      - delay: '00:00:01' 
-                      - service: number.set_value
-                        data:
-                          entity_id: !input remote_timeout_set_number
-                          value: 3599
-                      - service: select.select_option
-                        data:
-                          entity_id: !input mode_select
-                          option: '1'
-          
-          # FALL B: ZONE 3 - Sicherheits-STOPP (SOC <= Untere Schwelle UND Zyklus ON)
-          - conditions:
-              - condition: template
-                value_template: "{{ states(soc) | float(0) <= soc_conservation_limit_int }}"
-              - condition: state
-                entity_id: !input cycle_active_input_select
-                state: 'on'
-            sequence:
-              # Logging
-              - service: logbook.log
-                data:
-                  name: Solakon Zonenwechsel
-                  message: "🛑 Zone 3 aktiviert (Sicherheits-Stopp) - SOC: {{ states(soc) }}%"
-                  entity_id: !input soc_sensor
-              # Integral zurücksetzen
-              - service: input_number.set_value
-                data:
-                  entity_id: !input integral_helper
-                  value: 0
-              # 1. Zyklus auf 'off' setzen
-              - service: input_select.select_option
-                data:
-                  entity_id: !input cycle_active_input_select
-                  option: 'off'
-              # 2. Modus-Wechsel zu 'Disabled'
-              - choose:
-                  - conditions: "{{ states(solakon_mode) != '0' }}"
-                    sequence:
-                      - service: select.select_option
-                        data:
-                          entity_id: !input mode_select
-                          option: '0'
-              # 3. Power Limit auf 0 W setzen (Soft Stopp)
-              - service: number.set_value
-                data:
-                  entity_id: !input active_power_number
-                  value: 0
-                  
-          # FALL C: ZONE 3 - Sicherheits-STOPP (Zusätzliche Absicherung, falls Zyklus bereits OFF aber Modus aktiv)
-          - conditions:
-              - condition: template
-                value_template: "{{ states(soc) | float(0) < soc_conservation_limit_int }}"
-              - condition: state
-                entity_id: !input cycle_active_input_select
-                state: 'off'
-              - condition: template
-                value_template: "{{ states(solakon_mode) != '0' }}"
-            sequence:
-              # Modus auf 'Disabled' setzen
-              - choose:
-                  - conditions: "{{ states(solakon_mode) != '0' }}"
-                    sequence:
-                      - service: select.select_option
-                        data:
-                          entity_id: !input mode_select
-                          option: '0'
-              # Power Limit auf 0 W setzen
-              - service: number.set_value
-                data:
-                  entity_id: !input active_power_number
-                  value: 0
-                  
-          # FALL D: ZONE 2 - Batterieschonend START (P-Regler aktiv, aber 0 A Entladung)
-          - conditions:
-              - condition: template
-                value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int and states(soc) | float(0) <= soc_fast_limit_int }}"
-              - condition: state
-                entity_id: !input cycle_active_input_select
-                state: 'off'
-              - condition: template
-                value_template: "{{ states(solakon_mode) != '1' }}"
-              # Nachtcheck: Nur starten wenn NICHT Nacht ODER Funktion deaktiviert
+                value_template: "{{ soc_fast_limit_int <= soc_conservation_limit_int }}"
               - condition: template
                 value_template: >
-                  {{ not night_shutdown_enabled_bool or 
-                     (states(solar_power_for_night_check) | float(0)) >= night_pv_threshold }}
-            sequence:
-              # Logging
-              - service: logbook.log
-                data:
-                  name: Solakon Zonenwechsel
-                  message: "🔋 Zone 2 aktiviert (Batterieschonend) - SOC: {{ states(soc) }}%"
-                  entity_id: !input soc_sensor
-              # Integral zurücksetzen bei Zonenwechsel
-              - service: input_number.set_value
-                data:
-                  entity_id: !input integral_helper
-                  value: 0
-              # Modus-Wechsel zu 'INV Discharge PV Priority'
-              - choose:
-                  - conditions: "{{ states(solakon_mode) != '1' }}"
-                    sequence:
-                      - service: number.set_value
-                        data:
-                          entity_id: !input remote_timeout_set_number
-                          value: 10
-                      - delay: '00:00:01'
-                      - service: number.set_value
-                        data:
-                          entity_id: !input remote_timeout_set_number
-                          value: 3599
-                      - service: select.select_option
-                        data:
-                          entity_id: !input mode_select
-                          option: '1'
-          
-          - conditions:
-              # Nachtabschaltung aktiviert
-              - condition: template
-                value_template: "{{ night_shutdown_enabled_bool }}"
-              # Es ist Nacht (PV unter Schwelle)
-              - condition: template
-                value_template: "{{ (states(solar_power_for_night_check) | float(0)) < night_pv_threshold }}"
-              # Nur in Zone 2 (cycle = off)
-              - condition: state
-                entity_id: !input cycle_active_input_select
-                state: 'off'
-              # Modus ist aktuell aktiv
-              - condition: template
-                value_template: "{{ states(solakon_mode) != '0' }}"
-            sequence:
-              # Logging
-              - service: logbook.log
-                data:
-                  name: Solakon Nachtmodus
-                  message: "🌙 Nachtabschaltung aktiviert (Zone 2) - PV: {{ states(solar_power_for_night_check) }}W"
-                  entity_id: !input solar_power_sensor
-              # Integral zurücksetzen
-              - service: input_number.set_value
-                data:
-                  entity_id: !input integral_helper
-                  value: 0
-              # Modus auf 'Disabled' setzen
-              - service: select.select_option
-                data:
-                  entity_id: !input mode_select
-                  option: '0'
-              # Power Limit auf 0 W
-              - service: number.set_value
-                data:
-                  entity_id: !input active_power_number
-                  value: 0
-                          
+                  {{ is_state(soc, 'unknown') or is_state(soc, 'unavailable') or
+                     is_state(timeout_countdown, 'unknown') or is_state(timeout_countdown, 'unavailable') }}
+        sequence:
+          - action: system_log.write
+            data:
+              level: error
+              message: "Solakon Fehler: SOC-Limits ungültig oder Entitäten offline. Abbruch."
+          - stop: "Kritischer Fehler oder ungültige Konfiguration."
+        
   # -------------------------------------------------------------------------------------------------
-  # AKTION E: PI-Regler Logik, Timeout-Refresh UND Entlade-Limit-Absicherung
-  # NUR ausführen wenn Modus aktiv ist UND (Zone 1 ODER Tag)!
+  # HAUPT-LOGIK: Modus- und Zyklus-Steuerung (Zone 1, 2, 3)
+  # -------------------------------------------------------------------------------------------------
+  - choose:
+      # FALL A: ZONE 1 - Aggressive Entladung START (SOC > Obere Schwelle UND Zyklus OFF)
+      - conditions:
+          - condition: template
+            value_template: "{{ states(soc) | float(0) > soc_fast_limit_int }}"
+          - condition: state
+            entity_id: !input cycle_active_input_select
+            state: 'off'
+        sequence:
+          # Logging
+          - action: logbook.log
+            data:
+              name: Solakon Zonenwechsel
+              message: "🔋 Zone 1 aktiviert (Aggressive Entladung) - SOC: {{ states(soc) }}%"
+              entity_id: !input soc_sensor
+          # Integral zurücksetzen bei Zonenwechsel
+          - action: input_number.set_value
+            data:
+              entity_id: !input integral_helper
+              value: 0
+          # 1. Zyklus auf 'on' setzen
+          - action: input_select.select_option
+            data:
+              entity_id: !input cycle_active_input_select
+              option: 'on'
+          # 2. Surplusmode auf off setzen (nur wenn Zone 0 aktiv)
+          - choose:
+              - conditions: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - action: input_boolean.turn_off
+                    data:
+                      entity_id: !input surplus_state_helper
+          # 3. Modus-Wechsel zu 'INV Discharge PV Priority'
+          - choose:
+              - conditions: "{{ states(solakon_mode) != '1' }}"
+                sequence:
+                  - action: number.set_value
+                    data:
+                      entity_id: !input remote_timeout_set_number
+                      value: 10
+                  - delay: '00:00:01' 
+                  - action: number.set_value
+                    data:
+                      entity_id: !input remote_timeout_set_number
+                      value: 3599
+                  - action: select.select_option
+                    data:
+                      entity_id: !input mode_select
+                      option: '1'
+      
+      # FALL B: ZONE 3 - Sicherheits-STOPP (SOC < Untere Schwelle UND Zyklus ON)
+      - conditions:
+          - condition: template
+            value_template: "{{ states(soc) | float(0) < soc_conservation_limit_int }}"
+          - condition: state
+            entity_id: !input cycle_active_input_select
+            state: 'on'
+        sequence:
+          # Logging
+          - action: logbook.log
+            data:
+              name: Solakon Zonenwechsel
+              message: "🛑 Zone 3 aktiviert (Sicherheits-Stopp) - SOC: {{ states(soc) }}%"
+              entity_id: !input soc_sensor
+          # Integral zurücksetzen
+          - action: input_number.set_value
+            data:
+              entity_id: !input integral_helper
+              value: 0
+          # 1. Zyklus auf 'off' setzen
+          - action: input_select.select_option
+            data:
+              entity_id: !input cycle_active_input_select
+              option: 'off'
+          # 2. Surplusmode auf off setzen (nur wenn Zone 0 aktiv)
+          - choose:
+              - conditions: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - action: input_boolean.turn_off
+                    data:
+                      entity_id: !input surplus_state_helper
+          # 3. Modus-Wechsel zu 'Disabled'
+          - choose:
+              - conditions: "{{ states(solakon_mode) != '0' }}"
+                sequence:
+                  - action: select.select_option
+                    data:
+                      entity_id: !input mode_select
+                      option: '0'
+          # 4. Power Limit auf 0 W setzen (Soft Stopp)
+          - action: number.set_value
+            data:
+              entity_id: !input active_power_number
+              value: 0
+              
+      # FALL C: ZONE 3 - Sicherheits-STOPP (Zusätzliche Absicherung, falls Zyklus bereits OFF aber Modus aktiv)
+      - conditions:
+          - condition: template
+            value_template: "{{ states(soc) | float(0) < soc_conservation_limit_int }}"
+          - condition: state
+            entity_id: !input cycle_active_input_select
+            state: 'off'
+          - condition: template
+            value_template: "{{ states(solakon_mode) != '0' }}"
+        sequence:
+          # 1. Modus auf 'Disabled' setzen
+          - choose:
+              - conditions: "{{ states(solakon_mode) != '0' }}"
+                sequence:
+                  - action: select.select_option
+                    data:
+                      entity_id: !input mode_select
+                      option: '0'
+          # 2. Surplusmode auf off setzen (nur wenn Zone 0 aktiv)
+          - choose:
+              - conditions: "{{ surplus_entity_valid and is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - action: input_boolean.turn_off
+                    data:
+                      entity_id: !input surplus_state_helper
+          # 3. Power Limit auf 0 W setzen
+          - action: number.set_value
+            data:
+              entity_id: !input active_power_number
+              value: 0
+              
+      # FALL D: Recovery - Modus fiel ab, aber Zyklus ist noch aktiv
+      - conditions:
+          - condition: state
+            entity_id: !input cycle_active_input_select
+            state: 'on'
+          - condition: template
+            value_template: "{{ states(solakon_mode) != '1' }}"
+          - condition: template
+            value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int }}"
+        sequence:
+          - action: number.set_value
+            data:
+              entity_id: !input remote_timeout_set_number
+              value: 10
+          - delay: '00:00:01'
+          - action: number.set_value
+            data:
+              entity_id: !input remote_timeout_set_number
+              value: 3599
+          - action: select.select_option
+            data:
+              entity_id: !input mode_select
+              option: '1'
+    
+      # FALL E: ZONE 2 - Batterieschonend START (P-Regler aktiv, aber 0 A Entladung)
+      - conditions:
+          - condition: template
+            value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int and states(soc) | float(0) <= soc_fast_limit_int }}"
+          - condition: state
+            entity_id: !input cycle_active_input_select
+            state: 'off'
+          - condition: template
+            value_template: "{{ states(solakon_mode) == '0' }}"
+          # Nachtcheck: Nur starten wenn NICHT Nacht ODER Funktion deaktiviert
+          - condition: template
+            value_template: >
+              {{ not night_shutdown_enabled_bool or 
+                 (states(solar_power_for_night_check) | float(0)) >= night_pv_threshold }}
+        sequence:
+          # Logging
+          - action: logbook.log
+            data:
+              name: Solakon Zonenwechsel
+              message: "🔋 Zone 2 aktiviert (Batterieschonend) - SOC: {{ states(soc) }}%"
+              entity_id: !input soc_sensor
+          # Integral zurücksetzen bei Zonenwechsel
+          - action: input_number.set_value
+            data:
+              entity_id: !input integral_helper
+              value: 0
+          # Modus-Wechsel zu 'INV Discharge PV Priority'
+          - choose:
+              - conditions: "{{ states(solakon_mode) != '1' }}"
+                sequence:
+                  - action: number.set_value
+                    data:
+                      entity_id: !input remote_timeout_set_number
+                      value: 10
+                  - delay: '00:00:01'
+                  - action: number.set_value
+                    data:
+                      entity_id: !input remote_timeout_set_number
+                      value: 3599
+                  - action: select.select_option
+                    data:
+                      entity_id: !input mode_select
+                      option: '1'
+
+      # FALL F: Nachtabschaltung (Zone 2 bei PV < Schwelle)
+      - conditions:
+          # Nachtabschaltung aktiviert
+          - condition: template
+            value_template: "{{ night_shutdown_enabled_bool }}"
+          # Es ist Nacht (PV unter Schwelle)
+          - condition: template
+            value_template: "{{ (states(solar_power_for_night_check) | float(0)) < night_pv_threshold }}"
+          # Nur in Zone 2 (cycle = off)
+          - condition: state
+            entity_id: !input cycle_active_input_select
+            state: 'off'
+          # Modus ist aktuell aktiv
+          - condition: template
+            value_template: "{{ states(solakon_mode) != '0' }}"
+        sequence:
+          # Logging
+          - action: logbook.log
+            data:
+              name: Solakon Nachtmodus
+              message: "🌙 Nachtabschaltung aktiviert (Zone 2) - PV: {{ states(solar_power_for_night_check) }}W"
+              entity_id: !input solar_power_sensor
+          # Integral zurücksetzen
+          - action: input_number.set_value
+            data:
+              entity_id: !input integral_helper
+              value: 0
+          # Modus auf 'Disabled' setzen
+          - action: select.select_option
+            data:
+              entity_id: !input mode_select
+              option: '0'
+          # Power Limit auf 0 W
+          - action: number.set_value
+            data:
+              entity_id: !input active_power_number
+              value: 0
+                      
+  # -------------------------------------------------------------------------------------------------
+  # PRÜFUNG: NUR ausführen wenn Modus aktiv ist UND (Zone 1 ODER Tag)!
   # -------------------------------------------------------------------------------------------------
   - condition: template
     value_template: >
@@ -718,7 +832,7 @@ action:
       offset_1_entity_id: !input offset_1_entity
       offset_2_static: !input offset_2
       offset_2_entity_id: !input offset_2_entity
-
+  
       # Dynamischer Offset: Entity-Wert wenn konfiguriert, sonst statischer Fallback
       offset_1_int: >
         {% if offset_1_entity_id is string and offset_1_entity_id | length > 0 and states(offset_1_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
@@ -734,6 +848,13 @@ action:
         {% endif %}
       max_active_power_limit_int: !input max_active_power_limit
       pv_charge_reserve_int: !input pv_charge_reserve
+      soc_export_limit_int: !input soc_export_limit
+      surplus_exit_hysteresis_int: !input surplus_exit_hysteresis
+      
+      # Surplus
+      actual_power_sensor: !input actual_power_sensor
+      actual_power_float: "{{ states(actual_power_sensor) | float(0) }}"
+      surplus_pv_hysteresis_int: !input surplus_pv_hysteresis
       
       # PI-Regler-Variablen
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
@@ -746,7 +867,7 @@ action:
         {% else %}
           0
         {% endif %}
-
+  
       # Target Offset basiert auf Zone (offset_1_int in Zone 1, offset_2_int in Zone 2)
       target_offset: >
         {% if is_state(cycle_active, 'on') %}
@@ -760,12 +881,34 @@ action:
       
       # Wartezeit
       wait_time_int: !input wait_time
+            
+      # -----------------------------------------------------------------------
+      # ÜBERSCHUSS-MODUS (Zone 0): Nur berechnen wenn Feature aktiviert
+      # -----------------------------------------------------------------------
+      is_surplus_mode: >
+        {% if not (surplus_entity_valid | bool(false)) %}
+          {{ false }}
+        {% else %}
+          {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
+          {% if currently_in_surplus %}
+            {{ (states(soc) | float(0) >= (soc_export_limit_int - surplus_exit_hysteresis_int))
+               and (solar_power_float > (actual_power_float + grid_power_float - surplus_pv_hysteresis_int)) }}
+          {% else %}
+            {{ (states(soc) | float(0) >= soc_export_limit_int)
+               and (grid_power_float <= (target_offset + tolerance_int))
+               and (solar_power_float >= night_pv_threshold)
+               and (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int)) }}
+          {% endif %}
+        {% endif %}
       
-     # PI-Regler Berechnung
+      # -----------------------------------------------------------------------
+      # PI-Regler Berechnung
+      # -----------------------------------------------------------------------
+  
       # 1. Aktueller Fehler 
       error: >
         {% if is_state(cycle_active, 'on') %}
-          {# ZONE 1: Min(verfügbare Kapazität, Grid) #}
+          {# ZONE 1: Min(verfügbare Kapazität, Grid − Offset) #}
           {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_1_int)] | min | float(0) }}
         {% else %}
           {# ZONE 2: Min(verfügbare Kapazität, Grid - Offset, PV-Kapazität) #}
@@ -809,67 +952,164 @@ action:
           {{ [max_zone_2, p_regler_power] | min | float(0) }}
         {% endif %}
         
+  # SCHRITT 1: Entladestrom setzen
   - choose:
-      # FALL E.1: Limit für Zone 1 setzen (Aggressiv)
+      # FALL 1a: Limit für Zone 1 setzen (Aggressiv)
       - conditions:
           - condition: state
             entity_id: !input cycle_active_input_select
             state: 'on'
           - condition: template
             value_template: >
-              {# Prüfe, ob der aktuelle Wert NICHT dem Maximalwert entspricht #}
-              {{ states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
+              {# Prüfe, ob der aktuelle Wert NICHT dem Maximalwert entspricht und der Surplus modus inaktiv ist #}
+              {{ not (is_surplus_mode | bool(false)) and states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
         sequence:
-          - service: number.set_value
+          - action: number.set_value
             data:
               entity_id: !input max_discharge_current_number
               value: "{{ discharge_current_max }}"
               
-      # FALL E.2: Limit für Zone 2 setzen (Batterieschonend = 0 A)
+      # FALL 1b: Limit für Zone 0 setzen (Surplus-Puffer = 2 A)
       - conditions:
-          - condition: state
-            entity_id: !input cycle_active_input_select
-            state: 'off'
           - condition: template
             value_template: >
-              {# Prüfe, ob der aktuelle Wert NICHT 0 A entspricht #}
-              {{ states(discharge_current_entity) | float(999) | round(2) != 0 }}
+              {{ (is_surplus_mode | bool(false)) and 
+                 states(discharge_current_entity) | float(999) | round(2) != 2 }}
         sequence:
-          - service: number.set_value
+          - action: number.set_value
+            data:
+              entity_id: !input max_discharge_current_number
+              value: 2
+      
+      # FALL 1c: Limit für Zone 2 setzen (Batterieschonend = 0 A)
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ is_state(cycle_active, 'off') and 
+                 not (is_surplus_mode | bool(false)) and 
+                 states(discharge_current_entity) | float(999) | round(2) != 0 }}
+        sequence:
+          - action: number.set_value
             data:
               entity_id: !input max_discharge_current_number
               value: 0
-
-  # 2. Timeout-Reset
+  
+  # SCHRITT 2: Timeout-Reset
   - choose: 
         # Timeout-Reset erforderlich
       - conditions:
           - condition: template
             value_template: "{{ states(timeout_countdown) | int(9999) < 120 }}"
         sequence:
-          - service: number.set_value
+          - action: number.set_value
             data:
               entity_id: !input remote_timeout_set_number
               value: 10
           - delay: '00:00:01'
-          - service: number.set_value
+          - action: number.set_value
             data:
               entity_id: !input remote_timeout_set_number
               value: 3599
               
-  # 3. Integral speichern
-  - service: input_number.set_value
-    data:
-      entity_id: !input integral_helper
-      value: "{{ integral_new }}"
+  # SCHRITT 3: Integral speichern (in Zone 0 einfrieren)
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_surplus_mode | bool(false) }}"
+        sequence:
+          - action: input_number.set_value
+            data:
+              entity_id: !input integral_helper
+              value: "{{ integral_old }}"
+    default:
+      - action: input_number.set_value
+        data:
+          entity_id: !input integral_helper
+          value: "{{ integral_new }}"
       
-  # 4. Power Limit setzen (Nur wenn Toleranz überschritten ist)
-  - condition: template
-    value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
   
-  - service: number.set_value
-    data:
-      entity_id: !input active_power_number
-      value: "{{ [0, final_power_calculated] | max | round(0) }}"
-  - delay:
-      seconds: '{{wait_time_int}}'
+  # SCHRITT 4: Ausgangsleistung setzen + Delay (NUR wenn nötig)
+  #    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
+  #    Surplus Boolean nur zurücksetzen wenn nötig
+  - choose:
+      # Zweig A: Surplus-Bedingungen (Variable ist True)
+      - conditions:
+          - condition: template
+            value_template: "{{ (is_surplus_mode | bool(false)) and current_active_power < max_active_power_limit_int }}"
+        sequence:
+          # Check ob Helper an muss
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ (surplus_entity_valid | bool(false)) and not is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - action: input_boolean.turn_on
+                    data:
+                      entity_id: !input surplus_state_helper
+          # Power setzen (800W nur wenn Helper stabil an)
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - action: number.set_value
+                    data:
+                      entity_id: !input active_power_number
+                      value: "{{ max_active_power_limit_int }}"
+              - conditions:
+                  - condition: template
+                    value_template: "{{ not is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - action: number.set_value
+                    data:
+                      entity_id: !input active_power_number
+                      value: "{{ [0, final_power_calculated] | max | round(0) }}"
+          - delay:
+              seconds: "{{ wait_time_int }}"
+  
+      # Zweig B: Normaler PI-Regler
+      - conditions:
+          - condition: template
+            value_template: "{{ not (is_surplus_mode | bool(false)) and grid_error_for_tolerance > tolerance_int }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - action: input_boolean.turn_off
+                    data:
+                      entity_id: !input surplus_state_helper
+          - action: number.set_value
+            data:
+              entity_id: !input active_power_number
+              value: "{{ [0, final_power_calculated] | max | round(0) }}"
+          - delay:
+              seconds: "{{ wait_time_int }}"
+              
+    
+  # SCHRITT 5: Surplus-Boolean finalisieren — läuft immer
+  #    Redundant wenn Schritt 4 Output gesetzt hat, aber notwendig wenn Schritt 4 wegen
+  #    Toleranz oder erfülltem Hard-Limit übersprungen wurde (Boolean sonst veraltet)
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_surplus_mode | bool(false) }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ (surplus_entity_valid | bool(false)) and not is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - action: input_boolean.turn_on
+                    data:
+                      entity_id: !input surplus_state_helper
+    default:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ (surplus_entity_valid | bool(false))  and  is_state(surplus_state_entity, 'on') }}"
+            sequence:
+              - action: input_boolean.turn_off
+                data:
+                  entity_id: !input surplus_state_helper
