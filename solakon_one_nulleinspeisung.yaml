@@ -817,7 +817,7 @@ actions:
                   {% if states(solakon_mode) == '3' %}
                     {{ grid_power_float < (ac_charge_hysteresis_float + (tolerance_int | float(0))) }}
                   {% else %}
-                    {{ (grid_power_float + actual_power_float) < -(tolerance_int | float(0)) }}
+                    {{ (grid_power_float + actual_power_float) < (-1 * (tolerance_int | float(0))) }}
                   {% endif %}
             sequence:
               # Logging nur bei Moduswechsel
