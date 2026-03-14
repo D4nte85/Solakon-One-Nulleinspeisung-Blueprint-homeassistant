@@ -1030,7 +1030,6 @@ actions:
   
   # SCHRITT 4: Ausgangsleistung setzen + Delay (NUR wenn nötig)
   #    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
-  #    Surplus Boolean nur zurücksetzen wenn nötig
   - choose:
       # Zweig A: Surplus-Bedingungen (Variable ist True)
       - conditions:
@@ -1056,8 +1055,6 @@ actions:
               seconds: "{{ wait_time_int }}"              
     
   # SCHRITT 5: Surplus-Boolean finalisieren — läuft immer
-  #    Redundant wenn Schritt 4 Output gesetzt hat, aber notwendig wenn Schritt 4 wegen
-  #    Toleranz oder erfülltem Hard-Limit übersprungen wurde (Boolean sonst veraltet)
   - choose:
       - conditions:
           - condition: template
