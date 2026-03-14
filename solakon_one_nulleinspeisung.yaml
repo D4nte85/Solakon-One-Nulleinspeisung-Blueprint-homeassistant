@@ -881,13 +881,14 @@ actions:
   
   # SCHRITT 4: Ausgangsleistung setzen + Delay (NUR wenn nötig)
   #    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
-  - conditions:
-      - condition: template
-        value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
-    sequence:
-      - action: number.set_value
-        data:
-          entity_id: !input active_power_number
-          value: "{{ [0, final_power_calculated] | max | round(0) }}"
-      - delay:
-          seconds: "{{ wait_time_int }}"              
+  - choose:
+    - condirions:
+        - condition: template
+          value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
+      sequence:
+        - action: number.set_value
+          data:
+            entity_id: !input active_power_number
+            value: "{{ [0, final_power_calculated] | max | round(0) }}"
+        - delay:
+            seconds: "{{ wait_time_int }}"              
