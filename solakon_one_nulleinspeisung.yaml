@@ -1122,7 +1122,7 @@ actions:
       error: >
         {% if states(solakon_mode) == '3' %}
           {# AC LADEN: Ziel = Grid auf target_offset bringen #}
-          {{ [(ac_charge_power_limit_int - current_active_power), (target_offset - grid_power_float)] | min | float(0) }}
+          {{ [(ac_charge_power_limit_int - current_active_power), (grid_power_float - target_offset)] | min | float(0) }}
         {% elif is_state(cycle_active, 'on') %}
           {# ZONE 1: Min(verfügbare Kapazität, grid_power_float − Offset) #}
           {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_1_int)] | min | float(0) }}
