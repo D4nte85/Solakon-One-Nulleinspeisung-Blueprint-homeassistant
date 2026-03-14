@@ -43,19 +43,7 @@ Der Blueprint benötigt **zwei Helper**, die Sie vor der Installation erstellen 
    * Initialwert: `0`
 5. Speichern (Entity ID: z.B. `input_number.solakon_integral`)
 
-### 3. Input Boolean Helper (Surplus-Zustand — ERFORDERLICH wenn Zone 0 aktiv!)
-
-Wird benötigt, um den Überschuss-Einspeisung-Zustand **persistent über Automation-Läufe
-hinweg** zu speichern. Verhindert, dass das System zwischen Zone 0 und Nulleinspeisung flackert.
-
-1. Gehen Sie zu **Einstellungen** → **Geräte & Dienste** → **Helfer**
-2. Klicken Sie auf **Helfer erstellen** → **Umschalter** (Toggle)
-3. Name: z.B. `Solakon Surplus Aktiv`
-4. Speichern (Entity ID: z.B. `input_boolean.solakon_surplus_aktiv`)
-
-> ℹ️ **Hinweis:** Dieser Helper wird nur benötigt wenn die Überschuss-Einspeisung aktiviert ist. Bei deaktivierter Zone 0 kann dieses Feld im Blueprint leer gelassen werden.
-
-### 4. Input Number Helper für Dynamischen Offset (Optional)
+### 3. Input Number Helper für Dynamischen Offset (Optional)
 
 Wenn Sie den Nullpunkt-Offset zur Laufzeit dynamisch anpassen möchten, empfehlen wir den **Solakon ONE — Dynamischer Offset Blueprint** (siehe Abschnitt Dynamischer Offset). Dieser erstellt und befüllt die benötigten Helper automatisch.
 
@@ -116,7 +104,6 @@ Die Regelung wird anhand des aktuellen SOC in bis zu vier Betriebsmodi unterteil
 
 | Zone | SOC-Bereich / Bedingung | Modus | Max. Entladestrom | Regelziel | Besonderheiten |
 |:-----|:------------------------|:------|:-----------------|:---------|:--------------|
-| **0. Überschuss-Einspeisung** | SOC ≥ Export-Schwelle UND Netz im Gleichgewicht UND PV ≥ Nacht-Schwelle UND PV > Ausgangsleistung + Grid + PV-Hysterese | `INV Discharge (PV Priority)` | 2 A (Stabilitätspuffer) | Hard Limit (max. W) | **Optional aktivierbar.** Überwiegend PV-Strom ins Netz. Austritt bei SOC < (Export-Schwelle − SOC-Hysterese) ODER PV < Hausverbrauch − PV-Hysterese. |
 | **1. Aggressive Entladung** | SOC > Zone-1-Schwelle | `INV Discharge (PV Priority)` | Konfigurierter Max-Wert (Standard: 40 A)| 0W + Offset 1 | Läuft **durchgehend bis SOC ≤ Zone-3-Schwelle** (kein Yo-Yo-Effekt). Auch nachts aktiv. Hard Limit. |
 | **2. Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `INV Discharge (PV Priority)` | **0 A** | 0W + Offset 2 | Dynamisches Limit: **Max(0, PV − Reserve)**. Optional: Nachtabschaltung möglich. |
 | **3. Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `Disabled` | 0 A | — | Ausgang = 0 W. Vollständiger Schutz der Batterie. |
@@ -180,7 +167,6 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 | **Solakon** | Betriebsmodus-Auswahl | `select.solakon_one_modus_fernsteuern` | Schaltet Betriebsmodus |
 | **Helper** | Entladezyklus-Speicher | `input_select.soc_entladezyklus_status` | Input Select: `on`/`off` |
 | **Helper** | Integral-Speicher | `input_number.solakon_integral` | Input Number: -1000 bis 1000 |
-| **Helper** | Surplus-Zustand-Speicher | `input_boolean.solakon_surplus_aktiv` | Nur erforderlich wenn Überschuss-Einspeisung aktiviert ist (Zone 0). Bei deaktivierter Zone 0: n/a |
 
 ---
 
@@ -299,7 +285,6 @@ PV-Ladereserve: 100W
 P-Faktor: 1.5
 I-Faktor: 0.05
 Toleranzbereich: 30W
-Überschuss-Einspeisung: false
 ```
 
 ### Für maximale Eigenverbrauchsoptimierung:
@@ -311,9 +296,6 @@ PV-Ladereserve: 30W
 P-Faktor: 2.0
 I-Faktor: 0.08
 Toleranzbereich: 20W
-Überschuss-Einspeisung: true
-SOC-Schwelle Überschuss: 95%
-Hysterese Überschuss-Austritt: 5%
 ```
 
 ### Für ausgewogenen Betrieb (Standard):
@@ -326,8 +308,6 @@ P-Faktor: 1.5
 I-Faktor: 0.05
 Max. Ausgangsleistung: 800W
 Toleranzbereich: 25W
-Max. Entladestrom Zone 1: 40A
-Überschuss-Einspeisung: false
 ```
 
 ---
@@ -413,25 +393,7 @@ Zone 2: final_power = Min(Max(0, PV - reserve), new_power)
 
 **Ausgangs-Update-Bedingung:**
 ```
-Überschuss-Modus: Nur setzen wenn current_output < hard_limit  (Modbus-Spam verhindern)
-Normal-Modus:     Nur setzen wenn |grid_error| > tolerance
-```
-
----
-
-### Überschuss-Einspeisung State-Machine
-
-```
-Eintritts-Bedingung:  SOC >= export_limit
-                  UND grid_power <= (target_offset + tolerance)
-                  UND solar_power >= night_threshold
-                  UND solar_power > (current_active_power + grid_power + pv_hysteresis)
-
-Verbleib-Bedingung:   SOC >= (export_limit - soc_hysteresis)
-                  UND solar_power > (current_active_power + grid_power - pv_hysteresis)
-
-Abbruch-Bedingung:    SOC < (export_limit - soc_hysteresis)
-                  ODER solar_power <= (current_active_power + grid_power - pv_hysteresis)
+Nur setzen wenn |grid_error| > tolerance
 ```
 
 ---
