@@ -45,30 +45,15 @@
         %% ── PI-Regler Gate ──────────────────────────────────────────
         PI_GATE{{"Modus = INV Discharge? UND Zone 1 ODER Tag?"}}
         PI_GATE -- Nein --> END_SKIP([Ende — kein Output])
-        PI_GATE -- Ja --> SURPLUS_CHECK
+        PI_GATE -- Ja --> CALC_NORMAL
 
-        %% ── Überschuss-Prüfung ──────────────────────────────────────
-        SURPLUS_CHECK{{"☀️ Überschuss-Einspeisung aktiviert?"}}
-        SURPLUS_CHECK -- Nein --> CALC_NORMAL
-        SURPLUS_CHECK -- Ja --> SURPLUS_STATE
 
-        %% ── Surplus Zwei-Zustands-Logik ─────────────────────────────
-        SURPLUS_STATE{{"Aktuell im Überschuss-Modus?   (input_boolean = on)"}}
-        SURPLUS_STATE -- "Ja — Bleiben:   SOC ≥ (Export-Schwelle − SOC-Hysterese)   UND PV > Output + Grid − PV-Hysterese" --> CALC_SURPLUS
-        SURPLUS_STATE -- "Nein — Eintreten:   SOC ≥ Export-Schwelle   UND Grid ≤ Offset + Toleranz   UND PV ≥ Nacht-Schwelle   UND PV > Output + Grid + PV-Hysterese" --> CALC_SURPLUS
-        SURPLUS_STATE -- "Bedingung nicht erfüllt" --> CALC_NORMAL
-
-        %% ── Zone-0-Pfad ─────────────────────────────────────────────
-        CALC_SURPLUS["☀️ Zone 0 — Überschuss-Einspeisung   final_power = Hard Limit"]
-        CALC_SURPLUS --> DISCHARGE_SET
-
-        %% ── Normaler PI-Pfad ────────────────────────────────────────
+        %% ── PI-Pfad ────────────────────────────────────────
         CALC_NORMAL["🧠 PI-Regler   1. Fehler berechnen (zonenabhängig)      Zone 1: Min(Kapazität, Grid − Offset₁)      Zone 2: Min(Kapazität, Grid − Offset₂, PV-Kap.)   2. Integral aktualisieren (Anti-Windup)      |Grid-Fehler| > Toleranz → Integral += Fehler (±1000)      |Grid-Fehler| ≤ Toleranz UND |Integral| > 10 → Integral × 0,95      sonst → kein Update   3. Korrektur = P-Teil + I-Teil   4. new_power = current + Korrektur   5. Begrenzen:      Zone 1 → Hard Limit      Zone 2 → Max(0, PV − Reserve)"]
         CALC_NORMAL --> DISCHARGE_SET
 
         %% ── Entladestrom setzen ─────────────────────────────────────
         DISCHARGE_SET{{"Entladestrom setzen?"}}
-        DISCHARGE_SET -- "Surplus aktiv → 2 A" --> TIMEOUT_CHECK
         DISCHARGE_SET -- "Zyklus = on → Max-Wert" --> TIMEOUT_CHECK
         DISCHARGE_SET -- "Sonst → 0 A" --> TIMEOUT_CHECK
 
@@ -80,16 +65,10 @@
 
         %% ── Integral & Output ───────────────────────────────────────
         INTEGRAL_SAVE["💾 Integral-Wert speichern   Zone 0: integral_old (eingefroren)   Sonst: integral_new"]
-        INTEGRAL_SAVE --> TOL_CHECK
+        INTEGRAL_SAVE --> SET_OUTPUT
 
-        TOL_CHECK{{"Überschuss-Modus aktiv?   → Output < Hard Limit?   SONST Normal-Modus   → |Grid-Fehler| > Toleranz?"}}
-        TOL_CHECK -- Nein --> BOOL_UPDATE["🔁 Surplus-Boolean aktualisieren   (on/off je nach is_surplus_mode)"]
-        BOOL_UPDATE --> END_TOL([Ende — kein Output keine unnötigen API-Calls])
-        TOL_CHECK -- Ja --> SET_OUTPUT
-
-        SET_OUTPUT["⚙️ Ausgangsleistung setzen   Überschuss-Modus: Hard Limit + Boolean → on   Normal-Modus: Max(0, final_power) + Boolean → off   → Wechselrichter"]
+        SET_OUTPUT["⚙️ Ausgangsleistung setzen    Normal-Modus: Max(0, final_power) + Boolean → off   → Wechselrichter"]
         SET_OUTPUT --> WAIT["⏳ Wartezeit (0–30s)"]
-        WAIT --> BOOL_UPDATE
 
         %% ── Styles ──────────────────────────────────────────────────
         classDef zone0 fill:#fff3cd,stroke:#f0ad4e,color:#000
@@ -101,7 +80,6 @@
         classDef pi fill:#cce5ff,stroke:#004085,color:#000
         classDef end_node fill:#f8f9fa,stroke:#6c757d,color:#000
 
-        class CALC_SURPLUS,SURPLUS_STATE zone0
         class Z1_START zone1
         class Z2_START zone2
         class Z3_A,Z3_B zone3
