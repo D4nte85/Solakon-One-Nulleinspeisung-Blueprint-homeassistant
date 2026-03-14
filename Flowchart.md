@@ -10,15 +10,15 @@
 
         %% ── Zone 1 ──────────────────────────────────────────────────
         ZONE_CHECK -- "SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
-        Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Surplus-Boolean → off (nur wenn Zone 0 aktiv)   Modus → INV Discharge PV Priority   (Puls-Sequenz: 10s → 3599s)"]
+        Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Modus → INV Discharge PV Priority   (Puls-Sequenz: 10s → 3599s)"]
 
         %% ── Zone 3 (Zyklus on) ──────────────────────────────────────
         ZONE_CHECK -- "SOC < Zone-3-Schwelle UND Zyklus = on" --> Z3_A
-        Z3_A["🛑 Zone 3 aktivieren   Zyklus = off   Integral = 0   Surplus-Boolean → off (nur wenn Zone 0 aktiv)   Modus → Disabled   Output → 0 W"]
+        Z3_A["🛑 Zone 3 aktivieren   Zyklus = off   Integral = 0   Modus → Disabled   Output → 0 W"]
 
         %% ── Zone 3 (Absicherung) ────────────────────────────────────
         ZONE_CHECK -- "SOC < Zone-3-Schwelle UND Zyklus = off UND Modus ≠ Disabled" --> Z3_B
-        Z3_B["🛑 Zone 3 Absicherung   Surplus-Boolean → off (nur wenn Zone 0 aktiv)   Modus → Disabled   Output → 0 W"]
+        Z3_B["🛑 Zone 3 Absicherung   Modus → Disabled   Output → 0 W"]
 
         %% ── Recovery ────────────────────────────────────────────────
         ZONE_CHECK -- "Zyklus = on UND Modus ≠ INV Discharge UND SOC > Zone-3-Schwelle" --> RECOVERY
@@ -64,10 +64,10 @@
         TIMEOUT_RESET --> INTEGRAL_SAVE
 
         %% ── Integral & Output ───────────────────────────────────────
-        INTEGRAL_SAVE["💾 Integral-Wert speichern   Zone 0: integral_old (eingefroren)   Sonst: integral_new"]
+        INTEGRAL_SAVE["💾 Integral-Wert speichern"]
         INTEGRAL_SAVE --> SET_OUTPUT
 
-        SET_OUTPUT["⚙️ Ausgangsleistung setzen    Normal-Modus: Max(0, final_power) + Boolean → off   → Wechselrichter"]
+        SET_OUTPUT["⚙️ Ausgangsleistung setzen  Max(0, final_power)   → Wechselrichter"]
         SET_OUTPUT --> WAIT["⏳ Wartezeit (0–30s)"]
 
         %% ── Styles ──────────────────────────────────────────────────
