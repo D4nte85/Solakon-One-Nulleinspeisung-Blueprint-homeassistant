@@ -1208,7 +1208,6 @@ actions:
 
   # SCHRITT 4: Ausgangsleistung setzen + Delay (NUR wenn nötig)
   #    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
-  #    Surplus Boolean nur zurücksetzen wenn nötig
   - choose:
       # Zweig A: Surplus-Bedingungen (Variable ist True)
       - conditions:
