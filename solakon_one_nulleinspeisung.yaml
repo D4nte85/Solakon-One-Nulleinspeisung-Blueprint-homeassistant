@@ -811,9 +811,11 @@ actions:
               - condition: template
                 value_template: "{{ ac_charge_enabled_bool }}"
               - condition: template
+                value_template: "{{ states(solakon_mode) != '3' }}"
+              - condition: template
                 value_template: "{{ states(soc) | float(0) < soc_ac_charge_limit_int }}"
               - condition: template
-                value_template: "{{ (grid_power_float + actual_power_float) < (-1 * (tolerance_int | float(0))) }}"
+                value_template: "{{ and (grid_power_float + actual_power_float) < (-1 * (tolerance_int | float(0))) }}"
             sequence:
               # Logging nur bei Moduswechsel
               - action: logbook.log
