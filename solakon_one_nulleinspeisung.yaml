@@ -813,87 +813,43 @@ actions:
               - condition: template
                 value_template: "{{ states(soc) | float(0) < soc_ac_charge_limit_int }}"
               - condition: template
-                value_template: >
-                  {% if states(solakon_mode) == '3' %}
-                    {{ grid_power_float < (ac_charge_hysteresis_float + (tolerance_int | float(0))) }}
-                  {% else %}
-                    {{ (grid_power_float + actual_power_float) < (-1 * (tolerance_int | float(0))) }}
-                  {% endif %}
+                value_template: "{{ (grid_power_float + actual_power_float) < (-1 * (tolerance_int | float(0))) }}"
             sequence:
               # Logging nur bei Moduswechsel
-              - choose:
-                  - conditions: "{{ states(solakon_mode) != '3' }}"
-                    sequence:
-                      - action: logbook.log
-                        data:
-                          name: Solakon AC Laden
-                          message: >
-                            ⚡ AC Laden aktiviert
-                            (Zone {{ '1' if is_state(cycle_active, 'on') else '2' }})
-                            — Grid: {{ states(grid_power_float) }}W, SOC: {{ states(soc) }}%
-                          entity_id: !input soc_sensor
-              # Entladestrom auf 0 (kein Entladen während Ladens)
-              - choose:
-                  - conditions:
-                      - condition: template
-                        value_template: >
-                          {{ states(discharge_current_entity) | float(999) | round(2) != 0 }}
-                    sequence:
-                      - action: number.set_value
-                        data:
-                          entity_id: !input max_discharge_current_number
-                          value: 0
+              - action: logbook.log
+                data:
+                  name: Solakon AC Laden
+                  message: >
+                    ⚡ AC Laden aktiviert
+                    (Zone {{ '1' if is_state(cycle_active, 'on') else '2' }})
+                    — Grid: {{ states(grid_power_float) }}W, SOC: {{ states(soc) }}%
+                  entity_id: !input soc_sensor
               # Modus → INV Charge (PV Priority) = '3'
-              - choose:
-                  - conditions: "{{ states(solakon_mode) != '3' }}"
-                    sequence:
-                      - action: number.set_value
-                        data:
-                          entity_id: !input remote_timeout_set_number
-                          value: 10
-                      - delay: '00:00:01'
-                      - action: number.set_value
-                        data:
-                          entity_id: !input remote_timeout_set_number
-                          value: 3599
-                      - action: select.select_option
-                        data:
-                          entity_id: !input mode_select
-                          option: '3'
+              - action: number.set_value
+                data:
+                  entity_id: !input remote_timeout_set_number
+                  value: 10
+              - delay: '00:00:01'
+              - action: number.set_value
+                data:
+                  entity_id: !input remote_timeout_set_number
+                  value: 3599
+              - action: select.select_option
+                data:
+                  entity_id: !input mode_select
+                  option: '3'
               # Output auf 0 W nullen bei Eintritt (PI startet sauber)
-              - choose:
-                  - conditions: "{{ states(solakon_mode) != '3' }}"
-                    sequence:
-                      - action: number.set_value
-                        data:
-                          entity_id: !input active_power_number
-                          value: 0
-
-              # Timeout-Reset (< 120s)
-              - choose:
-                  - conditions:
-                      - condition: template
-                        value_template: "{{ states(timeout_countdown) | int(9999) < 120 }}"
-                    sequence:
-                      - action: number.set_value
-                        data:
-                          entity_id: !input remote_timeout_set_number
-                          value: 10
-                      - delay: '00:00:01'
-                      - action: number.set_value
-                        data:
-                          entity_id: !input remote_timeout_set_number
-                          value: 3599
+              - action: number.set_value
+                data:
+                  entity_id: !input active_power_number
+                  value: 0
                           
           # FALL H: AC Laden beenden
           - conditions:
               - condition: template
                 value_template: "{{ ac_charge_enabled_bool and states(solakon_mode) == '3' }}"
               - condition: template
-                value_template: >
-                  {{ states(soc) | float(0) >= soc_ac_charge_limit_int or
-                     (grid_power_float + actual_power_float) >= ac_charge_hysteresis_int | float(0) }}
-
+                value_template: "{{ states(soc) | float(0) >= soc_ac_charge_limit_int or grid_power_float > (ac_charge_hysteresis_float + (tolerance_int | float(0))) }}"
             sequence:
               - action: logbook.log
                 data:
