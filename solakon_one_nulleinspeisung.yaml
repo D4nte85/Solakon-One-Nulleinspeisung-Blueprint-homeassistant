@@ -593,7 +593,7 @@ actions:
       # FALL 0A: ÜBERSCHUSS STARTEN
       - conditions:
           - condition: template
-            value_template: "{{ surplus_entity_valid }}"
+            value_template: "{{ surplus_entity_valid | bool(false) }}"
           - condition: state
             entity_id: !input surplus_state_helper
             state: 'off'
@@ -614,7 +614,7 @@ actions:
       # FALL 0B: ÜBERSCHUSS BEENDEN
       - conditions:
           - condition: template
-            value_template: "{{ surplus_entity_valid }}"
+            value_template: "{{ surplus_entity_valid | bool(false) }}"
           - condition: state
             entity_id: !input surplus_state_helper
             state: 'on'
@@ -754,7 +754,7 @@ actions:
                       option: '0'
           # 2. Surplusmode auf off setzen (nur wenn Zone 0 aktiv)
           - choose:
-              - conditions: "{{ surplus_entity_valid and is_state(surplus_state_entity, 'on') }}"
+              - conditions: "{{ surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on') }}"
                 sequence:
                   - action: input_boolean.turn_off
                     data:
@@ -1001,7 +1001,7 @@ actions:
           - condition: template
             value_template: >
               {# Prüfe, ob der aktuelle Wert NICHT dem Maximalwert entspricht und der Surplus modus inaktiv ist #}
-              {{ not (is_surplus_mode | bool(false)) and states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
+              {{ not (surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on')) and states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
         sequence:
           - action: number.set_value
             data:
@@ -1012,7 +1012,7 @@ actions:
       - conditions:
           - condition: template
             value_template: >
-              {{ (is_surplus_mode | bool(false)) and 
+              {{ (surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on')) and 
                  states(discharge_current_entity) | float(999) | round(2) != 2 }}
         sequence:
           - action: number.set_value
@@ -1025,7 +1025,7 @@ actions:
           - condition: template
             value_template: >
               {{ is_state(cycle_active, 'off') and 
-                 not (is_surplus_mode | bool(false)) and 
+                 not (surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on')) and 
                  states(discharge_current_entity) | float(999) | round(2) != 0 }}
         sequence:
           - action: number.set_value
@@ -1054,7 +1054,7 @@ actions:
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ is_surplus_mode | bool(false) }}"
+            value_template: "{{ surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on') }}"
         sequence:
           - action: input_number.set_value
             data:
@@ -1073,7 +1073,7 @@ actions:
       # Zweig A: Surplus-Bedingungen (Surplus Helper ist ON)
       - conditions:
           - condition: template
-            value_template: "{{ surplus_entity_valid and is_state(surplus_state_entity, 'on') }}"
+            value_template: "{{ surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on') }}"
         sequence:
           - action: number.set_value
             data:
