@@ -251,8 +251,6 @@ Dafür steht ein eigener Blueprint zur Verfügung:
 - Stellt sicher, dass auch bei Trickle-Charge immer etwas für die Batterie übrig bleibt
 - Gleicht Wandlerverluste aus
 
-> ⚠️ **Abwärtskompatibel:** Wenn keine dynamische Entität ausgewählt wird, funktioniert dieser Blueprint wie bisher mit dem konfigurierten statischen Offset-Wert.
-
 ---
 
 ### 🔒 Sicherheits-Parameter
