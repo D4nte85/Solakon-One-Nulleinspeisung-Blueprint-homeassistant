@@ -10,15 +10,15 @@
 
         %% ── Zone 1 ──────────────────────────────────────────────────
         ZONE_CHECK -- "SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
-        Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Surplus-Boolean → off (nur wenn Zone 0 aktiv)   Modus → 1 (INV Discharge PV Priority)   (Puls-Sequenz: 10s → 3599s)"]
+        Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Modus → 1 (INV Discharge PV Priority)   (Puls-Sequenz: 10s → 3599s)"]
 
         %% ── Zone 3 (Zyklus on) ──────────────────────────────────────
         ZONE_CHECK -- "SOC < Zone-3-Schwelle UND Zyklus = on" --> Z3_A
-        Z3_A["🛑 Zone 3 aktivieren   Zyklus = off   Integral = 0   Surplus-Boolean → off (nur wenn Zone 0 aktiv)   Modus → Disabled   Output → 0 W"]
+        Z3_A["🛑 Zone 3 aktivieren   Zyklus = off   Integral = 0   Modus → Disabled   Output → 0 W"]
 
         %% ── Zone 3 (Absicherung) ────────────────────────────────────
         ZONE_CHECK -- "SOC < Zone-3-Schwelle UND Zyklus = off UND Modus ≠ Disabled" --> Z3_B
-        Z3_B["🛑 Zone 3 Absicherung   Surplus-Boolean → off (nur wenn Zone 0 aktiv)   Modus → Disabled   Output → 0 W"]
+        Z3_B["🛑 Zone 3 Absicherung   Modus → Disabled   Output → 0 W"]
 
         %% ── AC Laden Eintritt ───────────────────────────────────────
         ZONE_CHECK -- "AC Laden aktiviert   UND SOC < Ladeziel   UND Grid + Output < −Toleranz (Entry)   ODER Modus = INV Charge UND Grid < Hysterese (Stay)" --> G_CHECK
