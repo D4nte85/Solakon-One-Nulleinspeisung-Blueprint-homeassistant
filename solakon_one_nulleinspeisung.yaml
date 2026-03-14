@@ -433,13 +433,6 @@ variables:
   
   # Parameter
   discharge_current_max: !input default_discharge_current
-  surplus_export_enabled_bool: !input surplus_export_enabled
-  surplus_state_entity: !input surplus_state_helper
-  surplus_entity_valid: >
-    {{ surplus_export_enabled_bool and
-       surplus_state_entity is string and 
-       surplus_state_entity | length > 0 and
-       states(surplus_state_entity) not in ['unknown', 'unavailable'] }}
 
 triggers:
   # -------------------------------------------------------------------------------------------------
@@ -756,7 +749,6 @@ actions:
       max_active_power_limit_int: !input max_active_power_limit
       pv_charge_reserve_int: !input pv_charge_reserve
       soc_export_limit_int: !input soc_export_limit
-      surplus_exit_hysteresis_int: !input surplus_exit_hysteresis
       
       # PI-Regler-Variablen
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
@@ -844,32 +836,19 @@ actions:
             state: 'on'
           - condition: template
             value_template: >
-              {# Prüfe, ob der aktuelle Wert NICHT dem Maximalwert entspricht und der Surplus modus inaktiv ist #}
-              {{ not (is_surplus_mode | bool(false)) and states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
+              {# Prüfe, ob der aktuelle Wert NICHT dem Maximalwert entspricht #}
+              {{ states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
         sequence:
           - action: number.set_value
             data:
               entity_id: !input max_discharge_current_number
               value: "{{ discharge_current_max }}"
-              
-      # FALL 1b: Limit für Zone 0 setzen (Surplus-Puffer = 2 A)
-      - conditions:
-          - condition: template
-            value_template: >
-              {{ (is_surplus_mode | bool(false)) and 
-                 states(discharge_current_entity) | float(999) | round(2) != 2 }}
-        sequence:
-          - action: number.set_value
-            data:
-              entity_id: !input max_discharge_current_number
-              value: 2
       
-      # FALL 1c: Limit für Zone 2 setzen (Batterieschonend = 0 A)
+      # FALL 1b: Limit für Zone 2 setzen (Batterieschonend = 0 A)
       - conditions:
           - condition: template
             value_template: >
               {{ is_state(cycle_active, 'off') and 
-                 not (is_surplus_mode | bool(false)) and 
                  states(discharge_current_entity) | float(999) | round(2) != 0 }}
         sequence:
           - action: number.set_value
@@ -894,21 +873,11 @@ actions:
               entity_id: !input remote_timeout_set_number
               value: 3599
               
-  # SCHRITT 3: Integral speichern (in Zone 0 einfrieren)
-  - choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ is_surplus_mode | bool(false) }}"
-        sequence:
-          - action: input_number.set_value
-            data:
-              entity_id: !input integral_helper
-              value: "{{ integral_old }}"
-    default:
-      - action: input_number.set_value
-        data:
-          entity_id: !input integral_helper
-          value: "{{ integral_new }}"
+  # SCHRITT 3: Integral speichern
+  - action: input_number.set_value
+    data:
+      entity_id: !input integral_helper
+      value: "{{ integral_new }}"
       
   
   # SCHRITT 4: Ausgangsleistung setzen + Delay (NUR wenn nötig)
