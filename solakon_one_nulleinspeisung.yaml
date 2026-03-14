@@ -471,7 +471,8 @@ blueprint:
                 max: 100
                 unit_of_measurement: W
     
-mode: single
+mode: queued
+max_exceeded: silent
 
 variables:
   # ===========================================
