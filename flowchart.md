@@ -1,115 +1,61 @@
 ```mermaid
-    flowchart TD
-        START([⚡ Trigger Grid / PV / SOC / Mode]) --> VAL
-
-        VAL{{"🛡️ Validation SOC Limits & Entities"}}
-        VAL -- Error --> STOP([🛑 Stop + Log Entry])
-        VAL -- OK --> ZONE_CHECK
-
-        ZONE_CHECK{{"SOC & Cycle Status?"}}
-
-        %% ── Zone 1 ──────────────────────────────────────────────────
-        ZONE_CHECK -- "SOC > Zone-1-Threshold AND Cycle = off" --> Z1_START
-        Z1_START["🔋 Activate Zone 1   Cycle = on   Integral = 0   Surplus Boolean → off (only if Zone 0 active)   Mode → INV Discharge PV Priority   (Pulse Sequence: 10s → 3599s)"]
-
-        %% ── Zone 3 (Cycle on) ──────────────────────────────────────
-        ZONE_CHECK -- "SOC ≤ Zone-3-Threshold AND Cycle = on" --> Z3_A
-        Z3_A["🛑 Activate Zone 3   Cycle = off   Integral = 0   Surplus Boolean → off (only if Zone 0 active)   Mode → Disabled   Output → 0 W"]
-
-        %% ── Zone 3 (Safety) ────────────────────────────────────────
-        ZONE_CHECK -- "SOC < Zone-3-Threshold AND Cycle = off AND Mode ≠ Disabled" --> Z3_B
-        Z3_B["🛑 Zone 3 Safety Guard   Surplus Boolean → off (only if Zone 0 active)   Mode → Disabled   Output → 0 W"]
-
-        %% ── Recovery ────────────────────────────────────────────────
-        ZONE_CHECK -- "Cycle = on AND Mode ≠ INV Discharge AND SOC > Zone-3-Threshold" --> RECOVERY
-        RECOVERY["🔄 Recovery — Mode Reactivation   Mode → INV Discharge PV Priority   (Pulse Sequence: 10s → 3599s)"]
-
-        %% ── Zone 2 ──────────────────────────────────────────────────
-        ZONE_CHECK -- "Zone-3 < SOC ≤ Zone-1 AND Cycle = off AND Mode = Disabled AND NOT Night" --> Z2_START
-        Z2_START["🔋 Activate Zone 2   Integral = 0   Mode → INV Discharge PV Priority   (Pulse Sequence: 10s → 3599s)"]
-
-        %% ── Night Shutdown ────────────────────────────────────────
-        ZONE_CHECK -- "Night Shutdown active AND PV < Threshold AND Cycle = off AND Mode active" --> NIGHT
-        NIGHT["🌙 Night Shutdown   Integral = 0   Mode → Disabled   Output → 0 W"]
-
-        %% ── No Zone Change ───────────────────────────────────────
-        ZONE_CHECK -- "No Zone Change" --> PI_GATE
-
-        Z1_START --> PI_GATE
-        Z2_START --> PI_GATE
-        RECOVERY --> PI_GATE
-        Z3_A --> END_STOP([End])
-        Z3_B --> END_STOP
-        NIGHT --> END_STOP
-
-        %% ── PI Controller Gate ──────────────────────────────────────
-        PI_GATE{{"Mode = INV Discharge? AND Zone 1 OR Daytime?"}}
-        PI_GATE -- No --> END_SKIP([End — no output])
-        PI_GATE -- Yes --> SURPLUS_CHECK
-
-        %% ── Surplus Check ──────────────────────────────────────────
-        SURPLUS_CHECK{{"☀️ Surplus Export enabled?"}}
-        SURPLUS_CHECK -- No --> CALC_NORMAL
-        SURPLUS_CHECK -- Yes --> SURPLUS_STATE
-
-        %% ── Surplus Two-State Logic ─────────────────────────────────
-        SURPLUS_STATE{{"Currently in Surplus Mode?   (input_boolean = on)"}}
-        SURPLUS_STATE -- "Yes — Stay:   surplus_hold_active (60s after entry)   OR (SOC ≥ Export Threshold   AND (PV > Output + Grid   OR PV ≥ Hard Limit))" --> CALC_SURPLUS
-        SURPLUS_STATE -- "No — Enter:   SOC ≥ Export Threshold   AND Grid ≤ Offset + Tolerance   AND PV ≥ Night Threshold   AND PV > Output + Grid" --> CALC_SURPLUS
-        SURPLUS_STATE -- "Condition not met" --> CALC_NORMAL
-
-        %% ── Zone 0 Path ─────────────────────────────────────────────
-        CALC_SURPLUS["☀️ Zone 0 — Surplus Export   Discharge Current → 2 A (Stability Buffer)   final_power = Hard Limit   Integral saved (unchanged)"]
-        CALC_SURPLUS --> TIMEOUT_CHECK
-
-        %% ── Normal PI Path ────────────────────────────────────────
-        CALC_NORMAL["🧠 PI Controller   1. Calculate error (zone-dependent)      Zone 1: Min(Capacity, Grid − Offset₁)      Zone 2: Min(Capacity, Grid − Offset₂, PV Cap.)   2. Update integral (Anti-Windup)      |Grid Error| > Tolerance → Integral += Error (±1000)      |Grid Error| ≤ Tolerance AND |Integral| > 10 → Integral × 0.95      otherwise → no update   3. Correction = P-part + I-part   4. new_power = current + Correction   5. Clamp:      Zone 1 → Hard Limit      Zone 2 → Max(0, PV − Reserve)"]
-        CALC_NORMAL --> DISCHARGE_SET
-
-        %% ── Set Discharge Current ─────────────────────────────────
-        DISCHARGE_SET{{"Surplus active? → 2 A   Cycle = on? → Max Value   Otherwise → 0 A"}}
-        DISCHARGE_SET -- "Surplus active: 2 A" --> SET_2A["🔋 Discharge Current → 2 A Stability Buffer (only if value differs)"]
-        DISCHARGE_SET -- "Yes (Zone 1): configured max value" --> SET_40A["🔋 Discharge Current → configured max value (only if value differs)"]
-        DISCHARGE_SET -- "No (Zone 2): 0 A" --> SET_0A["🔋 Discharge Current → 0 A (only if value differs)"]
-        SET_2A --> TIMEOUT_CHECK
-        SET_40A --> TIMEOUT_CHECK
-        SET_0A --> TIMEOUT_CHECK
-
-        %% ── Timeout ─────────────────────────────────────────────────
-        TIMEOUT_CHECK{{"Countdown < 120s?"}}
-        TIMEOUT_CHECK -- Yes --> TIMEOUT_RESET["⏱️ Timeout Reset 10s → (1s Pause) → 3599s"]
-        TIMEOUT_CHECK -- No --> INTEGRAL_SAVE
-        TIMEOUT_RESET --> INTEGRAL_SAVE
-
-        %% ── Integral & Output ───────────────────────────────────────
-        INTEGRAL_SAVE["💾 Save Integral Value   Zone 0: integral_old (frozen)   Otherwise: integral_new"]
-        INTEGRAL_SAVE --> TOL_CHECK
-
-        TOL_CHECK{{"Surplus Mode active?   → Output < Hard Limit?   ELSE Normal Mode   → |Grid Error| > Tolerance?"}}
-        TOL_CHECK -- No --> BOOL_UPDATE["🔁 Update Surplus Boolean   (on/off based on is_surplus_mode)"]
-        BOOL_UPDATE --> END_TOL([End — no output, no unnecessary API calls])
-        TOL_CHECK -- Yes --> SET_OUTPUT
-
-        SET_OUTPUT["⚙️ Set Output Power   Surplus Mode: Hard Limit + Boolean → on   Normal Mode: Max(0, final_power) + Boolean → off   → Inverter"]
-        SET_OUTPUT --> WAIT["⏳ Wait Time (0–30s)"]
-        WAIT --> END_OK([End])
-
-        %% ── Styles ──────────────────────────────────────────────────
-        classDef zone0 fill:#fff3cd,stroke:#f0ad4e,color:#000
-        classDef zone1 fill:#d4edda,stroke:#28a745,color:#000
-        classDef zone2 fill:#d1ecf1,stroke:#17a2b8,color:#000
-        classDef zone3 fill:#f8d7da,stroke:#dc3545,color:#000
-        classDef night fill:#e2d9f3,stroke:#6f42c1,color:#000
-        classDef recovery fill:#fde8d0,stroke:#e07b20,color:#000
-        classDef pi fill:#cce5ff,stroke:#004085,color:#000
-        classDef end_node fill:#f8f9fa,stroke:#6c757d,color:#000
-
-        class CALC_SURPLUS,SURPLUS_STATE zone0
-        class Z1_START zone1
-        class Z2_START zone2
-        class Z3_A,Z3_B zone3
-        class NIGHT night
-        class RECOVERY recovery
-        class CALC_NORMAL,DISCHARGE_SET,SET_40A,SET_0A,SET_2A pi
-        class END_STOP,END_SKIP,END_TOL,END_OK,BOOL_UPDATE end_node
-```
+graph TD
+    A[Start: Grid Power, PV or SOC Change] --> B{Critical Entities Available?<br/>SOC Limits Correct?}
+    B -- No --> Z((STOP: Critical Error<br/>System Log Entry))
+    B -- Yes --> C{SOC > Upper Threshold<br/>AND Cycle = off?}
+    
+    %% --- ZONE 1 START (Aggressive Discharge) ---
+    C -- Yes --> D[ZONE 1 START: Aggressive Discharge<br/>Logbook Entry<br/>Integral Reset to 0<br/>Cycle: set to on<br/>Mode: Discharge PV Prio<br/>Timeout: 10s → 3599s Pulse]
+    D --> E
+    
+    C -- No --> E{SOC ≤ Lower Threshold<br/>AND Cycle = on?}
+    
+    %% --- ZONE 3 START (Safety STOP) ---
+    E -- Yes --> F[ZONE 3 START: Safety STOP<br/>Logbook Entry<br/>Integral Reset to 0<br/>Cycle: set to off<br/>Mode: Disabled<br/>Active Power: 0 W]
+    F --> END((End))
+    
+    %% --- ZONE 3 Additional Safety ---
+    E -- No --> G{SOC < Lower Threshold<br/>AND Cycle = off<br/>AND Mode ≠ Disabled?}
+    G -- Yes --> H[ZONE 3 SAFETY<br/>Mode: Disabled<br/>Active Power: 0 W]
+    H --> END
+    
+    %% --- ZONE 2 START (Battery Protection) ---
+    G -- No --> I{SOC Between Thresholds<br/>AND Cycle = off<br/>AND Mode ≠ Discharge<br/>AND Day OR Night-OFF?}
+    I -- Yes --> J[ZONE 2 START: Battery Protection<br/>Logbook Entry<br/>Integral Reset to 0<br/>Mode: Discharge PV Prio<br/>Timeout: 10s → 3599s Pulse]
+    J --> K
+    
+    %% --- NIGHT SHUTDOWN Zone 2 ---
+    I -- No --> L{Night Shutdown = on<br/>AND PV < Threshold<br/>AND Cycle = off<br/>AND Mode = Discharge?}
+    L -- Yes --> M[NIGHT SHUTDOWN Zone 2<br/>Logbook Entry<br/>Integral Reset to 0<br/>Mode: Disabled<br/>Active Power: 0 W]
+    M --> END
+    
+    %% --- PI CONTROLLER BLOCK ---
+    L -- No --> K{Mode = Discharge<br/>AND Cycle = on<br/>OR Day?}
+    
+    K -- Yes --> N[DISCHARGE CURRENT CONTROL<br/>Zone 1: 40A if ≠ 40A<br/>Zone 2: 0A if ≠ 0A]
+    N --> O[TIMEOUT REFRESH<br/>If Countdown < 120s:<br/>10s → 1s Delay → 3599s]
+    
+    O --> P[PI CONTROLLER CALCULATION<br/>1. Error Zone 1: Min avail. capacity, Grid<br/>   Error Zone 2: Min avail. capacity, Grid-Offset, PV-Capacity<br/>2. Integral: Clamp -1000, +1000 with Tolerance Decay<br/>3. Correction: error×P + integral×I<br/>4. New Power: current + Correction<br/>5. Final Power Zone 1: Min Hard Limit, new Power<br/>   Final Power Zone 2: Min PV-Reserve, new Power]
+    
+    P --> Q[SAVE INTEGRAL<br/>set input_number]
+    
+    Q --> R{Error > Tolerance?}
+    R -- Yes --> S[SET ACTIVE POWER<br/>Max 0, round final Power]
+    S --> END
+    R -- No --> END
+    
+    K -- No --> END
+    
+    %% --- STYLING ---
+    style D fill:#c9ffc9,stroke:#333,stroke-width:2px
+    style J fill:#c9ffc9,stroke:#333,stroke-width:2px
+    style F fill:#ffcccc,stroke:#333,stroke-width:2px
+    style H fill:#ffcccc,stroke:#333,stroke-width:2px
+    style M fill:#ffd699,stroke:#333,stroke-width:2px
+    style P fill:#fff7c2,stroke:#333,stroke-width:2px
+    style N fill:#d4e6f1,stroke:#333,stroke-width:2px
+    style O fill:#d4e6f1,stroke:#333,stroke-width:2px
+    style Q fill:#d4e6f1,stroke:#333,stroke-width:2px
+    style S fill:#d4e6f1,stroke:#333,stroke-width:2px
+    style END fill:#cccccc,stroke:#333,stroke-width:2px
+    style Z fill:#cccccc,stroke:#333,stroke-width:2px
