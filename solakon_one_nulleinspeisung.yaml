@@ -234,6 +234,7 @@ blueprint:
                 max: 30
                 step: 1
                 unit_of_measurement: s
+                
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🔋 SOC-ZONEN-PARAMETER
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -440,7 +441,8 @@ blueprint:
             default: input_boolean.solakon_surplus_aktiv
             selector:
               entity:
-                domain: input_boolean  
+                domain: input_boolean
+                
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🌙 NACHTABSCHALTUNG (Optional)
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -479,6 +481,18 @@ variables:
   # BLOCK 1: Variablen für Conditions & Modus-Logik
   # (Werden IMMER benötigt)
   # ===========================================
+
+  # Grid power
+  grid_power: !input grid_power_sensor
+  grid_power_float: "{{ states(grid_power) | float(0) }}"
+  
+  # Solar power
+  solar_power: !input solar_power_sensor
+  solar_power_float: "{{ states(solar_power) | float(0) }}"
+  
+  # Solakon power
+  actual_power_sensor: !input actual_power_sensor
+  actual_power_float: "{{ states(actual_power_sensor) | float(0) }}"
   
   # Zonen-Schwellwerte
   soc_fast_limit_int: !input soc_fast_limit
@@ -505,6 +519,11 @@ variables:
   
   # Parameter
   discharge_current_max: !input default_discharge_current
+
+  # Surplus
+  soc_export_limit_int: !input soc_export_limit
+  surplus_exit_hysteresis_int: !input surplus_exit_hysteresis
+  surplus_pv_hysteresis_int: !input surplus_pv_hysteresis
   surplus_export_enabled_bool: !input surplus_export_enabled
   surplus_state_entity: !input surplus_state_helper
   surplus_entity_valid: >
@@ -565,7 +584,57 @@ actions:
               level: error
               message: "Solakon Fehler: SOC-Limits ungültig oder Entitäten offline. Abbruch."
           - stop: "Kritischer Fehler oder ungültige Konfiguration."
-        
+          
+  # -------------------------------------------------------------------------------------------------
+  # 0. ÜBERSCHUSS-LOGIK (ZONE 0) STATUS-UPDATE
+  # -------------------------------------------------------------------------------------------------
+  - choose:
+      # FALL 0A: ÜBERSCHUSS STARTEN
+      - conditions:
+          - condition: template
+            value_template: "{{ surplus_entity_valid }}"
+          - condition: state
+            entity_id: !input surplus_state_helper
+            state: 'off'
+          - condition: template
+            value_template: >
+              {{ (states(soc) | float(0) >= soc_export_limit_int) and 
+                 (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int)) }}
+        sequence:
+          - action: logbook.log
+            data:
+              name: Solakon Zonenwechsel
+              message: "☀️ Zone 0 aktiviert (Überschuss-Einspeisung startet)"
+              entity_id: !input solar_power_sensor
+          - action: input_boolean.turn_on
+            data:
+              entity_id: !input surplus_state_helper
+
+      # FALL 0B: ÜBERSCHUSS BEENDEN
+      - conditions:
+          - condition: template
+            value_template: "{{ surplus_entity_valid }}"
+          - condition: state
+            entity_id: !input surplus_state_helper
+            state: 'on'
+          - condition: template
+            value_template: >
+              {{ (states(soc) | float(0) < (soc_export_limit_int - surplus_exit_hysteresis_int)) or 
+                 (solar_power_float <= (actual_power_float + grid_power_float - surplus_pv_hysteresis_int)) }}
+        sequence:
+          - action: logbook.log
+            data:
+              name: Solakon Zonenwechsel
+              message: "☁️ Zone 0 deaktiviert (Überschuss-Einspeisung beendet)"
+              entity_id: !input solar_power_sensor
+          - action: input_boolean.turn_off
+            data:
+              entity_id: !input surplus_state_helper
+          - action: input_number.set_value
+            data:
+              entity_id: !input integral_helper
+              value: 0
+              
   # -------------------------------------------------------------------------------------------------
   # HAUPT-LOGIK: Modus- und Zyklus-Steuerung (Zone 1, 2, 3)
   # -------------------------------------------------------------------------------------------------
@@ -816,13 +885,6 @@ actions:
   # (Werden nur bei aktivem Modus berechnet)
   # ===========================================
   - variables:
-      # Grid Power
-      grid_power: !input grid_power_sensor
-      grid_power_float: "{{ states(grid_power) | float(0) }}"
-      
-      # Solar Power
-      solar_power: !input solar_power_sensor
-      solar_power_float: "{{ states(solar_power) | float(0) }}"
       
       # Konfiguration
       tolerance_int: !input tolerance
@@ -850,12 +912,7 @@ actions:
       pv_charge_reserve_int: !input pv_charge_reserve
       soc_export_limit_int: !input soc_export_limit
       surplus_exit_hysteresis_int: !input surplus_exit_hysteresis
-      
-      # Surplus
-      actual_power_sensor: !input actual_power_sensor
-      actual_power_float: "{{ states(actual_power_sensor) | float(0) }}"
-      surplus_pv_hysteresis_int: !input surplus_pv_hysteresis
-      
+
       # PI-Regler-Variablen
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
         
@@ -881,25 +938,6 @@ actions:
       
       # Wartezeit
       wait_time_int: !input wait_time
-            
-      # -----------------------------------------------------------------------
-      # ÜBERSCHUSS-MODUS (Zone 0): Nur berechnen wenn Feature aktiviert
-      # -----------------------------------------------------------------------
-      is_surplus_mode: >
-        {% if not (surplus_entity_valid | bool(false)) %}
-          {{ false }}
-        {% else %}
-          {% set currently_in_surplus = is_state(surplus_state_entity, 'on') %}
-          {% if currently_in_surplus %}
-            {{ (states(soc) | float(0) >= (soc_export_limit_int - surplus_exit_hysteresis_int))
-               and (solar_power_float > (actual_power_float + grid_power_float - surplus_pv_hysteresis_int)) }}
-          {% else %}
-            {{ (states(soc) | float(0) >= soc_export_limit_int)
-               and (grid_power_float <= (target_offset + tolerance_int))
-               and (solar_power_float >= night_pv_threshold)
-               and (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int)) }}
-          {% endif %}
-        {% endif %}
       
       # -----------------------------------------------------------------------
       # PI-Regler Berechnung
@@ -1029,12 +1067,12 @@ actions:
       
   
   # SCHRITT 4: Ausgangsleistung setzen + Delay (NUR wenn nötig)
-  #    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
+  #    Kein Output nötig (innerhalb Toleranz) → kein Delay
   - choose:
-      # Zweig A: Surplus-Bedingungen (Variable ist True)
+      # Zweig A: Surplus-Bedingungen (Surplus Helper ist ON)
       - conditions:
           - condition: template
-            value_template: "{{ is_state(surplus_state_entity, 'on') }}"
+            value_template: "{{ surplus_entity_valid and is_state(surplus_state_entity, 'on') }}"
         sequence:
           - action: number.set_value
             data:
@@ -1052,28 +1090,4 @@ actions:
               entity_id: !input active_power_number
               value: "{{ [0, final_power_calculated] | max | round(0) }}"
           - delay:
-              seconds: "{{ wait_time_int }}"              
-    
-  # SCHRITT 5: Surplus-Boolean finalisieren — läuft immer
-  - choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ is_surplus_mode | bool(false) }}"
-        sequence:
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ (surplus_entity_valid | bool(false)) and not is_state(surplus_state_entity, 'on') }}"
-                sequence:
-                  - action: input_boolean.turn_on
-                    data:
-                      entity_id: !input surplus_state_helper
-    default:
-      - choose:
-          - conditions:
-              - condition: template
-                value_template: "{{ (surplus_entity_valid | bool(false))  and  is_state(surplus_state_entity, 'on') }}"
-            sequence:
-              - action: input_boolean.turn_off
-                data:
-                  entity_id: !input surplus_state_helper
+              seconds: "{{ wait_time_int }}"
