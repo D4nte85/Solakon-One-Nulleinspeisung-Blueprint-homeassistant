@@ -19,7 +19,7 @@ blueprint:
     ### 🔋 SOC-Zonenlogik (3 oder 4 Zonen je nach Konfiguration)
     
     #### 0. Zone: Überschuss-Einspeisung (Optional - aktivierbar)
-    * **Eintritts-Bedingung:** SOC ≥ konfigurierte Schwelle UND Netz ≤ Offset + Toleranz UND PV aktiv (≥ Nacht-Schwelle) UND PV > aktuelle Ausgangsleistung + Grid-Leistung + PV-Hysterese.
+    * **Eintritts-Bedingung:** SOC ≥ konfigurierte Schwelle UND PV > aktuelle Ausgangsleistung + Grid-Leistung + PV-Hysterese.
     * **Aktion:** AC-Output-Limit wird auf Maximum gesetzt, Max. Entladestrom auf 2 A (Stabilitätspuffer für den Wechselrichter).Überwiegend PV-Strom fließt ins Netz.
     * **Rückkehr:** Sobald SOC unter (Export-Schwelle − SOC-Hysterese) fällt ODER PV-Leistung unter (Ausgangsleistung + Grid − PV-Hysterese) sinkt.
     * **⚠️ Deaktiviert:** Wenn diese Funktion deaktiviert ist gilt die klassische Nulleinspeisung.
