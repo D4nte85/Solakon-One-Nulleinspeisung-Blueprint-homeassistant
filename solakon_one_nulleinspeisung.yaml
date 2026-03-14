@@ -748,8 +748,7 @@ actions:
         {% endif %}
       max_active_power_limit_int: !input max_active_power_limit
       pv_charge_reserve_int: !input pv_charge_reserve
-      soc_export_limit_int: !input soc_export_limit
-      
+
       # PI-Regler-Variablen
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
         
