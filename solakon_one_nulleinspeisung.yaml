@@ -882,7 +882,7 @@ actions:
   # SCHRITT 4: Ausgangsleistung setzen + Delay (NUR wenn nötig)
   #    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
   - choose:
-    - condirions:
+    - conditions:
         - condition: template
           value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
       sequence:
