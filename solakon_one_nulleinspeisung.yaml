@@ -1255,51 +1255,19 @@ actions:
       # Zweig A: Surplus-Bedingungen (Variable ist True)
       - conditions:
           - condition: template
-            value_template: "{{ (is_surplus_mode | bool(false)) and current_active_power < max_active_power_limit_int }}"
+            value_template: "{{ is_state(surplus_state_entity, 'on') }}"
         sequence:
-          # Check ob Helper an muss
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ (surplus_entity_valid | bool(false)) and not is_state(surplus_state_entity, 'on') }}"
-                sequence:
-                  - action: input_boolean.turn_on
-                    data:
-                      entity_id: !input surplus_state_helper
-          # Power setzen (800W nur wenn Helper stabil an)
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ is_state(surplus_state_entity, 'on') }}"
-                sequence:
-                  - action: number.set_value
-                    data:
-                      entity_id: !input active_power_number
-                      value: "{{ max_active_power_limit_int }}"
-              - conditions:
-                  - condition: template
-                    value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
-                sequence:
-                  - action: number.set_value
-                    data:
-                      entity_id: !input active_power_number
-                      value: "{{ [0, final_power_calculated] | max | round(0) }}"
+          - action: number.set_value
+            data:
+              entity_id: !input active_power_number
+              value: "{{ max_active_power_limit_int }}"
           - delay:
               seconds: "{{ wait_time_int }}"
-  
       # Zweig B: Normaler PI-Regler
       - conditions:
           - condition: template
             value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
         sequence:
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: "{{ is_state(surplus_state_entity, 'on') }}"
-                sequence:
-                  - action: input_boolean.turn_off
-                    data:
-                      entity_id: !input surplus_state_helper
           - action: number.set_value
             data:
               entity_id: !input active_power_number
