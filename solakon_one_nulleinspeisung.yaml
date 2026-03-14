@@ -429,7 +429,6 @@ variables:
   # Entitäten
   active_power_entity: !input active_power_number
   discharge_current_entity: !input max_discharge_current_number
-  timeout_set_entity: !input remote_timeout_set_number
   
   # Parameter
   discharge_current_max: !input default_discharge_current
@@ -565,7 +564,7 @@ actions:
                     data:
                       entity_id: !input mode_select
                       option: '0'
-          # 4. Power Limit auf 0 W setzen (Soft Stopp)
+          # 3. Power Limit auf 0 W setzen (Soft Stopp)
           - action: number.set_value
             data:
               entity_id: !input active_power_number
@@ -880,7 +879,7 @@ actions:
       
   
   # SCHRITT 4: Ausgangsleistung setzen + Delay (NUR wenn nötig)
-  #    Kein Output nötig (innerhalb Toleranz) → kein Delay, weiter zu Schritt 5
+  #    Kein Output nötig (innerhalb Toleranz) → kein Delay
   - choose:
     - conditions:
         - condition: template
