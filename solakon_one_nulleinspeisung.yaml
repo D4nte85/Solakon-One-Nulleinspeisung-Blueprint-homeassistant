@@ -753,6 +753,9 @@ actions:
       solar_power: !input solar_power_sensor
       solar_power_float: "{{ states(solar_power) | float(0) }}"
       
+      # Wartezeit
+      wait_time_int: !input wait_time
+
       # Konfiguration
       pi_script: !input PI_regler_script
       max_active_power_limit_int: !input max_active_power_limit
@@ -873,4 +876,4 @@ actions:
               i_factor: "{{ ki_factor_float }}"
               integral_entity: !input integral_helper
               output_entity: !input active_power_number
-          - delay: { seconds: !input wait_time }
+          - delay: { seconds: wait_time_int }
