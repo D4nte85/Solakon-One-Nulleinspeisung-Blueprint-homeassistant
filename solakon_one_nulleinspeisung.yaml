@@ -802,9 +802,6 @@ actions:
       at_max_limit: "{{ raw_error > 0 and states(active_power_number) | float(0) >= dynamic_max_power | float(0) }}"
       at_min_limit: "{{ raw_error < 0 and states(active_power_number) | float(0) <= 0 }}"
 
-      
-      # Wartezeit
-      wait_time_int: !input wait_time
         
   # SCHRITT 1: Entladestrom setzen
   - choose:
