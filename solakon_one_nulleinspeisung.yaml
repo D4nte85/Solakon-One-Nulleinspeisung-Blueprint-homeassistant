@@ -876,4 +876,5 @@ actions:
               i_factor: "{{ ki_factor_float }}"
               integral_entity: !input integral_helper
               output_entity: !input active_power_number
-          - delay: { seconds: wait_time_int }
+          - delay:
+              seconds: "{{ wait_time_int }}"
