@@ -754,6 +754,9 @@ actions:
       solar_power_float: "{{ states(solar_power) | float(0) }}"
       
       # Konfiguration
+      pi_script: !input PI_regler_script
+      max_active_power_limit_int: !input max_active_power_limit
+      pv_charge_reserve_int: !input pv_charge_reserve
       tolerance_int: !input tolerance
       regulator_factor_float: !input regulator_factor
       ki_factor_float: !input ki_factor
@@ -775,19 +778,26 @@ actions:
         {% else %}
           {{ offset_2_static }}
         {% endif %}
-      max_active_power_limit_int: !input max_active_power_limit
-      pv_charge_reserve_int: !input pv_charge_reserve
-
-      # PI-Regler-Variablen
-      current_active_power: "{{ states(active_power_entity) | float(0) }}"
-  
-      # Target Offset basiert auf Zone (offset_1_int in Zone 1, offset_2_int in Zone 2)
       target_offset: >
         {% if is_state(cycle_active, 'on') %}
           {{ offset_1_int }}
         {% else %}
           {{ offset_2_int }}
         {% endif %}
+
+      # PI-Regler-Variablen
+      current_active_power: "{{ states(active_power_entity) | float(0) }}"
+      
+      # Toleranzprüfung basiert auf tatsächlichem Grid-Fehler (nicht begrenzt)
+      grid_error_for_tolerance: "{{ (grid_power_float - target_offset) | abs }}"
+      
+      # Der aktuelle Fehler (Bezug - Sollwert)
+      raw_error: "{{ grid_power_float - target_offset }}"
+      
+      # Prüfung: Sind wir am Limit und wollen noch mehr?
+      at_max_limit: "{{ raw_error > 0 and states(active_power_number) | float(0) >= max_active_power_limit_int }}"
+      at_min_limit: "{{ raw_error < 0 and states(active_power_number) | float(0) <= 0 }}"
+
       
       # Wartezeit
       wait_time_int: !input wait_time
@@ -822,34 +832,34 @@ actions:
               value: 0
   
   # SCHRITT 2: Timeout-Reset
-- choose:
-    # Bedingung: Timeout-Reset nur erforderlich, wenn Restzeit < 120s
-    - conditions:
-        - condition: template
-          value_template: "{{ states(timeout_countdown) | int(9999) < 120 }}"
-      sequence:
-        - choose:
-            # Wenn aktuell 3599 eingestellt ist, schreibe 3598
-            - conditions:
-                - condition: template
-                  value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
-              sequence:
-                - action: number.set_value
-                  data:
-                    entity_id: !input remote_timeout_set_number
-                    value: 3598
-            # In allen anderen Fällen (wenn es 3598 ist oder etwas ganz anderes), schreibe 3599
-            - default:
-                - action: number.set_value
-                  data:
-                    entity_id: !input remote_timeout_set_number
-                    value: 3599
+  - choose:
+      # Bedingung: Timeout-Reset nur erforderlich, wenn Restzeit < 120s
+      - conditions:
+          - condition: template
+            value_template: "{{ states(timeout_countdown) | int(9999) < 120 }}"
+        sequence:
+          - choose:
+              # Wenn aktuell 3599 eingestellt ist, schreibe 3598
+              - conditions:
+                  - condition: template
+                    value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                sequence:
+                  - action: number.set_value
+                    data:
+                      entity_id: !input remote_timeout_set_number
+                      value: 3598
+              # In allen anderen Fällen (wenn es 3598 ist oder etwas ganz anderes), schreibe 3599
+              - default:
+                  - action: number.set_value
+                    data:
+                      entity_id: !input remote_timeout_set_number
+                      value: 3599
               
   # 3. PI-REGLER AUFRUF
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
+            value_template: "{{ grid_error_abs > tolerance_int and not at_max_limit| bool(false) and not at_min_limit| bool(false) }}"
         sequence:
           - action: "{{ pi_script }}"
             data:
