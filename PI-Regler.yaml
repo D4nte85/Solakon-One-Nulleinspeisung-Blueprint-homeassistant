@@ -53,8 +53,6 @@ variables:
   integral_new: >
     {% if grid_error_abs > tol_float %}
       {{ [[-1000, integral_old + error_float] | max, 1000] | min | float(0) }}
-    {% elif integral_old | abs > 10 %}
-      {{ (integral_old * 0.95) | float(0) }}
     {% else %}
       {{ integral_old | float(0) }}
     {% endif %}
