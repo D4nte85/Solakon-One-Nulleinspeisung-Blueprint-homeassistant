@@ -788,11 +788,9 @@ actions:
       # PI-Regler-Variablen
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
       
-      # Toleranzprüfung basiert auf tatsächlichem Grid-Fehler (nicht begrenzt)
-      grid_error_for_tolerance: "{{ (grid_power_float - target_offset) | abs }}"
-      
       # Der aktuelle Fehler (Bezug - Sollwert)
       raw_error: "{{ grid_power_float - target_offset }}"
+      grid_error_abs: "{{ (grid_power_float - target_offset) | abs }}"
       
       # Prüfung: Sind wir am Limit und wollen noch mehr?
       at_max_limit: "{{ raw_error > 0 and states(active_power_number) | float(0) >= max_active_power_limit_int }}"
