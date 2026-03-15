@@ -787,13 +787,19 @@ actions:
 
       # PI-Regler-Variablen
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
-      
+      dynamic_max_power: >
+        {% if is_state(cycle_active, 'on') %}
+          {{ max_active_power_limit_int }}
+        {% else %}
+          {{ [0, solar_power_float - pv_charge_reserve_int] | max }}
+        {% endif %}
+
       # Der aktuelle Fehler (Bezug - Sollwert)
       raw_error: "{{ grid_power_float - target_offset }}"
       grid_error_abs: "{{ (grid_power_float - target_offset) | abs }}"
       
       # Prüfung: Sind wir am Limit und wollen noch mehr?
-      at_max_limit: "{{ raw_error > 0 and states(active_power_number) | float(0) >= max_active_power_limit_int }}"
+      at_max_limit: "{{ raw_error > 0 and states(active_power_number) | float(0) >= dynamic_max_power | float(0) }}"
       at_min_limit: "{{ raw_error < 0 and states(active_power_number) | float(0) <= 0 }}"
 
       
@@ -864,7 +870,7 @@ actions:
               grid_power: "{{ grid_power_float }}"
               current_power: "{{ current_active_power }}"
               target_offset: "{{ target_offset }}"
-              max_power: "{{ max_active_power_limit_int }}"
+              max_power: "{{ dynamic_max_power }}"
               tolerance: "{{ tolerance_int }}"
               p_factor: "{{ regulator_factor_float }}"
               i_factor: "{{ ki_factor_float }}"
