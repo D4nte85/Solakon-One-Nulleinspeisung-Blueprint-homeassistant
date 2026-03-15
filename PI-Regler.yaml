@@ -70,12 +70,8 @@ sequence:
       entity_id: "{{ integral_entity }}"
     data:
       value: "{{ integral_new }}"
-      
-  # 2. Nur schreiben, wenn außerhalb der Toleranz
-  - condition: template
-    value_template: "{{ grid_error_abs > tol_float }}"
     
-  # 3. Wert an die übergebene Entität senden
+  # 2. Wert an die übergebene Entität senden
   - action: number.set_value
     target:
       entity_id: "{{ output_entity }}"
