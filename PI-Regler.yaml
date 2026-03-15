@@ -46,20 +46,19 @@ variables:
   
   raw_error: "{{ grid_float - target_float }}"
   grid_error_abs: "{{ raw_error | abs }}"
-  error_float: "{{ [(max_pwr_float - current_float), raw_error] | min | float(0) }}"
   
   # Integral Logik
   integral_old: "{{ states(integral_entity) | float(0) }}"
   integral_new: >
     {% if grid_error_abs > tol_float %}
-      {{ [[-1000, integral_old + error_float] | max, 1000] | min | float(0) }}
+      {{ (integral_old + raw_error)| float(0) | clamp(-1000, 1000) }}
     {% else %}
       {{ integral_old | float(0) }}
     {% endif %}
     
   # Endergebnis
   power_correction: "{{ (error_float * p_val) + (integral_new * i_val) }}"
-  final_power: "{{ [[0, current_float + power_correction] | max, max_pwr_float] | min | round(0) }}"
+  final_power: "{{ (current_float + power_correction) | float(0) | round (0) | clamp(0,max_pwr_float) }}"
 
 sequence:
   # 1. Integral immer aktualisieren
