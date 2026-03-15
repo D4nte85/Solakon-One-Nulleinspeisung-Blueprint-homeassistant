@@ -46,12 +46,18 @@ variables:
   
   raw_error: "{{ grid_float - target_float }}"
   grid_error_abs: "{{ raw_error | abs }}"
+  error_float: >
+     {% if raw_error > 0 %}
+       {{ [raw_error, (max_pwr_float - current_float)] | min }}
+     {% else %}
+       {{ [raw_error, (0 - current_float)] | max }}
+     {% endif %}
   
   # Integral Logik
   integral_old: "{{ states(integral_entity) | float(0) }}"
   integral_new: >
     {% if grid_error_abs > tol_float %}
-      {{ (integral_old + raw_error)| float(0) | clamp(-1000, 1000) }}
+      {{ (integral_old + error_float)| float(0) | clamp(-1000, 1000) }}
     {% else %}
       {{ integral_old | float(0) }}
     {% endif %}
