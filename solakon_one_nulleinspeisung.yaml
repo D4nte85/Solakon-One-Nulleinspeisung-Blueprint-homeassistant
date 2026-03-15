@@ -170,6 +170,20 @@ blueprint:
             selector:
               entity:
                 domain: input_number
+
+          mode_helper:
+            name: 🛠️ Strom Bezugsmodus (input_select - Optional)
+            description: |
+              Optionaler input_select Helfer zur manuellen Steuerung des Strombezugsmodus.
+              Settings → Devices & Services → Helpers → Create Helper → Dropdown
+              - Name: z.B. 'Strom Bezugsmodus'
+              - Options: 'PV + Batterie', 'Nur PV' (exakt so!)
+            
+              'PV + Batterie' = Standardmodus mit dynamischer Nulleinspeisung
+              'Nur PV' = Modus mit maximaler PV-Ausnutzung, Batterie wird nicht entladen (Offset wird ignoriert).
+            selector:
+              entity:
+                domain: input_select
         
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🎚️ REGELUNGS-PARAMETER
@@ -425,6 +439,7 @@ variables:
   
   # PI-Regler Helper
   integral_entity: !input integral_helper
+  mode_helper_entity: !input mode_helper
   
   # Entitäten
   active_power_entity: !input active_power_number
@@ -824,6 +839,15 @@ actions:
           {% set max_zone_2 = max_zone_2_limit | float(0) %}
           {{ [max_zone_2, p_regler_power] | min | float(0) }}
         {% endif %}
+
+      # 6. Ausgabeleistung mit optionaler PV-Kappung (nur wenn mode_helper konfiguriert)
+      final_power_to_set: >
+        {% set requested_power = [0, final_power_calculated | float(0)] | max %}
+        {% if mode_helper_entity is string and mode_helper_entity | length > 0 and states(mode_helper_entity) == 'Nur PV' %}
+          {{ [requested_power, solar_power_float] | min | round(0) }}
+        {% else %}
+          {{ requested_power | round(0) }}
+        {% endif %}
         
   # SCHRITT 1: Entladestrom setzen
   - choose:
@@ -888,6 +912,6 @@ actions:
         - action: number.set_value
           data:
             entity_id: !input active_power_number
-            value: "{{ [0, final_power_calculated] | max | round(0) }}"
+            value: "{{ final_power_to_set }}"
         - delay:
             seconds: "{{ wait_time_int }}"              
