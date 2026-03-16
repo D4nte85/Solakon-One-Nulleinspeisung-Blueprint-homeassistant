@@ -140,13 +140,17 @@ blueprint:
         description: "Hier findest du die notwendigen Helfer die du anlegen MUSST damit dieser Blueprint richtig funktioniert."
         collapsed: true 
         input:     
-          cycle_active_input_select:
-            name: 🛠️ Entladezyklus-Zustandsspeicher (input_select - ERFORDERLICH!)
+          cycle_active_boolean_helper:
+            name: 🛠️ Entladezyklus-Zustandsspeicher (input_boolean - ERFORDERLICH!)
             description: |
-              ⚠️ WICHTIG: Erstellen Sie einen Input Select Helfer mit den Optionen 'on' und 'off'.
-              Settings → Devices & Services → Helpers → Create Helper → Dropdown
+              ⚠️ WICHTIG: Erstellen Sie einen Schalter Helfer (Input Boolean).
+              Einstellungen → Geräte & Dienste → Helfer → Helfer erstellen → Schalter
               - Name: z.B. 'SOC Entladezyklus Status'
-              - Options: 'on' und 'off' (exakt so!)
+              Dieser speichert, ob der Entladezyklus aktiv ist (Zone 1).
+            default: input_boolean.soc_entladezyklus_status
+            selector:
+              entity:
+                domain: input_boolean
             
               Dieser speichert, ob der Entladezyklus aktiv ist (Zone 1).
             default: input_select.soc_entladezyklus_status
@@ -424,7 +428,7 @@ variables:
   soc: !input soc_sensor
   timeout_countdown: !input remote_timeout_countdown_sensor
   solakon_mode: !input mode_select
-  cycle_active: !input cycle_active_input_select
+  cycle_active: !input cycle_active_boolean_helper
   
   # Nachtabschaltung Config
   night_shutdown_enabled_bool: !input night_shutdown_enabled
@@ -503,7 +507,7 @@ actions:
           - condition: template
             value_template: "{{ states(soc) | float(0) > soc_fast_limit_int }}"
           - condition: state
-            entity_id: !input cycle_active_input_select
+            entity_id: !input cycle_active_boolean_helper
             state: 'off'
         sequence:
           # Logging
@@ -518,10 +522,9 @@ actions:
               entity_id: !input integral_helper
               value: 0
           # 1. Zyklus auf 'on' setzen
-          - action: input_select.select_option
-            data:
-              entity_id: !input cycle_active_input_select
-              option: 'on'
+          - action: input_boolean.turn_on
+            target:
+              entity_id: !input cycle_active_boolean_helper
           # 2. Modus-Wechsel zu 'INV Discharge PV Priority'
           - choose:
               - conditions: "{{ states(solakon_mode) != '1' }}"
@@ -552,7 +555,7 @@ actions:
           - condition: template
             value_template: "{{ states(soc) | float(0) < soc_conservation_limit_int }}"
           - condition: state
-            entity_id: !input cycle_active_input_select
+            entity_id: !input cycle_active_boolean_helper
             state: 'on'
         sequence:
           # Logging
@@ -567,10 +570,9 @@ actions:
               entity_id: !input integral_helper
               value: 0
           # 1. Zyklus auf 'off' setzen
-          - action: input_select.select_option
-            data:
-              entity_id: !input cycle_active_input_select
-              option: 'off'
+          - action: input_boolean.turn_off
+            target:
+              entity_id: !input cycle_active_boolean_helper
           # 2. Modus-Wechsel zu 'Disabled'
           - choose:
               - conditions: "{{ states(solakon_mode) != '0' }}"
@@ -590,7 +592,7 @@ actions:
           - condition: template
             value_template: "{{ states(soc) | float(0) < soc_conservation_limit_int }}"
           - condition: state
-            entity_id: !input cycle_active_input_select
+            entity_id: !input cycle_active_boolean_helper
             state: 'off'
           - condition: template
             value_template: "{{ states(solakon_mode) != '0' }}"
@@ -612,7 +614,7 @@ actions:
       # FALL D: Recovery - Modus fiel ab, aber Zyklus ist noch aktiv
       - conditions:
           - condition: state
-            entity_id: !input cycle_active_input_select
+            entity_id: !input cycle_active_boolean_helper
             state: 'on'
           - condition: template
             value_template: "{{ states(solakon_mode) != '1' }}"
@@ -645,7 +647,7 @@ actions:
           - condition: template
             value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int and states(soc) | float(0) <= soc_fast_limit_int }}"
           - condition: state
-            entity_id: !input cycle_active_input_select
+            entity_id: !input cycle_active_boolean_helper
             state: 'off'
           - condition: template
             value_template: "{{ states(solakon_mode) == '0' }}"
@@ -701,7 +703,7 @@ actions:
             value_template: "{{ (states(solar_power_for_night_check) | float(0)) < night_pv_threshold }}"
           # Nur in Zone 2 (cycle = off)
           - condition: state
-            entity_id: !input cycle_active_input_select
+            entity_id: !input cycle_active_boolean_helper
             state: 'off'
           # Modus ist aktuell aktiv
           - condition: template
@@ -810,7 +812,7 @@ actions:
       # FALL 1a: Limit für Zone 1 setzen (Aggressiv)
       - conditions:
           - condition: state
-            entity_id: !input cycle_active_input_select
+            entity_id: !input cycle_active_boolean_helper
             state: 'on'
           - condition: template
             value_template: >
