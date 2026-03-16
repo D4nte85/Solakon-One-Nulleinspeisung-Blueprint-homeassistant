@@ -151,12 +151,6 @@ blueprint:
             selector:
               entity:
                 domain: input_boolean
-            
-              Dieser speichert, ob der Entladezyklus aktiv ist (Zone 1).
-            default: input_select.soc_entladezyklus_status
-            selector:
-              entity:
-                domain: input_select
         
           integral_helper:
             name: 🛠️ Integral-Speicher (input_number - ERFORDERLICH!)
