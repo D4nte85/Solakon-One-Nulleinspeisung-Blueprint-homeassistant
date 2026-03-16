@@ -386,7 +386,7 @@ blueprint:
           night_shutdown_enabled:
             name: 🌙 Nachtabschaltung aktivieren
             description: |
-              Deaktiviert Zone 2 nachts automatisch (bei PV < Schwelle).
+              Deaktiviert Zone 2 nachts automatisch (bei PV < PV-Ladereserve).
               ⚠️ Zone 1 (aggressive Entladung) läuft auch nachts weiter!
               Sinnvoll für Batterieschonung bei 0 PV.
             default: false
