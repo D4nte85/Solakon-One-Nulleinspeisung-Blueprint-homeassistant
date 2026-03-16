@@ -534,11 +534,11 @@ actions:
                               entity_id: !input remote_timeout_set_number
                               value: 3598
                       # In allen anderen Fällen (wenn es 3598 ist oder etwas ganz anderes), schreibe 3599
-                      - default:
-                          - action: number.set_value
-                            data:
-                              entity_id: !input remote_timeout_set_number
-                              value: 3599
+                      default:
+                        - action: number.set_value
+                          data:
+                            entity_id: !input remote_timeout_set_number
+                            value: 3599
                   - action: select.select_option
                     data:
                       entity_id: !input mode_select
@@ -626,11 +626,11 @@ actions:
                       entity_id: !input remote_timeout_set_number
                       value: 3598
               # In allen anderen Fällen (wenn es 3598 ist oder etwas ganz anderes), schreibe 3599
-              - default:
-                  - action: number.set_value
-                    data:
-                      entity_id: !input remote_timeout_set_number
-                      value: 3599
+              default:
+                - action: number.set_value
+                  data:
+                    entity_id: !input remote_timeout_set_number
+                    value: 3599
           - action: select.select_option
             data:
               entity_id: !input mode_select
@@ -677,11 +677,11 @@ actions:
                               entity_id: !input remote_timeout_set_number
                               value: 3598
                       # In allen anderen Fällen (wenn es 3598 ist oder etwas ganz anderes), schreibe 3599
-                      - default:
-                          - action: number.set_value
-                            data:
-                              entity_id: !input remote_timeout_set_number
-                              value: 3599
+                      default:
+                        - action: number.set_value
+                          data:
+                            entity_id: !input remote_timeout_set_number
+                            value: 3599
                   - action: select.select_option
                     data:
                       entity_id: !input mode_select
@@ -848,11 +848,11 @@ actions:
                       entity_id: !input remote_timeout_set_number
                       value: 3598
               # In allen anderen Fällen (wenn es 3598 ist oder etwas ganz anderes), schreibe 3599
-              - default:
-                  - action: number.set_value
-                    data:
-                      entity_id: !input remote_timeout_set_number
-                      value: 3599
+              default:
+                - action: number.set_value
+                  data:
+                    entity_id: !input remote_timeout_set_number
+                    value: 3599
               
   # 3. PI-REGLER AUFRUF
   - choose:
