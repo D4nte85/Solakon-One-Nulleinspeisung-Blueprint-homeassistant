@@ -392,20 +392,9 @@ blueprint:
             default: false
             selector:
               boolean:
-        
-          night_shutdown_pv_threshold:
-            name: 🌙 PV-Schwelle für "Nacht"
-            description: |
-              Unterhalb dieser PV-Leistung gilt es als Nacht (z.B. 10 W).
-              Nur relevant wenn Nachtabschaltung aktiviert ist.
-            default: 10
-            selector:
-              number:
-                min: 0
-                max: 100
-                unit_of_measurement: W
+
     
-mode: queued
+mode: single
 max_exceeded: silent
 
 variables:
@@ -426,8 +415,8 @@ variables:
   
   # Nachtabschaltung Config
   night_shutdown_enabled_bool: !input night_shutdown_enabled
-  night_pv_threshold: !input night_shutdown_pv_threshold
   solar_power_for_night_check: !input solar_power_sensor
+  pv_charge_reserve_int: !input pv_charge_reserve
   
   # PI-Regler Helper
   integral_entity: !input integral_helper
@@ -694,7 +683,7 @@ actions:
             value_template: "{{ night_shutdown_enabled_bool }}"
           # Es ist Nacht (PV unter Schwelle)
           - condition: template
-            value_template: "{{ (states(solar_power_for_night_check) | float(0)) < night_pv_threshold }}"
+            value_template: "{{ (pv_charge_reserve_int | float(0)) < night_pv_threshold }}"
           # Nur in Zone 2 (cycle = off)
           - condition: state
             entity_id: !input cycle_active_boolean_helper
@@ -707,7 +696,7 @@ actions:
           - action: logbook.log
             data:
               name: Solakon Nachtmodus
-              message: "🌙 Nachtabschaltung aktiviert (Zone 2) - PV: {{ states(solar_power_for_night_check) }}W"
+              message: "🌙 Nachtabschaltung aktiviert (Zone 2) - PV: {{ pv_charge_reserve_int }}W"
               entity_id: !input solar_power_sensor
           # Integral zurücksetzen
           - action: input_number.set_value
@@ -754,7 +743,6 @@ actions:
       # Konfiguration
       pi_script: !input PI_regler_script
       max_active_power_limit_int: !input max_active_power_limit
-      pv_charge_reserve_int: !input pv_charge_reserve
       tolerance_int: !input tolerance
       regulator_factor_float: !input regulator_factor
       ki_factor_float: !input ki_factor
