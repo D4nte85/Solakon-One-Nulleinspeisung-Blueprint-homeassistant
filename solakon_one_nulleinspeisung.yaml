@@ -175,19 +175,20 @@ blueprint:
         # 🎚️ REGELUNGS-PARAMETER
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
 
-      PI_regler_script:
-        name: 📜 PI-Regler Script
-        description: Das aus dem "PI-Regler" Blueprint erstellte Script.
-        default: script.pi_regler
-        selector:
-          entity:
-            domain: script
       
       PI_parameter:
         name: "🎚️ REGELUNGS-PARAMETER (PI):"
         description: "Hier findest du die Parameter für die PI-regelung, diese solltest du nicht anfassen müssen, aber du kannst."
         collapsed: true 
         input:    
+          PI_regler_script:
+            name: 📜 PI-Regler Script
+            description: Das aus dem "PI-Regler" Blueprint erstellte Script.
+            default: script.pi_regler
+            selector:
+              entity:
+                domain: script
+
           regulator_factor:
             name: 🎛️ P-Faktor (Proportional-Verstärkung)
             description: |
