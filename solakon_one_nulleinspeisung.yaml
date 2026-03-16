@@ -174,8 +174,6 @@ blueprint:
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🎚️ REGELUNGS-PARAMETER
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
-
-      
       PI_parameter:
         name: "🎚️ REGELUNGS-PARAMETER (PI):"
         description: "Hier findest du die Parameter für die PI-regelung, diese solltest du nicht anfassen müssen, aber du kannst."
