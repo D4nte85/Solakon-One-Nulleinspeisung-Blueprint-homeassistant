@@ -424,6 +424,7 @@ variables:
   # Entitäten
   active_power_entity: !input active_power_number
   discharge_current_entity: !input max_discharge_current_number
+  remote_timeout_set_number: !input remote_timeout_set_number
   
   # Parameter
   discharge_current_max: !input default_discharge_current
@@ -469,7 +470,7 @@ actions:
           - condition: or
             conditions:
               - condition: template
-                value_template: "{{ soc_fast_limit_int <= soc_conservation_limit_int }}"
+                value_template: "{{ soc_fast_limit_int | float(0) <= soc_conservation_limit_int | float(0) }}"
               - condition: template
                 value_template: >
                   {{ is_state(soc, 'unknown') or is_state(soc, 'unavailable') or
@@ -638,7 +639,7 @@ actions:
           - condition: template
             value_template: >
               {{ not night_shutdown_enabled_bool or 
-                 (states(solar_power_for_night_check) | float(0)) >= night_pv_threshold }}
+                 (states(solar_power_for_night_check) | float(0)) >= pv_charge_reserve_int | float(0) }}
         sequence:
           # Logging
           - action: logbook.log
@@ -777,7 +778,7 @@ actions:
         {% if is_state(cycle_active, 'on') %}
           {{ max_active_power_limit_int }}
         {% else %}
-          {{ [0, solar_power_float - pv_charge_reserve_int] | max }}
+          {{ [0, solar_power_float - (pv_charge_reserve_int | float(0)] | max }}
         {% endif %}
 
       # Der aktuelle Fehler (Bezug - Sollwert)
