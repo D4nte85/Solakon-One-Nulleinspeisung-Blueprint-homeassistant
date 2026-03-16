@@ -778,7 +778,7 @@ actions:
         {% if is_state(cycle_active, 'on') %}
           {{ max_active_power_limit_int }}
         {% else %}
-          {{ [0, solar_power_float - (pv_charge_reserve_int | float(0)] | max }}
+          {{ [0, solar_power_float - (pv_charge_reserve_int | float(0))] | max }}
         {% endif %}
 
       # Der aktuelle Fehler (Bezug - Sollwert)
