@@ -58,6 +58,8 @@ variables:
   integral_new: >
     {% if grid_error_abs > tol_float %}
       {{ (integral_old + error_float)| float(0) | clamp(-1000, 1000) }}
+    {% elif integral_old | abs > 10 %}
+      {{ (integral_old * 0.95) | round(2) }}
     {% else %}
       {{ integral_old | float(0) }}
     {% endif %}
