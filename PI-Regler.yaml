@@ -36,7 +36,7 @@ fields:
 
 variables:
   # Berechnungen basierend auf den übergebenen Feldern
-  grid_float: "{{ grid_power | float(0) }}"
+  grid_float: "{{ states(grid_power) | float(0) }}"
   current_float: "{{ current_power | float(0) }}"
   target_float: "{{ target_offset | float(0) }}"
   max_pwr_float: "{{ max_power | float(800) }}"
