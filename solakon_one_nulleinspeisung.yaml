@@ -851,7 +851,7 @@ actions:
         sequence:
           - action: "{{ pi_script }}"
             data:
-              grid_power: "{{ grid_power_float }}"
+              grid_power: !input grid_power_sensor
               current_power: "{{ current_active_power }}"
               target_offset: "{{ target_offset }}"
               max_power: "{{ dynamic_max_power }}"
