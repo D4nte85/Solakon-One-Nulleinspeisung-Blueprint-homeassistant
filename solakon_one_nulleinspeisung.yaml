@@ -723,8 +723,9 @@ actions:
               value: 0
           # Modus auf 'Disabled' setzen
           - action: select.select_option
-            data:
+            target:
               entity_id: !input mode_select
+            data:
               option: '0'
           # Power Limit auf 0 W
           - action: number.set_value
