@@ -697,7 +697,7 @@ actions:
           - action: logbook.log
             data:
               name: Solakon Nachtmodus
-              message: "🌙 Nachtabschaltung aktiviert (Zone 2) - PV: {{ pv_charge_reserve_int }}W"
+              message: "🌙 Nachtabschaltung aktiviert (Zone 2) - PV: {{ states(solar_power_for_night_check) }}W"
               entity_id: !input solar_power_sensor
           # Integral zurücksetzen
           - action: input_number.set_value
