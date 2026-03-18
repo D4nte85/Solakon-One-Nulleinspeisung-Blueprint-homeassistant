@@ -567,15 +567,16 @@ actions:
               - conditions: "{{ states(solakon_mode) != '0' }}"
                 sequence:
                   - action: select.select_option
-                    data:
+                    target:
                       entity_id: !input mode_select
+                    data:
                       option: '0'
           # 3. Power Limit auf 0 W setzen (Soft Stopp)
-          - action: select.select_option
+          - action: number.set_value
             target:
-              entity_id: !input mode_select
+              entity_id: !input active_power_number
             data:
-              option: 0
+              value: 0
               
       # FALL C: ZONE 3 - Sicherheits-STOPP (Zusätzliche Absicherung, falls Zyklus bereits OFF aber Modus aktiv)
       - conditions:
@@ -675,14 +676,16 @@ actions:
                             value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
                         sequence:
                           - action: number.set_value
-                            data:
+                            target:
                               entity_id: !input remote_timeout_set_number
+                            data:
                               value: 3598
                     # In allen anderen Fällen (wenn es 3598 ist oder etwas ganz anderes), schreibe 3599
                     default:
                       - action: number.set_value
-                        data:
+                        target:
                           entity_id: !input remote_timeout_set_number
+                        data:
                           value: 3599
                   - action: select.select_option
                     target:
@@ -724,11 +727,11 @@ actions:
               entity_id: !input mode_select
               option: '0'
           # Power Limit auf 0 W
-          - action: select.select_option
+          - action: number.set_value
             target:
-              entity_id: !input mode_select
+              entity_id: !input active_power_number
             data:
-              option: 0
+              value: 0
                       
   # -------------------------------------------------------------------------------------------------
   # PRÜFUNG: NUR ausführen wenn Modus aktiv ist UND (Zone 1 ODER Tag)!
