@@ -502,8 +502,9 @@ actions:
               entity_id: !input soc_sensor
           # Integral zurücksetzen bei Zonenwechsel
           - action: input_number.set_value
-            data:
+            target:
               entity_id: !input integral_helper
+            data:
               value: 0
           # 1. Zyklus auf 'on' setzen
           - action: input_boolean.turn_on
@@ -520,18 +521,21 @@ actions:
                             value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
                         sequence:
                           - action: number.set_value
-                            data:
+                            target:
                               entity_id: !input remote_timeout_set_number
+                            data:
                               value: 3598
                     # In allen anderen Fällen (wenn es 3598 ist oder etwas ganz anderes), schreibe 3599
                     default:
                       - action: number.set_value
-                        data:
+                        target:
                           entity_id: !input remote_timeout_set_number
+                        data:
                           value: 3599
                   - action: select.select_option
-                    data:
+                    target:
                       entity_id: !input mode_select
+                    data:
                       option: '1'
       
       # FALL B: ZONE 3 - Sicherheits-STOPP (SOC < Untere Schwelle UND Zyklus ON)
@@ -550,8 +554,9 @@ actions:
               entity_id: !input soc_sensor
           # Integral zurücksetzen
           - action: input_number.set_value
-            data:
+            target:
               entity_id: !input integral_helper
+            data:
               value: 0
           # 1. Zyklus auf 'off' setzen
           - action: input_boolean.turn_off
@@ -566,10 +571,11 @@ actions:
                       entity_id: !input mode_select
                       option: '0'
           # 3. Power Limit auf 0 W setzen (Soft Stopp)
-          - action: number.set_value
+          - action: select.select_option
+            target:
+              entity_id: !input mode_select
             data:
-              entity_id: !input active_power_number
-              value: 0
+              option: 0
               
       # FALL C: ZONE 3 - Sicherheits-STOPP (Zusätzliche Absicherung, falls Zyklus bereits OFF aber Modus aktiv)
       - conditions:
@@ -586,13 +592,15 @@ actions:
               - conditions: "{{ states(solakon_mode) != '0' }}"
                 sequence:
                   - action: select.select_option
-                    data:
+                    target:
                       entity_id: !input mode_select
+                    data:
                       option: '0'
           # 2. Power Limit auf 0 W setzen
           - action: number.set_value
-            data:
+            target:
               entity_id: !input active_power_number
+            data:
               value: 0
               
       # FALL D: Recovery - Modus fiel ab, aber Zyklus ist noch aktiv
@@ -612,18 +620,21 @@ actions:
                     value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
                 sequence:
                   - action: number.set_value
-                    data:
+                    target:
                       entity_id: !input remote_timeout_set_number
+                    data:
                       value: 3598
             # In allen anderen Fällen (wenn es 3598 ist oder etwas ganz anderes), schreibe 3599
             default:
               - action: number.set_value
-                data:
+                target:
                   entity_id: !input remote_timeout_set_number
+                data:
                   value: 3599
           - action: select.select_option
-            data:
+            target:
               entity_id: !input mode_select
+            data:
               option: '1'
     
       # FALL E: ZONE 2 - Batterieschonend START (P-Regler aktiv, aber 0 A Entladung)
@@ -649,8 +660,9 @@ actions:
               entity_id: !input soc_sensor
           # Integral zurücksetzen bei Zonenwechsel
           - action: input_number.set_value
-            data:
+            target:
               entity_id: !input integral_helper
+            data:
               value: 0
           # Modus-Wechsel zu 'INV Discharge PV Priority'
           - choose:
@@ -673,8 +685,9 @@ actions:
                           entity_id: !input remote_timeout_set_number
                           value: 3599
                   - action: select.select_option
-                    data:
+                    target:
                       entity_id: !input mode_select
+                    data:
                       option: '1'
 
       # FALL F: Nachtabschaltung (Zone 2 bei PV < Schwelle)
@@ -711,10 +724,11 @@ actions:
               entity_id: !input mode_select
               option: '0'
           # Power Limit auf 0 W
-          - action: number.set_value
+          - action: select.select_option
+            target:
+              entity_id: !input mode_select
             data:
-              entity_id: !input active_power_number
-              value: 0
+              option: 0
                       
   # -------------------------------------------------------------------------------------------------
   # PRÜFUNG: NUR ausführen wenn Modus aktiv ist UND (Zone 1 ODER Tag)!
@@ -804,8 +818,9 @@ actions:
               {{ states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
         sequence:
           - action: number.set_value
-            data:
+            target:
               entity_id: !input max_discharge_current_number
+            data:
               value: "{{ discharge_current_max }}"
       
       # FALL 1b: Limit für Zone 2 setzen (Batterieschonend = 0 A)
@@ -816,8 +831,9 @@ actions:
                  states(discharge_current_entity) | float(999) | round(2) != 0 }}
         sequence:
           - action: number.set_value
-            data:
+            target:
               entity_id: !input max_discharge_current_number
+            data:
               value: 0
   
   # SCHRITT 2: Timeout-Reset
@@ -834,14 +850,16 @@ actions:
                     value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
                 sequence:
                   - action: number.set_value
-                    data:
+                    target:
                       entity_id: !input remote_timeout_set_number
+                    data:
                       value: 3598
             # In allen anderen Fällen (wenn es 3598 ist oder etwas ganz anderes), schreibe 3599
             default:
               - action: number.set_value
-                data:
+                target:
                   entity_id: !input remote_timeout_set_number
+                data:
                   value: 3599
               
   # 3. PI-REGLER AUFRUF
