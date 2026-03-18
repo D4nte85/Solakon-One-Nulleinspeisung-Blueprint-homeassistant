@@ -684,7 +684,7 @@ actions:
             value_template: "{{ night_shutdown_enabled_bool }}"
           # Es ist Nacht (PV unter Schwelle)
           - condition: template
-            value_template: "{{ (pv_charge_reserve_int | float(0)) < night_pv_threshold }}"
+            value_template: "{{ states(solar_power_for_night_check) | float(0) < pv_charge_reserve_int | float(0) }}"
           # Nur in Zone 2 (cycle = off)
           - condition: state
             entity_id: !input cycle_active_boolean_helper
@@ -723,7 +723,7 @@ actions:
       {{ states(solakon_mode) == '1' and
          (is_state(cycle_active, 'on') or 
           not night_shutdown_enabled_bool or
-          (states(solar_power_for_night_check) | float(0)) >= night_pv_threshold) }}
+          (states(solar_power_for_night_check) | float(0)) >= pv_charge_reserve_int | float(0) }}
     
   # ===========================================
   # BLOCK 2: Variablen NUR für PI-Regler
