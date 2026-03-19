@@ -15,7 +15,7 @@ Für eine wie im Folgenden gewollte Funktion sollte als Standard ein 0W für 24s
 
 Installieren Sie den Blueprint direkt über diesen Button in Ihrer Home Assistant Instanz:
 
-[![Open your Home Assistant instance and show the blueprint import dialog with a pre-filled URL.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2Fmain%2Fsolakon_one_nulleinspeisung.yaml)
+[![Open your Home Assistant instance and show the blueprint import dialog with a pre-filled URL.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2Flagacy-v207%2Fsolakon_one_nulleinspeisung.yaml)
 
 ## 🛠️ Vorbereitung: Erstellung der erforderlichen Helper
 
@@ -92,7 +92,7 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung:
   - **Zone 2:** Fehler = Min(verfügbare Kapazität, Grid Power − Offset₂, PV-Kapazität)
 
 * **Leistungsbegrenzung:**
-  - Oberes Hard Limit (z.B. 800 W) in Zone 1 und Zone 0
+  - Oberes Hard Limit (z.B. 800 W) in Zone 1
   - Dynamisches PV-basiertes Limit in Zone 2
   - Unteres Limit: fest 0 W
 
@@ -100,7 +100,7 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung:
 
 ### 2. 🔋 SOC-Zonen-Logik
 
-Die Regelung wird anhand des aktuellen SOC in bis zu vier Betriebsmodi unterteilt:
+Die Regelung wird anhand des aktuellen SOC in bis zu drei Betriebsmodi unterteilt:
 
 | Zone | SOC-Bereich / Bedingung | Modus | Max. Entladestrom | Regelziel | Besonderheiten |
 |:-----|:------------------------|:------|:-----------------|:---------|:--------------|
@@ -120,14 +120,13 @@ Falls der Modus des Wechselrichters extern zurückgesetzt wird (z.B. durch einen
 
 ---
 
-### 4. 🌙 Nachtabschaltung (Optional)
+### 3. 🌙 Nachtabschaltung (Optional)
 
 Die Nachtabschaltung kann optional aktiviert werden und betrifft **nur Zone 2**:
 
 * **Aktivierung:** Über den Parameter "Nachtabschaltung aktivieren"
 * **Schwelle:** PV-Leistung unter konfiguriertem Wert (z.B. 10 W)
 * **Verhalten:**
-  - **Zone 0:** Nicht betroffen (setzt SOC-Vollstand voraus)
   - **Zone 1:** Läuft auch nachts weiter (hoher SOC → aggressive Entladung gewünscht)
   - **Zone 2:** Wird bei PV < Schwelle auf `Disabled` gesetzt (Integral wird zurückgesetzt)
   - **Zone 3:** Ohnehin deaktiviert
@@ -135,7 +134,7 @@ Die Nachtabschaltung kann optional aktiviert werden und betrifft **nur Zone 2**:
 
 ---
 
-### 5. ⏱️ Remote Timeout Reset und Moduswechsel-Sequenz
+### 4. ⏱️ Remote Timeout Reset und Moduswechsel-Sequenz
 
 Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 
@@ -257,7 +256,7 @@ Dafür steht ein eigener Blueprint zur Verfügung:
 
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
-| **Max. Ausgangsleistung** | 800 W | 0 | 1200 W | Absolute Obergrenze (Hard Limit) in Zone 0 und Zone 1. |
+| **Max. Ausgangsleistung** | 800 W | 0 | 1200 W | Absolute Obergrenze (Hard Limit) in Zone 1. |
 
 ---
 
@@ -384,7 +383,6 @@ new_power = current_power + correction
 
 **Finale Leistung (zonenabhängige Begrenzung):**
 ```
-Zone 0: final_power = hard_limit                       (Überschuss-Einspeisung)
 Zone 1: final_power = Min(hard_limit, new_power)
 Zone 2: final_power = Min(Max(0, PV - reserve), new_power)
 ```
