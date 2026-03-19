@@ -43,7 +43,7 @@
         NIGHT --> END_STOP
 
         %% ── PI-Regler Gate ──────────────────────────────────────────
-        PI_GATE{{"Modus = INV Discharge? UND Zone 1 ODER Tag?"}}
+        PI_GATE{{"Modus = INV Discharge?\nUND (Zone 1 ODER Nacht-AUS ODER PV ≥ Schwelle)?"}}
         PI_GATE -- Nein --> END_SKIP([Ende — kein Output])
         PI_GATE -- Ja --> CALC_NORMAL
 
@@ -65,7 +65,12 @@
 
         %% ── Integral & Output ───────────────────────────────────────
         INTEGRAL_SAVE["💾 Integral-Wert speichern"]
-        INTEGRAL_SAVE --> SET_OUTPUT
+        INTEGRAL_SAVE --> OUTPUT_GATE
+
+        %% ── Output nur bei Regelabweichung > Toleranz ───────────────
+        OUTPUT_GATE{{"Grid-Fehler > Toleranz?"}}
+        OUTPUT_GATE -- Nein --> END_SKIP2([Ende — kein Output])
+        OUTPUT_GATE -- Ja --> SET_OUTPUT
 
         SET_OUTPUT["⚙️ Ausgangsleistung setzen  Max(0, final_power)   → Wechselrichter"]
         SET_OUTPUT --> WAIT["⏳ Wartezeit (0–30s)"]
@@ -86,5 +91,5 @@
         class NIGHT night
         class RECOVERY recovery
         class CALC_NORMAL,DISCHARGE_SET pi
-        class END_STOP,END_SKIP,END_TOL,END_OK,BOOL_UPDATE end_node
+        class END_STOP,END_SKIP,END_SKIP2 end_node
 ```
