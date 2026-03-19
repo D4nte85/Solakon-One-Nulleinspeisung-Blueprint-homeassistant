@@ -1,0 +1,78 @@
+blueprint:
+  name: PI-Regler
+  description: >
+    Ein reines Rechen-Script. Erwartet alle Entitäten und Werte als Variablen 
+    beim Aufruf aus einer Automatisierung.
+  domain: script
+
+mode: single
+
+fields:
+  grid_power:
+    name: Netzleistung (Watt)
+    description: Aktueller Wert vom Stromzähler
+  current_power:
+    name: Aktuelle WR-Leistung (Watt)
+    description: Derzeitiger Output des Wechselrichters
+  target_offset:
+    name: Sollwert (Watt)
+    description: Ziel-Netzbezug
+  max_power:
+    name: Max Leistung (Watt)
+    description: Limit des Wechselrichters
+  tolerance:
+    name: Toleranz (Watt)
+    description: Totband, in dem nicht geregelt wird
+  p_factor:
+    name: P-Faktor
+  i_factor:
+    name: I-Faktor
+  integral_entity:
+    name: Integral-Helfer (ID)
+    description: Die Entitäts-ID des input_number Helfers
+  output_entity:
+    name: Ziel-Entität (ID)
+    description: Die Entitäts-ID des Wechselrichter-Limits
+
+variables:
+  # Berechnungen basierend auf den übergebenen Feldern
+  grid_float: "{{ states(grid_power) | float(0) }}"
+  current_float: "{{ current_power | float(0) }}"
+  target_float: "{{ target_offset | float(0) }}"
+  max_pwr_float: "{{ max_power | float(800) }}"
+  tol_float: "{{ tolerance | float(10) }}"
+  p_val: "{{ p_factor | float(1.5) }}"
+  i_val: "{{ i_factor | float(0.05) }}"
+  
+  raw_error: "{{ grid_float - target_float }}"
+  grid_error_abs: "{{ raw_error | abs }}"
+  error_float: >
+     {% if raw_error > 0 %}
+       {{ [raw_error, (max_pwr_float - current_float)] | min }}
+     {% else %}
+       {{ [raw_error, (0 - current_float)] | max }}
+     {% endif %}
+  
+  # Integral Logik
+  integral_old: "{{ states(integral_entity) | float(0) }}"
+  integral_new: "{{ (integral_old + error_float)| float(0) | clamp(-1000, 1000) }}"
+
+  # Endergebnis
+  power_correction: "{{ (error_float * p_val) + (integral_new * i_val) }}"
+  final_power: "{{ (current_float + power_correction) | float(0) | round (0) | clamp(0,max_pwr_float) }}"
+
+sequence:
+  - parallel:
+      # 1. Integral immer aktualisieren
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ integral_entity }}"
+        data:
+          value: "{{ integral_new }}"
+        
+      # 2. Wert an die übergebene Entität senden
+      - action: number.set_value
+        target:
+          entity_id: "{{ output_entity }}"
+        data:
+          value: "{{ final_power }}"

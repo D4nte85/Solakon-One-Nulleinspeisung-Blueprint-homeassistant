@@ -1,6 +1,6 @@
-# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V207
+# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V300
 
-Dieser Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung** für den Solakon ONE Wechselrichter, basierend auf einem **PI-Regler (Proportional-Integral-Regler)** und einer intelligenten **SOC-Zonen-Logik** mit optionaler **Überschuss-Einspeisung bei vollem Akku**.
+Dieser Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung** für den Solakon ONE Wechselrichter, basierend auf einem **PI-Regler (Proportional-Integral-Regler)** und einer intelligenten **SOC-Zonen-Logik**.
 
 Ziel dieses Blueprints ist es, PV-Energie direkt auszugeben ohne den Umweg über die Batterie. Dies verhindert das "Flackern", das die App mit ihrer (lade ein Prozent → entlade ein Prozent → repeat) Funktionsweise verursacht, und schont die Batterie.
 
@@ -15,21 +15,22 @@ Für eine wie im Folgenden gewollte Funktion sollte als Standard ein 0W für 24s
 
 Installieren Sie den Blueprint direkt über diesen Button in Ihrer Home Assistant Instanz:
 
-[![Open your Home Assistant instance and show the blueprint import dialog with a pre-filled URL.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2Fmain%2Fsolakon_one_nulleinspeisung.yaml)
+[![Open your Home Assistant instance and show the blueprint import dialog with a pre-filled URL.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2Fcomplete-rework-%2F-PI-script%2Fsolakon_one_nulleinspeisung.yaml)
+
+Der zugehörige **PI-Regler Script-Blueprint** muss ebenfalls importiert werden:
+
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fcomplete-rework-%2F-PI-script%2FPI-Regler.yaml)
 
 ## 🛠️ Vorbereitung: Erstellung der erforderlichen Helper
 
-Der Blueprint benötigt **zwei Helper**, die Sie vor der Installation erstellen müssen:
+Der Blueprint benötigt **zwei Helper** und ein **Script**, die Sie vor der Installation erstellen bzw. einrichten müssen:
 
-### 1. Input Select Helper (Entladezyklus-Speicher)
+### 1. Input Boolean Helper (Entladezyklus-Speicher)
 
 1. Gehen Sie zu **Einstellungen** → **Geräte & Dienste** → **Helfer**
-2. Klicken Sie auf **Helfer erstellen** → **Auswahl** (Dropdown)
+2. Klicken Sie auf **Helfer erstellen** → **Schalter** (Input Boolean)
 3. Name: z.B. `SOC Entladezyklus Status`
-4. Fügen Sie **genau** diese beiden Optionen hinzu:
-   * `on`
-   * `off`
-5. Speichern (Entity ID: z.B. `input_select.soc_entladezyklus_status`)
+4. Speichern (Entity ID: z.B. `input_boolean.soc_entladezyklus_status`)
 
 ### 2. Input Number Helper (Integral-Speicher für PI-Regler)
 
@@ -43,7 +44,15 @@ Der Blueprint benötigt **zwei Helper**, die Sie vor der Installation erstellen 
    * Initialwert: `0`
 5. Speichern (Entity ID: z.B. `input_number.solakon_integral`)
 
-### 3. Input Number Helper für Dynamischen Offset (Optional)
+### 3. PI-Regler Script (ERFORDERLICH)
+
+1. Importieren Sie den **PI-Regler Blueprint** (Link oben)
+2. Gehen Sie zu **Einstellungen** → **Automationen & Szenen** → **Scripts** → **Script erstellen**
+3. Wählen Sie den importierten PI-Regler Blueprint
+4. Name: z.B. `PI-Regler` (Script Entity ID: z.B. `script.pi_regler`)
+5. Speichern
+
+### 4. Input Number Helper für Dynamischen Offset (Optional)
 
 Wenn Sie den Nullpunkt-Offset zur Laufzeit dynamisch anpassen möchten, empfehlen wir den **Solakon ONE — Dynamischer Offset Blueprint** (siehe Abschnitt Dynamischer Offset). Dieser erstellt und befüllt die benötigten Helper automatisch.
 
@@ -60,14 +69,13 @@ Alternativ können Sie auch manuell einen oder zwei Helper erstellen:
 5. Speichern (Entity ID: z.B. `input_number.solakon_offset_zone1`)
 6. Optional: Wiederholen für Zone 2 (`input_number.solakon_offset_zone2`)
 
-
 ---
 
 ## 🧠 Kernfunktionalität
 
 ### 1. PI-Regler (Proportional-Integral-Regler)
 
-Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung:
+Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Rechenlogik ist in ein separates **Script-Blueprint** (`PI-Regler`) ausgelagert, das aus der Hauptautomatisierung heraus aufgerufen wird:
 
 * **P-Anteil (Proportional):**
   - Reagiert sofort auf aktuelle Abweichungen
@@ -78,75 +86,90 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung:
   - Summiert Abweichungen über die Zeit auf
   - Eliminiert **bleibende Regelabweichungen**
   - Konfigurierbare Geschwindigkeit über den **I-Faktor** (z.B. 0.05)
-  - **Anti-Windup:** Begrenzt auf ±1000 Punkte
+  - **Anti-Windup:** Begrenzt auf ±1000 Punkte (im PI-Script)
   - **Automatischer Reset:** Bei jedem Zonenwechsel auf 0 zurückgesetzt
-  - **Toleranz-Decay:** 5% Abbau pro Zyklus, solange der Grid-Fehler innerhalb der Toleranz liegt und `|Integral| > 10`. Verhindert schleichendes Integral-Windup bei stabiler Regelung.
+  - **Toleranz-Decay:** 5% Abbau pro Zyklus in der Hauptautomatisierung, solange der Grid-Fehler innerhalb der Toleranz liegt und `|Integral| > 10`. Verhindert schleichendes Integral-Windup bei stabiler Regelung.
 
 * **Messprinzip:**
   - Basiert auf dem **Netz-Leistungssensor** (z.B. Shelly 3EM)
   - **Positive Werte = Bezug**, **Negative Werte = Einspeisung**
   - Keine Verzögerung — sofortige Reaktion auf Sensor-Änderungen
 
-* **Fehlerberechnung mit dynamischer Begrenzung:**
-  - **Zone 1:** Fehler = Min(verfügbare Kapazität, Grid Power − Offset₁)
-  - **Zone 2:** Fehler = Min(verfügbare Kapazität, Grid Power − Offset₂, PV-Kapazität)
+* **Fehlerberechnung mit Kapazitäts-Clamping (im PI-Script):**
+  - Fehler = Grid Power − Target Offset
+  - Positiver Fehler (Bezug): begrenzt auf verfügbare Kapazität nach oben (`dynamic_max − current`)
+  - Negativer Fehler (Überschuss): begrenzt auf `0 − current` nach unten
 
 * **Leistungsbegrenzung:**
-  - Oberes Hard Limit (z.B. 800 W) in Zone 1 und Zone 0
-  - Dynamisches PV-basiertes Limit in Zone 2
+  - **Zone 1:** `dynamic_max` = Hard Limit (z.B. 800 W)
+  - **Zone 2:** `dynamic_max` = Max(0, PV − Reserve)
   - Unteres Limit: fest 0 W
+
+* **PI-Aufruf-Guard (in Hauptautomatisierung):**
+  - Wird nur ausgeführt wenn `|Fehler| > Toleranz`
+  - Zusätzlich: kein Aufruf wenn `at_max_limit` (Fehler positiv UND Output bereits am Limit) oder `at_min_limit` (Fehler negativ UND Output bereits bei 0W)
 
 ---
 
 ### 2. 🔋 SOC-Zonen-Logik
 
-Die Regelung wird anhand des aktuellen SOC in bis zu vier Betriebsmodi unterteilt:
+Die Regelung wird anhand des aktuellen SOC in drei Betriebsmodi unterteilt. Die Zonen-Steuerung erfolgt über die **Falls A–F** in einem `choose`-Block:
 
 | Zone | SOC-Bereich / Bedingung | Modus | Max. Entladestrom | Regelziel | Besonderheiten |
 |:-----|:------------------------|:------|:-----------------|:---------|:--------------|
-| **1. Aggressive Entladung** | SOC > Zone-1-Schwelle | `INV Discharge (PV Priority)` | Konfigurierter Max-Wert (Standard: 40 A)| 0W + Offset 1 | Läuft **durchgehend bis SOC ≤ Zone-3-Schwelle** (kein Yo-Yo-Effekt). Auch nachts aktiv. Hard Limit. |
-| **2. Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `INV Discharge (PV Priority)` | **0 A** | 0W + Offset 2 | Dynamisches Limit: **Max(0, PV − Reserve)**. Optional: Nachtabschaltung möglich. |
-| **3. Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `Disabled` | 0 A | — | Ausgang = 0 W. Vollständiger Schutz der Batterie. |
+| **1. Aggressive Entladung** | SOC > Zone-1-Schwelle | `'1'` (INV Discharge PV Priority) | Konfigurierter Max-Wert (Standard: 40 A) | 0W + Offset 1 | Läuft **durchgehend bis SOC ≤ Zone-3-Schwelle** (kein Yo-Yo-Effekt). Auch nachts aktiv. Hard Limit. |
+| **2. Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `'1'` (INV Discharge PV Priority) | **0 A** | 0W + Offset 2 | Dynamisches Limit: **Max(0, PV − Reserve)**. Optional: Nachtabschaltung möglich. |
+| **3. Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` (Disabled) | 0 A | — | Ausgang = 0 W. Vollständiger Schutz der Batterie. |
 
 **Wichtig:**
-- Zone 1 wird **einmal aktiviert** beim Überschreiten der Zone-1-Schwelle und läuft dann durch bis zur Zone-3-Schwelle
-- Zone 2 startet nur wenn Zyklus = off UND Modus = Disabled (z.B. nach Zone-3-Übergang, Erststart oder manueller Deaktivierung)
+- Zone 1 wird **einmal aktiviert** beim Überschreiten der Zone-1-Schwelle (Zyklus = `off` → `on`) und läuft dann durch bis zur Zone-3-Schwelle
+- Zone 2 startet nur wenn Zyklus = `off` UND Modus = `'0'` (z.B. nach Zone-3-Übergang, Erststart oder manueller Deaktivierung) UND NICHT Nacht
 - Dies verhindert ständiges Hin- und Herwechseln zwischen den Zonen
-- **Max. Entladestrom** wird automatisch gesteuert — keine manuelle Einstellung nötig
+- **Max. Entladestrom** wird automatisch gesteuert — keine manuelle Einstellung nötig (Änderung nur wenn aktueller Wert vom Sollwert abweicht)
 
-#### 🔄 Recovery-Mechanismus
+#### Übersicht der Steuer-Falls (choose-Block)
 
-Falls der Modus des Wechselrichters extern zurückgesetzt wird (z.B. durch einen Neustart der Integration oder manuelle Änderung), während der Entladezyklus noch aktiv ist (`Zyklus = on`), erkennt der Blueprint diesen Zustand automatisch und reaktiviert den Modus über die Puls-Sequenz (10s → 3599s) — ohne Zonenwechsel oder Integral-Reset. Voraussetzung: SOC liegt noch über der Zone-3-Schwelle.
+| Fall | Bedingung | Aktion |
+|:-----|:----------|:-------|
+| **A** | SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Timer-Toggle, Modus → `'1'` |
+| **B** | SOC < Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Modus → `'0'`, Output → 0W |
+| **C** | SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Modus → `'0'`, Output → 0W |
+| **D** | Zyklus = `on` UND Modus ≠ `'1'` UND SOC > Zone-3-Schwelle | Recovery: Timer-Toggle, Modus → `'1'` (kein Integral-Reset) |
+| **E** | Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Timer-Toggle, Modus → `'1'` |
+| **F** | Nachtabschaltung aktiv UND PV < Reserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Modus → `'0'`, Output → 0W |
+
+#### 🔄 Recovery-Mechanismus (Fall D)
+
+Falls der Modus des Wechselrichters extern zurückgesetzt wird (z.B. durch einen Neustart der Integration oder manuelle Änderung), während der Entladezyklus noch aktiv ist (Zyklus = `on`), erkennt der Blueprint diesen Zustand automatisch und reaktiviert den Modus über den Timer-Toggle — ohne Zonenwechsel oder Integral-Reset. Voraussetzung: SOC liegt noch über der Zone-3-Schwelle.
+
+---
+
+### 3. ⏱️ Timer-Toggle und Moduswechsel-Sequenz
+
+Um die stabile Übernahme von Moduswechseln durch den Solakon ONE zu gewährleisten, wird statt eines festen Werts ein **Toggle zwischen 3598 und 3599** gesendet:
+
+- Wenn aktueller Timer-Wert = 3599 → schreibe 3598
+- Sonst → schreibe 3599
+
+Dies erzeugt eine Zustandsänderung, die den Wechselrichter zur sicheren Übernahme des neuen Modus veranlasst. Der Toggle wird bei jedem Moduswechsel (Falls A, D, E) direkt vor dem Setzen des Modus durchgeführt.
+
+**Kontinuierlicher Timeout-Reset (Schritt 2):**
+- Der Remote-Timeout wird automatisch per Timer-Toggle zurückgesetzt
+- Trigger: Countdown fällt unter 120s
 
 ---
 
 ### 4. 🌙 Nachtabschaltung (Optional)
 
-Die Nachtabschaltung kann optional aktiviert werden und betrifft **nur Zone 2**:
+Die Nachtabschaltung kann optional aktiviert werden und betrifft **nur Zone 2** (Fall F):
 
 * **Aktivierung:** Über den Parameter "Nachtabschaltung aktivieren"
-* **Schwelle:** PV-Leistung unter konfiguriertem Wert (z.B. 10 W)
+* **Schwelle:** PV-Leistung unter konfiguriertem Wert (PV-Ladereserve-Wert)
 * **Verhalten:**
-  - **Zone 0:** Nicht betroffen (setzt SOC-Vollstand voraus)
   - **Zone 1:** Läuft auch nachts weiter (hoher SOC → aggressive Entladung gewünscht)
-  - **Zone 2:** Wird bei PV < Schwelle auf `Disabled` gesetzt (Integral wird zurückgesetzt)
+  - **Zone 2:** Wird bei PV < Schwelle auf `'0'` (Disabled) gesetzt (Integral wird zurückgesetzt)
   - **Zone 3:** Ohnehin deaktiviert
 * **Sinnvoll für:** Batterieschonung bei 0 PV, wenn keine Grundlast vorhanden ist
-
----
-
-### 5. ⏱️ Remote Timeout Reset und Moduswechsel-Sequenz
-
-Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
-
-1. **Kontinuierlicher Timeout-Reset:**
-   - Der Remote-Timeout wird automatisch auf 3599s zurückgesetzt
-   - Trigger: Countdown fällt unter 120s
-
-2. **Forcierter Reset bei Moduswechsel:**
-   - Zweistufige Puls-Sequenz: 10s → 3599s (mit 1s Verzögerung)
-   - Stellt sichere Modusübernahme sicher
-   - Gilt bei Zone-1-Start, Zone-2-Start und Recovery
 
 ---
 
@@ -163,10 +186,11 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 | **Solakon** | Remote Timeout Countdown | `sensor.solakon_one_fernsteuerung_zeituberschreitung` | Verbleibender Countdown |
 | **Solakon** | Ausgangsleistungsregler | `number.solakon_one_fernsteuerung_leistung` | Setzt Leistungs-Sollwert |
 | **Solakon** | Max. Entladestrom | `number.solakon_one_maximaler_entladestrom` | Setzt Entladestrom-Limit |
-| **Solakon** | Modus-Reset-Timer | `number.solakon_one_fernsteuerung_zeituberschreitung` | Setzt/Reset Timeout (max. 3599s) |
-| **Solakon** | Betriebsmodus-Auswahl | `select.solakon_one_modus_fernsteuern` | Schaltet Betriebsmodus |
-| **Helper** | Entladezyklus-Speicher | `input_select.soc_entladezyklus_status` | Input Select: `on`/`off` |
-| **Helper** | Integral-Speicher | `input_number.solakon_integral` | Input Number: -1000 bis 1000 |
+| **Solakon** | Modus-Reset-Timer | `number.solakon_one_fernsteuerung_zeituberschreitung` | Setzt/Reset Timeout (Timer-Toggle 3598↔3599) |
+| **Solakon** | Betriebsmodus-Auswahl | `select.solakon_one_modus_fernsteuern` | Schaltet Betriebsmodus (`'0'` = Disabled, `'1'` = INV Discharge PV Priority) |
+| **Helper** | Entladezyklus-Speicher | `input_boolean.soc_entladezyklus_status` | Input Boolean: `on`/`off` |
+| **Helper** | Integral-Speicher | `input_number.solakon_integral` | Input Number: −1000 bis 1000 |
+| **Script** | PI-Regler Script | `script.pi_regler` | Aus dem PI-Regler Blueprint erstelltes Script |
 
 ---
 
@@ -176,7 +200,7 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 |:----------|:---------|:----|:----|:-------------|
 | **P-Faktor** | 1.5 | 0.1 | 5.0 | Proportional-Verstärkung. Höher = aggressiver, schneller. |
 | **I-Faktor** | 0.05 | 0.01 | 0.2 | Integral-Verstärkung. Höher = schnellere Fehlerkorrektur, aber instabiler. |
-| **Toleranzbereich** | 25 W | 0 | 200 W | Totband um Regelziel. Keine Korrektur innerhalb dieser Zone. |
+| **Toleranzbereich** | 25 W | 0 | 200 W | Totband um Regelziel. Keine PI-Korrektur innerhalb dieser Zone (stattdessen Integral-Decay). |
 | **Wartezeit** | 3 s | 0 | 30 s | Verzögerung nach Leistungsänderung. Gibt Wechselrichter und Sensoren Zeit zum Aktualisieren. |
 
 **Tuning-Tipps:**
@@ -191,7 +215,7 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
-| **Zone 1 Start** | 50 % | 1 % | 99 % | Obere Schwelle. Überschreiten aktiviert aggressive Entladung. |
+| **Zone 1 Start** | 50 % | 1 % | 99 % | Obere Schwelle. Überschreiten aktiviert Zone 1 (aggressive Entladung). |
 | **Zone 3 Stopp** | 20 % | 1 % | 49 % | Untere Schwelle. Unterschreiten stoppt Entladung komplett. |
 | **Max. Entladestrom Zone 1** | 40 A | 0 A | 40 A | Entladestrom in Zone 1. Zone 2 nutzt automatisch 0 A. |
 
@@ -207,7 +231,7 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 | **Nullpunkt-Offset-1 (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert wenn konfiguriert. |
 | **Nullpunkt-Offset-2 (Statisch)** | 30 W | 0 | 100 W | Statischer Fallback-Wert für Zone 2. |
 | **Nullpunkt-Offset-2 (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert wenn konfiguriert. |
-| **PV-Ladereserve** | 50 W | 0 | 1000 W | Reservierte PV-Leistung für Ladung in Zone 2. Dynamisches Limit: Max(0, PV − Reserve). |
+| **PV-Ladereserve** | 50 W | 0 | 1000 W | Reservierte PV-Leistung für Ladung in Zone 2. Dynamisches Limit: Max(0, PV − Reserve). Dient auch als PV-Schwelle für Nachtabschaltung. |
 
 ---
 
@@ -257,7 +281,7 @@ Dafür steht ein eigener Blueprint zur Verfügung:
 
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
-| **Max. Ausgangsleistung** | 800 W | 0 | 1200 W | Absolute Obergrenze (Hard Limit) in Zone 0 und Zone 1. |
+| **Max. Ausgangsleistung** | 800 W | 0 | 1200 W | Absolute Obergrenze (Hard Limit) in Zone 1. |
 
 ---
 
@@ -266,7 +290,7 @@ Dafür steht ein eigener Blueprint zur Verfügung:
 | Parameter | Standard | Beschreibung |
 |:----------|:---------|:-------------|
 | **Nachtabschaltung aktivieren** | false | Ein/Aus-Schalter für die Funktion |
-| **PV-Schwelle für "Nacht"** | 10 W | Unterhalb dieser PV-Leistung gilt es als Nacht |
+| **PV-Schwelle für "Nacht"** | — | Verwendet den Wert der **PV-Ladereserve** als Schwelle |
 
 **Hinweis:** Nur Zone 2 wird nachts deaktiviert. Zone 1 läuft weiter!
 
@@ -323,7 +347,7 @@ Toleranzbereich: 25W
 - Batterie wird geladen
 
 **Mittags (12:00 - SOC: 55%)**
-- Zone 1 aktiviert (SOC > Zone-1-Schwelle)
+- Zone 1 aktiviert (SOC > Zone-1-Schwelle, Fall A)
 - Max. Entladestrom: **40A** (automatisch gesetzt)
 - Regelziel: Offset 1 (nahe Nulleinspeisung)
 - Hard Limit: 800W
@@ -334,8 +358,8 @@ Toleranzbereich: 25W
 - Max. Entladestrom: weiterhin 40A
 
 **Nacht (22:00 - SOC: 19%)**
-- Zone 3 aktiviert (SOC ≤ Zone-3-Schwelle)
-- Modus: `Disabled`
+- Zone 3 aktiviert (SOC ≤ Zone-3-Schwelle, Fall B)
+- Modus: `'0'` (Disabled)
 - Ausgang: 0W — Batterie geschützt
 
 **Nächster Morgen — Zyklus beginnt von vorne**
@@ -351,64 +375,92 @@ Der Blueprint validiert die Konfiguration beim Start. Fehler werden im **System-
 | **Die obere SOC-Schwelle muss größer sein als die untere** | Schwellenwerte falsch konfiguriert | Zone-1-Schwelle (z.B. 50%) > Zone-3-Schwelle (z.B. 20%) |
 | **SOC-Sensor ist UNKNOWN/UNAVAILABLE** | Solakon Integration offline | Prüfen Sie die Verbindung zum Wechselrichter |
 | **Timeout Countdown Sensor ist UNKNOWN/UNAVAILABLE** | Sensor nicht verfügbar | Prüfen Sie die Solakon Integration |
-| **Modus-Selektor ist UNKNOWN/UNAVAILABLE** | Select-Entity fehlt | Prüfen Sie die Solakon Integration |
-| **Ausgangsleistungsregler hat keine min-Attribute** | Number-Entity fehlerhaft | Prüfen Sie die Solakon Integration |
 
 ---
 
 ## ⚙️ Technische Details
 
-### PI-Regler Implementierung
+### Architektur
 
-**Fehlerberechnung (je nach Zone):**
+Der Blueprint besteht aus **zwei Komponenten**:
+
+1. **Hauptautomatisierung** (`solakon_one_nulleinspeisung.yaml`): Zonen-Steuerung, SOC-Logik, Entladestrom-Verwaltung, Timeout-Reset, PI-Aufruf-Guard, Integral-Decay
+2. **PI-Regler Script** (`PI-Regler.yaml`): Reine Berechnungslogik — Fehler, Integral-Update (Anti-Windup), Korrektur, Output-Setzen
+
+### PI-Regler Implementierung (im Script)
+
+**Fehlerberechnung mit Kapazitäts-Clamping:**
 ```
-Zone 1: error = Min(verfügbare_Kapazität, grid_power - offset_1)
-Zone 2: error = Min(verfügbare_Kapazität, grid_power - offset_2, pv_kapazität)
+raw_error = grid_power - target_offset
+
+Wenn raw_error > 0 (Bezug):
+  error = Min(raw_error, dynamic_max - current_power)   # nicht über Kapazität
+Wenn raw_error < 0 (Einspeisung):
+  error = Max(raw_error, 0 - current_power)             # nicht unter 0
 ```
 
-**Integral-Logik mit Toleranz-Decay:**
+**Integral-Logik (Anti-Windup im Script):**
 ```
-Wenn |grid_error| > tolerance:
-  integral_new = Clamp(integral_old + error, -1000, 1000)
-Sonst wenn |integral_old| > 10:
-  integral_new = integral_old * 0.95  # 5% Abbau pro Zyklus
-Sonst:
-  integral_new = integral_old         # Keine Änderung
+integral_new = Clamp(integral_old + error, -1000, 1000)
 ```
 
 **PI-Korrektur:**
 ```
 correction = error * P_Factor + integral_new * I_Factor
 new_power = current_power + correction
+final_power = Clamp(new_power, 0, dynamic_max)
 ```
 
-**Finale Leistung (zonenabhängige Begrenzung):**
+### Integral-Decay (in Hauptautomatisierung)
+
+Wird im `default`-Zweig ausgeführt, wenn der PI-Regler **nicht** aufgerufen wird (Fehler ≤ Toleranz oder At-Limit):
+
 ```
-Zone 0: final_power = hard_limit                       (Überschuss-Einspeisung)
-Zone 1: final_power = Min(hard_limit, new_power)
-Zone 2: final_power = Min(Max(0, PV - reserve), new_power)
+Wenn |Integral| > 10:
+  integral_new = integral_old * 0.95   # 5% Abbau pro Zyklus
+Sonst:
+  integral_new = integral_old          # Keine Änderung
 ```
 
-**Ausgangs-Update-Bedingung:**
+### PI-Aufruf-Bedingung
+
 ```
-Nur setzen wenn |grid_error| > tolerance
+Nur ausführen wenn:
+  |grid_error| > tolerance
+  UND NICHT (raw_error > 0 UND current >= dynamic_max)   # at_max_limit
+  UND NICHT (raw_error < 0 UND current <= 0)             # at_min_limit
 ```
 
----
+### Dynamisches Power-Limit (zonenabhängig)
 
-### Recovery-Mechanismus
+```
+Zone 1 (cycle = on):  dynamic_max = hard_limit
+Zone 2 (cycle = off): dynamic_max = Max(0, PV - pv_charge_reserve)
+```
+
+### Timer-Toggle Mechanismus
+
+```
+Wenn timer_value == 3599:
+  → Schreibe 3598
+Sonst:
+  → Schreibe 3599
+→ Anschließend: Modus setzen
+```
+
+Erzeugt zuverlässig eine Zustandsänderung für sichere Modusübernahme durch den Solakon ONE.
+
+### Recovery-Mechanismus (Fall D)
 
 ```
 Bedingung:  Zyklus = on
-        UND Modus ≠ INV Discharge PV Priority
+        UND Modus ≠ '1'
         UND SOC > Zone-3-Schwelle
 
-Aktion:     Puls-Sequenz 10s → (1s Pause) → 3599s
-            Modus → INV Discharge PV Priority
+Aktion:     Timer-Toggle (3598↔3599)
+            Modus → '1' (INV Discharge PV Priority)
             (kein Integral-Reset, kein Zonenwechsel)
 ```
-
----
 
 ### Automatische Entladestrom-Steuerung
 
@@ -417,13 +469,13 @@ Aktion:     Puls-Sequenz 10s → (1s Pause) → 3599s
 | Zone 1 (Aggressiv) | Konfigurierter Maximalwert | Nur wenn aktueller Wert abweicht |
 | Zone 2 (Schonend) | 0 A | Nur wenn aktueller Wert abweicht |
 
-Änderungen werden nur vorgenommen, wenn der aktuelle Wert vom Sollwert abweicht (verhindert unnötige API-Calls).
+Änderungen werden nur vorgenommen, wenn der aktuelle Wert vom Sollwert abweicht (verhindert unnötige Modbus-Calls).
 
 ---
 
 ## ⚠️ Wichtige Hinweise
 
-1. **Helper erstellen vor Installation:** Beide Helper müssen existieren, bevor der Blueprint konfiguriert wird
+1. **Helper und Script vor Installation erstellen:** Input Boolean, Input Number (Integral) und PI-Regler Script müssen existieren, bevor der Blueprint konfiguriert wird
 2. **Solakon ONE Integration:** Muss vollständig eingerichtet sein
 3. **Netzleistungssensor:** Korrekte Polarität (positiv = Bezug, negativ = Einspeisung)
 4. **PI-Regler Tuning:** Die Standardwerte sind konservativ. Bei instabilem Verhalten I-Faktor senken.
@@ -433,7 +485,8 @@ Aktion:     Puls-Sequenz 10s → (1s Pause) → 3599s
 8. **Regelbare Wartezeit:** Nach jeder Leistungsänderung wartet der Blueprint 0–30 Sekunden
 9. **Entladestrom-Automatik:** Max. Entladestrom wird vollautomatisch gesteuert — keine manuelle Einstellung nötig
 10. **Toleranz-Decay:** Verhindert automatisch Integral-Windup — 5% Abbau pro Zyklus wenn `|Integral| > 10` und Grid-Fehler innerhalb der Toleranz
-11. **Recovery:** Modus-Verlust bei aktivem Zyklus wird automatisch erkannt und korrigiert — kein manueller Eingriff nötig
+11. **Recovery:** Modus-Verlust bei aktivem Zyklus wird automatisch erkannt und korrigiert (Fall D) — kein manueller Eingriff nötig
+12. **Modus-Werte:** Der Solakon ONE verwendet `'0'` für Disabled und `'1'` für INV Discharge PV Priority
 
 ---
 
@@ -447,6 +500,6 @@ Der Blueprint reagiert auf folgende Events:
 | Solar Power Change | `solar_power_change` | Sofortige PI-Regelung bei PV-Leistungsänderung |
 | SOC High | `soc_high` | Zone 1 Start (SOC > Zone-1-Schwelle) |
 | SOC Low | `soc_low` | Zone 3 Start (SOC ≤ Zone-3-Schwelle) |
-| Mode Change | `mode_change` | Reagiert auf externe Modusänderungen, löst ggf. Recovery aus |
+| Mode Change | `mode_change` | Reagiert auf externe Modusänderungen, löst ggf. Recovery aus (Fall D) |
 
 **Alle Trigger** führen die komplette Logik aus — keine separate Behandlung nötig.

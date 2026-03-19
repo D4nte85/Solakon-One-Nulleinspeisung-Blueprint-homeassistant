@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V207)
+  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V300)
   description: |
     ### Dynamische Nulleinspeisung mit SOC-Zonenlogik
       Dieser Home Assistant Blueprint implementiert eine dynamische Nulleinspeisung für den Solakon ONE Wechselrichter.
@@ -140,19 +140,17 @@ blueprint:
         description: "Hier findest du die notwendigen Helfer die du anlegen MUSST damit dieser Blueprint richtig funktioniert."
         collapsed: true 
         input:     
-          cycle_active_input_select:
-            name: 🛠️ Entladezyklus-Zustandsspeicher (input_select - ERFORDERLICH!)
+          cycle_active_boolean_helper:
+            name: 🛠️ Entladezyklus-Zustandsspeicher (input_boolean - ERFORDERLICH!)
             description: |
-              ⚠️ WICHTIG: Erstellen Sie einen Input Select Helfer mit den Optionen 'on' und 'off'.
-              Settings → Devices & Services → Helpers → Create Helper → Dropdown
+              ⚠️ WICHTIG: Erstellen Sie einen Schalter Helfer (Input Boolean).
+              Einstellungen → Geräte & Dienste → Helfer → Helfer erstellen → Schalter
               - Name: z.B. 'SOC Entladezyklus Status'
-              - Options: 'on' und 'off' (exakt so!)
-            
               Dieser speichert, ob der Entladezyklus aktiv ist (Zone 1).
-            default: input_select.soc_entladezyklus_status
+            default: input_boolean.soc_entladezyklus_status
             selector:
               entity:
-                domain: input_select
+                domain: input_boolean
         
           integral_helper:
             name: 🛠️ Integral-Speicher (input_number - ERFORDERLICH!)
@@ -179,6 +177,14 @@ blueprint:
         description: "Hier findest du die Parameter für die PI-regelung, diese solltest du nicht anfassen müssen, aber du kannst."
         collapsed: true 
         input:    
+          PI_regler_script:
+            name: 📜 PI-Regler Script
+            description: Das aus dem "PI-Regler" Blueprint erstellte Script.
+            default: script.pi_regler
+            selector:
+              entity:
+                domain: script
+
           regulator_factor:
             name: 🎛️ P-Faktor (Proportional-Verstärkung)
             description: |
@@ -380,24 +386,13 @@ blueprint:
           night_shutdown_enabled:
             name: 🌙 Nachtabschaltung aktivieren
             description: |
-              Deaktiviert Zone 2 nachts automatisch (bei PV < Schwelle).
+              Deaktiviert Zone 2 nachts automatisch (bei PV < PV-Ladereserve).
               ⚠️ Zone 1 (aggressive Entladung) läuft auch nachts weiter!
               Sinnvoll für Batterieschonung bei 0 PV.
             default: false
             selector:
               boolean:
-        
-          night_shutdown_pv_threshold:
-            name: 🌙 PV-Schwelle für "Nacht"
-            description: |
-              Unterhalb dieser PV-Leistung gilt es als Nacht (z.B. 10 W).
-              Nur relevant wenn Nachtabschaltung aktiviert ist.
-            default: 10
-            selector:
-              number:
-                min: 0
-                max: 100
-                unit_of_measurement: W
+
     
 mode: single
 max_exceeded: silent
@@ -416,12 +411,12 @@ variables:
   soc: !input soc_sensor
   timeout_countdown: !input remote_timeout_countdown_sensor
   solakon_mode: !input mode_select
-  cycle_active: !input cycle_active_input_select
+  cycle_active: !input cycle_active_boolean_helper
   
   # Nachtabschaltung Config
   night_shutdown_enabled_bool: !input night_shutdown_enabled
-  night_pv_threshold: !input night_shutdown_pv_threshold
   solar_power_for_night_check: !input solar_power_sensor
+  pv_charge_reserve_int: !input pv_charge_reserve
   
   # PI-Regler Helper
   integral_entity: !input integral_helper
@@ -429,6 +424,7 @@ variables:
   # Entitäten
   active_power_entity: !input active_power_number
   discharge_current_entity: !input max_discharge_current_number
+  remote_timeout_set_number: !input remote_timeout_set_number
   
   # Parameter
   discharge_current_max: !input default_discharge_current
@@ -474,7 +470,7 @@ actions:
           - condition: or
             conditions:
               - condition: template
-                value_template: "{{ soc_fast_limit_int <= soc_conservation_limit_int }}"
+                value_template: "{{ soc_fast_limit_int | float(0) <= soc_conservation_limit_int | float(0) }}"
               - condition: template
                 value_template: >
                   {{ is_state(soc, 'unknown') or is_state(soc, 'unavailable') or
@@ -495,7 +491,7 @@ actions:
           - condition: template
             value_template: "{{ states(soc) | float(0) > soc_fast_limit_int }}"
           - condition: state
-            entity_id: !input cycle_active_input_select
+            entity_id: !input cycle_active_boolean_helper
             state: 'off'
         sequence:
           # Logging
@@ -506,30 +502,40 @@ actions:
               entity_id: !input soc_sensor
           # Integral zurücksetzen bei Zonenwechsel
           - action: input_number.set_value
-            data:
+            target:
               entity_id: !input integral_helper
+            data:
               value: 0
           # 1. Zyklus auf 'on' setzen
-          - action: input_select.select_option
-            data:
-              entity_id: !input cycle_active_input_select
-              option: 'on'
+          - action: input_boolean.turn_on
+            target:
+              entity_id: !input cycle_active_boolean_helper
           # 2. Modus-Wechsel zu 'INV Discharge PV Priority'
           - choose:
               - conditions: "{{ states(solakon_mode) != '1' }}"
                 sequence:
-                  - action: number.set_value
-                    data:
-                      entity_id: !input remote_timeout_set_number
-                      value: 10
-                  - delay: '00:00:01' 
-                  - action: number.set_value
-                    data:
-                      entity_id: !input remote_timeout_set_number
-                      value: 3599
+                  - choose:
+                      # Wenn aktuell 3599 eingestellt ist, schreibe 3598
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                        sequence:
+                          - action: number.set_value
+                            target:
+                              entity_id: !input remote_timeout_set_number
+                            data:
+                              value: 3598
+                    # In allen anderen Fällen (wenn es 3598 ist oder etwas ganz anderes), schreibe 3599
+                    default:
+                      - action: number.set_value
+                        target:
+                          entity_id: !input remote_timeout_set_number
+                        data:
+                          value: 3599
                   - action: select.select_option
-                    data:
+                    target:
                       entity_id: !input mode_select
+                    data:
                       option: '1'
       
       # FALL B: ZONE 3 - Sicherheits-STOPP (SOC < Untere Schwelle UND Zyklus ON)
@@ -537,7 +543,7 @@ actions:
           - condition: template
             value_template: "{{ states(soc) | float(0) < soc_conservation_limit_int }}"
           - condition: state
-            entity_id: !input cycle_active_input_select
+            entity_id: !input cycle_active_boolean_helper
             state: 'on'
         sequence:
           # Logging
@@ -548,26 +554,28 @@ actions:
               entity_id: !input soc_sensor
           # Integral zurücksetzen
           - action: input_number.set_value
-            data:
+            target:
               entity_id: !input integral_helper
+            data:
               value: 0
           # 1. Zyklus auf 'off' setzen
-          - action: input_select.select_option
-            data:
-              entity_id: !input cycle_active_input_select
-              option: 'off'
+          - action: input_boolean.turn_off
+            target:
+              entity_id: !input cycle_active_boolean_helper
           # 2. Modus-Wechsel zu 'Disabled'
           - choose:
               - conditions: "{{ states(solakon_mode) != '0' }}"
                 sequence:
                   - action: select.select_option
-                    data:
+                    target:
                       entity_id: !input mode_select
+                    data:
                       option: '0'
           # 3. Power Limit auf 0 W setzen (Soft Stopp)
           - action: number.set_value
-            data:
+            target:
               entity_id: !input active_power_number
+            data:
               value: 0
               
       # FALL C: ZONE 3 - Sicherheits-STOPP (Zusätzliche Absicherung, falls Zyklus bereits OFF aber Modus aktiv)
@@ -575,7 +583,7 @@ actions:
           - condition: template
             value_template: "{{ states(soc) | float(0) < soc_conservation_limit_int }}"
           - condition: state
-            entity_id: !input cycle_active_input_select
+            entity_id: !input cycle_active_boolean_helper
             state: 'off'
           - condition: template
             value_template: "{{ states(solakon_mode) != '0' }}"
@@ -585,37 +593,49 @@ actions:
               - conditions: "{{ states(solakon_mode) != '0' }}"
                 sequence:
                   - action: select.select_option
-                    data:
+                    target:
                       entity_id: !input mode_select
+                    data:
                       option: '0'
           # 2. Power Limit auf 0 W setzen
           - action: number.set_value
-            data:
+            target:
               entity_id: !input active_power_number
+            data:
               value: 0
               
       # FALL D: Recovery - Modus fiel ab, aber Zyklus ist noch aktiv
       - conditions:
           - condition: state
-            entity_id: !input cycle_active_input_select
+            entity_id: !input cycle_active_boolean_helper
             state: 'on'
           - condition: template
             value_template: "{{ states(solakon_mode) != '1' }}"
           - condition: template
             value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int }}"
         sequence:
-          - action: number.set_value
-            data:
-              entity_id: !input remote_timeout_set_number
-              value: 10
-          - delay: '00:00:01'
-          - action: number.set_value
-            data:
-              entity_id: !input remote_timeout_set_number
-              value: 3599
+          - choose:
+              # Wenn aktuell 3599 eingestellt ist, schreibe 3598
+              - conditions:
+                  - condition: template
+                    value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                sequence:
+                  - action: number.set_value
+                    target:
+                      entity_id: !input remote_timeout_set_number
+                    data:
+                      value: 3598
+            # In allen anderen Fällen (wenn es 3598 ist oder etwas ganz anderes), schreibe 3599
+            default:
+              - action: number.set_value
+                target:
+                  entity_id: !input remote_timeout_set_number
+                data:
+                  value: 3599
           - action: select.select_option
-            data:
+            target:
               entity_id: !input mode_select
+            data:
               option: '1'
     
       # FALL E: ZONE 2 - Batterieschonend START (P-Regler aktiv, aber 0 A Entladung)
@@ -623,7 +643,7 @@ actions:
           - condition: template
             value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int and states(soc) | float(0) <= soc_fast_limit_int }}"
           - condition: state
-            entity_id: !input cycle_active_input_select
+            entity_id: !input cycle_active_boolean_helper
             state: 'off'
           - condition: template
             value_template: "{{ states(solakon_mode) == '0' }}"
@@ -631,7 +651,7 @@ actions:
           - condition: template
             value_template: >
               {{ not night_shutdown_enabled_bool or 
-                 (states(solar_power_for_night_check) | float(0)) >= night_pv_threshold }}
+                 (states(solar_power_for_night_check) | float(0)) >= pv_charge_reserve_int | float(0) }}
         sequence:
           # Logging
           - action: logbook.log
@@ -641,25 +661,36 @@ actions:
               entity_id: !input soc_sensor
           # Integral zurücksetzen bei Zonenwechsel
           - action: input_number.set_value
-            data:
+            target:
               entity_id: !input integral_helper
+            data:
               value: 0
           # Modus-Wechsel zu 'INV Discharge PV Priority'
           - choose:
               - conditions: "{{ states(solakon_mode) != '1' }}"
                 sequence:
-                  - action: number.set_value
-                    data:
-                      entity_id: !input remote_timeout_set_number
-                      value: 10
-                  - delay: '00:00:01'
-                  - action: number.set_value
-                    data:
-                      entity_id: !input remote_timeout_set_number
-                      value: 3599
+                  - choose:
+                      # Wenn aktuell 3599 eingestellt ist, schreibe 3598
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                        sequence:
+                          - action: number.set_value
+                            target:
+                              entity_id: !input remote_timeout_set_number
+                            data:
+                              value: 3598
+                    # In allen anderen Fällen (wenn es 3598 ist oder etwas ganz anderes), schreibe 3599
+                    default:
+                      - action: number.set_value
+                        target:
+                          entity_id: !input remote_timeout_set_number
+                        data:
+                          value: 3599
                   - action: select.select_option
-                    data:
+                    target:
                       entity_id: !input mode_select
+                    data:
                       option: '1'
 
       # FALL F: Nachtabschaltung (Zone 2 bei PV < Schwelle)
@@ -669,10 +700,10 @@ actions:
             value_template: "{{ night_shutdown_enabled_bool }}"
           # Es ist Nacht (PV unter Schwelle)
           - condition: template
-            value_template: "{{ (states(solar_power_for_night_check) | float(0)) < night_pv_threshold }}"
+            value_template: "{{ states(solar_power_for_night_check) | float(0) < pv_charge_reserve_int | float(0) }}"
           # Nur in Zone 2 (cycle = off)
           - condition: state
-            entity_id: !input cycle_active_input_select
+            entity_id: !input cycle_active_boolean_helper
             state: 'off'
           # Modus ist aktuell aktiv
           - condition: template
@@ -686,18 +717,21 @@ actions:
               entity_id: !input solar_power_sensor
           # Integral zurücksetzen
           - action: input_number.set_value
-            data:
+            target:
               entity_id: !input integral_helper
+            data:
               value: 0
           # Modus auf 'Disabled' setzen
           - action: select.select_option
-            data:
+            target:
               entity_id: !input mode_select
+            data:
               option: '0'
           # Power Limit auf 0 W
           - action: number.set_value
-            data:
+            target:
               entity_id: !input active_power_number
+            data:
               value: 0
                       
   # -------------------------------------------------------------------------------------------------
@@ -708,7 +742,7 @@ actions:
       {{ states(solakon_mode) == '1' and
          (is_state(cycle_active, 'on') or 
           not night_shutdown_enabled_bool or
-          (states(solar_power_for_night_check) | float(0)) >= night_pv_threshold) }}
+          (states(solar_power_for_night_check) | float(0)) >= pv_charge_reserve_int | float(0)) }}
     
   # ===========================================
   # BLOCK 2: Variablen NUR für PI-Regler
@@ -723,7 +757,12 @@ actions:
       solar_power: !input solar_power_sensor
       solar_power_float: "{{ states(solar_power) | float(0) }}"
       
+      # Wartezeit
+      wait_time_int: !input wait_time
+
       # Konfiguration
+      pi_script: !input PI_regler_script
+      max_active_power_limit_int: !input max_active_power_limit
       tolerance_int: !input tolerance
       regulator_factor_float: !input regulator_factor
       ki_factor_float: !input ki_factor
@@ -745,92 +784,37 @@ actions:
         {% else %}
           {{ offset_2_static }}
         {% endif %}
-      max_active_power_limit_int: !input max_active_power_limit
-      pv_charge_reserve_int: !input pv_charge_reserve
-
-      # PI-Regler-Variablen
-      current_active_power: "{{ states(active_power_entity) | float(0) }}"
-        
-      # Max Power Limit in Zone 2 = Max(0, PV - Reserve)
-      max_zone_2_limit: >
-        {% set pv_minus_reserve = solar_power_float - pv_charge_reserve_int %}
-        {% if pv_minus_reserve > 0 %}
-          {{ pv_minus_reserve }}
-        {% else %}
-          0
-        {% endif %}
-  
-      # Target Offset basiert auf Zone (offset_1_int in Zone 1, offset_2_int in Zone 2)
       target_offset: >
         {% if is_state(cycle_active, 'on') %}
           {{ offset_1_int }}
         {% else %}
           {{ offset_2_int }}
         {% endif %}
-      
-      # Toleranzprüfung basiert auf tatsächlichem Grid-Fehler (nicht begrenzt)
-      grid_error_for_tolerance: "{{ (grid_power_float - target_offset) | abs }}"
-      
-      # Wartezeit
-      wait_time_int: !input wait_time
-      
-      # -----------------------------------------------------------------------
-      # PI-Regler Berechnung
-      # -----------------------------------------------------------------------
-  
-      # 1. Aktueller Fehler 
-      error: >
+
+      # PI-Regler-Variablen
+      current_active_power: "{{ states(active_power_entity) | float(0) }}"
+      dynamic_max_power: >
         {% if is_state(cycle_active, 'on') %}
-          {# ZONE 1: Min(verfügbare Kapazität, Grid − Offset) #}
-          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_1_int)] | min | float(0) }}
+          {{ max_active_power_limit_int }}
         {% else %}
-          {# ZONE 2: Min(verfügbare Kapazität, Grid - Offset, PV-Kapazität) #}
-          {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_2_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
+          {{ [0, solar_power_float - (pv_charge_reserve_int | float(0))] | max }}
         {% endif %}
+
+      # Der aktuelle Fehler (Bezug - Sollwert)
+      raw_error: "{{ grid_power_float - (target_offset | float(0))}}"
+      grid_error_abs: "{{ (grid_power_float - (target_offset| float(0))) | abs }}"
       
-      # 2. Integral mit Anti-Windup
-      integral_old: "{{ states(integral_entity) | float(0) }}"
-      integral_new: >
-        {% set error_float = error | float(0) %}
-        {% if grid_error_for_tolerance > tolerance_int %}
-          {{ [[-1000, integral_old + error_float] | max, 1000] | min | float(0) }}
-        {% elif integral_old | abs > 10 %}
-          {{ (integral_old * 0.95) | float(0) }}
-        {% else %}
-          {{ integral_old | float(0) }}
-        {% endif %}
-      
-      # 3. PI-Korrektur (P-Anteil + I-Anteil)
-      power_correction_pi: >
-        {% set error_float = error | float(0) %}
-        {% set integral_float = integral_new | float(0) %}
-        {% set p_part = error_float * regulator_factor_float %}
-        {% set i_part = integral_float * ki_factor_float %}
-        {{ (p_part + i_part) | float(0) }}
-      
-      # 4. Neuer Power-Sollwert
-      new_power_unlimited: >
-        {% set correction = power_correction_pi | float(0) %}
-        {{ (current_active_power + correction) | float(0) }}
-        
-      # 5. Finale Power: Logik in einem Template zusammengefasst
-      final_power_calculated: >
-        {% set p_regler_power = new_power_unlimited | float(0) %}
-        {% if is_state(cycle_active, 'on') %}
-          {# ZONE 1: Hard Limit #}
-          {{ [max_active_power_limit_int, p_regler_power] | min | float(0) }}
-        {% else %}
-          {# ZONE 2: Dynamisches PV-Limit #}
-          {% set max_zone_2 = max_zone_2_limit | float(0) %}
-          {{ [max_zone_2, p_regler_power] | min | float(0) }}
-        {% endif %}
+      # Prüfung: Sind wir am Limit und wollen noch mehr?
+      at_max_limit: "{{ raw_error > 0 and current_active_power >= dynamic_max_power | float(0) }}"
+      at_min_limit: "{{ raw_error < 0 and current_active_power <= 0 }}"
+
         
   # SCHRITT 1: Entladestrom setzen
   - choose:
       # FALL 1a: Limit für Zone 1 setzen (Aggressiv)
       - conditions:
           - condition: state
-            entity_id: !input cycle_active_input_select
+            entity_id: !input cycle_active_boolean_helper
             state: 'on'
           - condition: template
             value_template: >
@@ -838,8 +822,9 @@ actions:
               {{ states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
         sequence:
           - action: number.set_value
-            data:
+            target:
               entity_id: !input max_discharge_current_number
+            data:
               value: "{{ discharge_current_max }}"
       
       # FALL 1b: Limit für Zone 2 setzen (Batterieschonend = 0 A)
@@ -850,44 +835,65 @@ actions:
                  states(discharge_current_entity) | float(999) | round(2) != 0 }}
         sequence:
           - action: number.set_value
-            data:
+            target:
               entity_id: !input max_discharge_current_number
+            data:
               value: 0
   
   # SCHRITT 2: Timeout-Reset
-  - choose: 
-        # Timeout-Reset erforderlich
+  - choose:
+      # Bedingung: Timeout-Reset nur erforderlich, wenn Restzeit < 120s
       - conditions:
           - condition: template
             value_template: "{{ states(timeout_countdown) | int(9999) < 120 }}"
         sequence:
-          - action: number.set_value
-            data:
-              entity_id: !input remote_timeout_set_number
-              value: 10
-          - delay: '00:00:01'
-          - action: number.set_value
-            data:
-              entity_id: !input remote_timeout_set_number
-              value: 3599
+          - choose:
+              # Wenn aktuell 3599 eingestellt ist, schreibe 3598
+              - conditions:
+                  - condition: template
+                    value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                sequence:
+                  - action: number.set_value
+                    target:
+                      entity_id: !input remote_timeout_set_number
+                    data:
+                      value: 3598
+            # In allen anderen Fällen (wenn es 3598 ist oder etwas ganz anderes), schreibe 3599
+            default:
+              - action: number.set_value
+                target:
+                  entity_id: !input remote_timeout_set_number
+                data:
+                  value: 3599
               
-  # SCHRITT 3: Integral speichern
-  - action: input_number.set_value
-    data:
-      entity_id: !input integral_helper
-      value: "{{ integral_new }}"
-      
-  
-  # SCHRITT 4: Ausgangsleistung setzen + Delay (NUR wenn nötig)
-  #    Kein Output nötig (innerhalb Toleranz) → kein Delay
+  # 3. PI-REGLER AUFRUF
   - choose:
-    - conditions:
-        - condition: template
-          value_template: "{{ grid_error_for_tolerance > tolerance_int }}"
-      sequence:
-        - action: number.set_value
-          data:
-            entity_id: !input active_power_number
-            value: "{{ [0, final_power_calculated] | max | round(0) }}"
-        - delay:
-            seconds: "{{ wait_time_int }}"              
+      - conditions:
+          - condition: template
+            value_template: "{{ grid_error_abs > tolerance_int and not at_max_limit| bool(false) and not at_min_limit| bool(false) }}"
+        sequence:
+          - action: "{{ pi_script }}"
+            data:
+              grid_power: !input grid_power_sensor
+              current_power: "{{ current_active_power }}"
+              target_offset: "{{ target_offset }}"
+              max_power: "{{ dynamic_max_power }}"
+              tolerance: "{{ tolerance_int }}"
+              p_factor: "{{ regulator_factor_float }}"
+              i_factor: "{{ ki_factor_float }}"
+              integral_entity: !input integral_helper
+              output_entity: !input active_power_number
+          - delay:
+              seconds: "{{ wait_time_int }}"
+    default:
+      # Integral-Decay wenn PI nicht aufgerufen wird (Fehler innerhalb Toleranz)
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ states(integral_entity) | float(0) | abs > 10 }}"
+            sequence:
+              - action: input_number.set_value
+                target:
+                  entity_id: !input integral_helper
+                data:
+                  value: "{{ (states(integral_entity) | float(0) * 0.95) | round(2) }}"
