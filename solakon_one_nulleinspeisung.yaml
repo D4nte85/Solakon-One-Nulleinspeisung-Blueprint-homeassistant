@@ -19,15 +19,15 @@ blueprint:
     ### 🔋 SOC-Zonenlogik (3 Zonen je nach Konfiguration)
     
     #### 1. Zone: Aggressive Regelung (Entladezyklus / Hoher SOC)
-    * **Bedingung:** SOC > Oberer Schwellenwert (`soc_fast_limit`) ODER Entladezyklus aktiv.
+    * **Bedingung:** SOC > Oberer Schwellenwert (`soc_fast_limit`) UND Entladezyklus inaktiv → Aktivierung. Läuft danach weiter solange Entladezyklus aktiv (= on).
     * **Aktion:** Max. Entladestrom wird auf den Standardwert (z.B. 40 A) gesetzt.
-    * **Regelung:** PI-Regler mit Nullpunkt-Offset (z.B. 30 W) zur Verschiebung des Regelziels hin zu leichtem Netzbezug oder exacter Nulleinspeisung.
+    * **Regelung:** PI-Regler mit Nullpunkt-Offset (z.B. 30 W) zur Verschiebung des Regelziels hin zu leichtem Netzbezug oder exakter Nulleinspeisung.
     * **Verhalten:** Zone 1 läuft dann bis SOC < Zone-3-Schwelle fällt (kein Yo-Yo-Effekt).
     
     #### 2. Zone: Batterieschonende Regelung (Zwischen-SOC)
-    * **Bedingung:** SOC zwischen Unterer (`soc_conservation_limit`) und Oberer Schwelle, UND Entladezyklus inaktiv.
+    * **Bedingung:** SOC zwischen Unterer (`soc_conservation_limit`) und Oberer Schwelle, UND Entladezyklus inaktiv, UND Modus = Disabled, UND nicht Nacht.
     * **Aktion:** Max. Entladestrom wird auf 0 A gesetzt, kein Einfluss auf Batterieheizung, begrenzt die Ausgangsleistung der Solakon sicherer auf die PV-Leistung.
-    * **Regelung:** PI-Regler mit Nullpunkt-Offset (z.B. 30 W) zur Verschiebung des Regelziels hin zu leichtem Netzbezug oder exacter Nulleinspeisung.
+    * **Regelung:** PI-Regler mit Nullpunkt-Offset (z.B. 30 W) zur Verschiebung des Regelziels hin zu leichtem Netzbezug oder exakter Nulleinspeisung.
     * **Dynamische Obergrenze:** Entladeleistung wird durch Max(0, PV - Reserve) gedeckelt.
     * **Nachtabschaltung:** Optional kann Zone 2 bei PV < Schwelle deaktiviert werden (Zone 1 bleibt aktiv).
     
@@ -36,7 +36,7 @@ blueprint:
     * **Aktion:** Sofortiges Umschalten auf "Disabled" und Setzen des AC-Output-Limits auf 0 W.
     
   domain: automation
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/main/solakon_one_nulleinspeisung.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/lagacy-v207/solakon_one_nulleinspeisung.yaml
   input:
       
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -361,7 +361,7 @@ blueprint:
             name: 🔒 Maximale Ausgangsleistung (Hard Limit)
             description: |
               Absolute Obergrenze der AC-Ausgangsleistung (z.B. 800 W).
-              Schützt vor Überlastung des Wechselrichters.
+              Schützt vor Überlastung des Wechselrichters. Gilt in Zone 1.
             default: 800
             selector:
               number:
@@ -459,7 +459,7 @@ triggers:
     id: soc_low
 
   # -------------------------------------------------------------------------------------------------
-  # 3. Modus-Wechsel (Reagiert auf manuelle/externe Änderung)
+  # 3. Modus-Wechsel (Reagiert auf manuelle/externe Änderung → löst ggf. Recovery aus)
   # -------------------------------------------------------------------------------------------------
   - trigger: state
     entity_id: !input mode_select
@@ -514,7 +514,7 @@ actions:
             data:
               entity_id: !input cycle_active_input_select
               option: 'on'
-          # 2. Modus-Wechsel zu 'INV Discharge PV Priority'
+          # 2. Modus-Wechsel zu 'INV Discharge PV Priority' (Puls-Sequenz für sichere Übernahme)
           - choose:
               - conditions: "{{ states(solakon_mode) != '1' }}"
                 sequence:
@@ -556,7 +556,7 @@ actions:
             data:
               entity_id: !input cycle_active_input_select
               option: 'off'
-          # 2. Modus-Wechsel zu 'Disabled'
+          # 2. Modus-Wechsel zu 'Disabled' (nur wenn noch nicht Disabled)
           - choose:
               - conditions: "{{ states(solakon_mode) != '0' }}"
                 sequence:
@@ -570,7 +570,8 @@ actions:
               entity_id: !input active_power_number
               value: 0
               
-      # FALL C: ZONE 3 - Sicherheits-STOPP (Zusätzliche Absicherung, falls Zyklus bereits OFF aber Modus aktiv)
+      # FALL C: ZONE 3 - Sicherheits-STOPP (Zusätzliche Absicherung:
+      #         Zyklus bereits OFF, aber Modus ist noch aktiv — z.B. nach Neustart)
       - conditions:
           - condition: template
             value_template: "{{ states(soc) | float(0) < soc_conservation_limit_int }}"
@@ -580,21 +581,19 @@ actions:
           - condition: template
             value_template: "{{ states(solakon_mode) != '0' }}"
         sequence:
-          # 1. Modus auf 'Disabled' setzen
-          - choose:
-              - conditions: "{{ states(solakon_mode) != '0' }}"
-                sequence:
-                  - action: select.select_option
-                    data:
-                      entity_id: !input mode_select
-                      option: '0'
-          # 2. Power Limit auf 0 W setzen
+          # Modus auf 'Disabled' setzen
+          - action: select.select_option
+            data:
+              entity_id: !input mode_select
+              option: '0'
+          # Power Limit auf 0 W setzen
           - action: number.set_value
             data:
               entity_id: !input active_power_number
               value: 0
               
       # FALL D: Recovery - Modus fiel ab, aber Zyklus ist noch aktiv
+      #         (z.B. Integration-Neustart oder manuelle externe Änderung)
       - conditions:
           - condition: state
             entity_id: !input cycle_active_input_select
@@ -618,7 +617,7 @@ actions:
               entity_id: !input mode_select
               option: '1'
     
-      # FALL E: ZONE 2 - Batterieschonend START (P-Regler aktiv, aber 0 A Entladung)
+      # FALL E: ZONE 2 - Batterieschonend START (PI-Regler aktiv, 0 A Entladestrom)
       - conditions:
           - condition: template
             value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int and states(soc) | float(0) <= soc_fast_limit_int }}"
@@ -644,7 +643,7 @@ actions:
             data:
               entity_id: !input integral_helper
               value: 0
-          # Modus-Wechsel zu 'INV Discharge PV Priority'
+          # Modus-Wechsel zu 'INV Discharge PV Priority' (Puls-Sequenz für sichere Übernahme)
           - choose:
               - conditions: "{{ states(solakon_mode) != '1' }}"
                 sequence:
@@ -662,7 +661,7 @@ actions:
                       entity_id: !input mode_select
                       option: '1'
 
-      # FALL F: Nachtabschaltung (Zone 2 bei PV < Schwelle)
+      # FALL F: Nachtabschaltung (Zone 2 bei PV < Schwelle deaktivieren)
       - conditions:
           # Nachtabschaltung aktiviert
           - condition: template
@@ -674,7 +673,7 @@ actions:
           - condition: state
             entity_id: !input cycle_active_input_select
             state: 'off'
-          # Modus ist aktuell aktiv
+          # Modus ist aktuell aktiv (kein unnötiger Aufruf wenn bereits Disabled)
           - condition: template
             value_template: "{{ states(solakon_mode) != '0' }}"
         sequence:
@@ -701,7 +700,9 @@ actions:
               value: 0
                       
   # -------------------------------------------------------------------------------------------------
-  # PRÜFUNG: NUR ausführen wenn Modus aktiv ist UND (Zone 1 ODER Tag)!
+  # PRÜFUNG: PI-Regler nur ausführen wenn:
+  #   - Modus aktiv (INV Discharge PV Priority) UND
+  #   - Zone 1 aktiv (Zyklus = on) ODER Nachtabschaltung deaktiviert ODER PV >= Schwelle (Tag)
   # -------------------------------------------------------------------------------------------------
   - condition: template
     value_template: >
@@ -768,7 +769,7 @@ actions:
           {{ offset_2_int }}
         {% endif %}
       
-      # Toleranzprüfung basiert auf tatsächlichem Grid-Fehler (nicht begrenzt)
+      # Toleranzprüfung basiert auf tatsächlichem Grid-Fehler (nicht begrenzt durch Kapazität)
       grid_error_for_tolerance: "{{ (grid_power_float - target_offset) | abs }}"
       
       # Wartezeit
@@ -778,7 +779,7 @@ actions:
       # PI-Regler Berechnung
       # -----------------------------------------------------------------------
   
-      # 1. Aktueller Fehler 
+      # 1. Aktueller Fehler (zonenabhängig begrenzt)
       error: >
         {% if is_state(cycle_active, 'on') %}
           {# ZONE 1: Min(verfügbare Kapazität, Grid − Offset) #}
@@ -788,7 +789,7 @@ actions:
           {{ [(max_active_power_limit_int - current_active_power), (grid_power_float - offset_2_int), (max_zone_2_limit - current_active_power)] | min | float(0) }}
         {% endif %}
       
-      # 2. Integral mit Anti-Windup
+      # 2. Integral mit Anti-Windup und Toleranz-Decay
       integral_old: "{{ states(integral_entity) | float(0) }}"
       integral_new: >
         {% set error_float = error | float(0) %}
@@ -808,12 +809,14 @@ actions:
         {% set i_part = integral_float * ki_factor_float %}
         {{ (p_part + i_part) | float(0) }}
       
-      # 4. Neuer Power-Sollwert
+      # 4. Neuer Power-Sollwert (unbegrenzt)
       new_power_unlimited: >
         {% set correction = power_correction_pi | float(0) %}
         {{ (current_active_power + correction) | float(0) }}
         
-      # 5. Finale Power: Logik in einem Template zusammengefasst
+      # 5. Finale Power (zonenabhängige Begrenzung):
+      #    Zone 1: Hard Limit
+      #    Zone 2: Dynamisches PV-Limit = Max(0, PV - Reserve)
       final_power_calculated: >
         {% set p_regler_power = new_power_unlimited | float(0) %}
         {% if is_state(cycle_active, 'on') %}
@@ -825,9 +828,9 @@ actions:
           {{ [max_zone_2, p_regler_power] | min | float(0) }}
         {% endif %}
         
-  # SCHRITT 1: Entladestrom setzen
+  # SCHRITT 1: Entladestrom setzen (nur bei Abweichung vom Sollwert → verhindert unnötige API-Calls)
   - choose:
-      # FALL 1a: Limit für Zone 1 setzen (Aggressiv)
+      # FALL 1a: Zone 1 — Max. Entladestrom setzen
       - conditions:
           - condition: state
             entity_id: !input cycle_active_input_select
@@ -842,7 +845,7 @@ actions:
               entity_id: !input max_discharge_current_number
               value: "{{ discharge_current_max }}"
       
-      # FALL 1b: Limit für Zone 2 setzen (Batterieschonend = 0 A)
+      # FALL 1b: Zone 2 — Entladestrom auf 0 A setzen (batterieschonend)
       - conditions:
           - condition: template
             value_template: >
@@ -854,9 +857,8 @@ actions:
               entity_id: !input max_discharge_current_number
               value: 0
   
-  # SCHRITT 2: Timeout-Reset
+  # SCHRITT 2: Timeout-Reset (wenn Countdown unter 120s fällt)
   - choose: 
-        # Timeout-Reset erforderlich
       - conditions:
           - condition: template
             value_template: "{{ states(timeout_countdown) | int(9999) < 120 }}"
@@ -871,15 +873,14 @@ actions:
               entity_id: !input remote_timeout_set_number
               value: 3599
               
-  # SCHRITT 3: Integral speichern
+  # SCHRITT 3: Integral speichern (immer, auch bei Regelung innerhalb der Toleranz)
   - action: input_number.set_value
     data:
       entity_id: !input integral_helper
       value: "{{ integral_new }}"
       
-  
-  # SCHRITT 4: Ausgangsleistung setzen + Delay (NUR wenn nötig)
-  #    Kein Output nötig (innerhalb Toleranz) → kein Delay
+  # SCHRITT 4: Ausgangsleistung setzen + Delay
+  #    NUR wenn Grid-Fehler > Toleranz → verhindert unnötige Stellbefehle bei stabiler Regelung
   - choose:
     - conditions:
         - condition: template
@@ -890,4 +891,4 @@ actions:
             entity_id: !input active_power_number
             value: "{{ [0, final_power_calculated] | max | round(0) }}"
         - delay:
-            seconds: "{{ wait_time_int }}"              
+            seconds: "{{ wait_time_int }}"
