@@ -62,16 +62,17 @@ variables:
   final_power: "{{ (current_float + power_correction) | float(0) | round (0) | clamp(0,max_pwr_float) }}"
 
 sequence:
-  # 1. Integral immer aktualisieren
-  - action: input_number.set_value
-    target:
-      entity_id: "{{ integral_entity }}"
-    data:
-      value: "{{ integral_new }}"
-    
-  # 2. Wert an die übergebene Entität senden
-  - action: number.set_value
-    target:
-      entity_id: "{{ output_entity }}"
-    data:
-      value: "{{ final_power }}"
+  - parallel:
+      # 1. Integral immer aktualisieren
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ integral_entity }}"
+        data:
+          value: "{{ integral_new }}"
+        
+      # 2. Wert an die übergebene Entität senden
+      - action: number.set_value
+        target:
+          entity_id: "{{ output_entity }}"
+        data:
+          value: "{{ final_power }}"
