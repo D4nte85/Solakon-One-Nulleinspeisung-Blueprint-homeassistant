@@ -562,21 +562,18 @@ actions:
           - action: input_boolean.turn_off
             target:
               entity_id: !input cycle_active_boolean_helper
-          # 2. Modus-Wechsel zu 'Disabled'
-          - choose:
-              - conditions: "{{ states(solakon_mode) != '0' }}"
-                sequence:
-                  - action: select.select_option
-                    target:
-                      entity_id: !input mode_select
-                    data:
-                      option: '0'
-          # 3. Power Limit auf 0 W setzen (Soft Stopp)
+          # 2. Power Limit auf 0 W setzen (Soft Stopp)
           - action: number.set_value
             target:
               entity_id: !input active_power_number
             data:
               value: 0
+         # 3. Modus-Wechsel zu 'Disabled'
+          - action: select.select_option
+            target:
+              entity_id: !input mode_select
+            data:
+              option: '0'
               
       # FALL C: ZONE 3 - Sicherheits-STOPP (Zusätzliche Absicherung, falls Zyklus bereits OFF aber Modus aktiv)
       - conditions:
@@ -588,21 +585,18 @@ actions:
           - condition: template
             value_template: "{{ states(solakon_mode) != '0' }}"
         sequence:
-          # 1. Modus auf 'Disabled' setzen
-          - choose:
-              - conditions: "{{ states(solakon_mode) != '0' }}"
-                sequence:
-                  - action: select.select_option
-                    target:
-                      entity_id: !input mode_select
-                    data:
-                      option: '0'
-          # 2. Power Limit auf 0 W setzen
+          # 1. Power Limit auf 0 W setzen (Soft Stopp)
           - action: number.set_value
             target:
               entity_id: !input active_power_number
             data:
               value: 0
+         # 2. Modus-Wechsel zu 'Disabled'
+          - action: select.select_option
+            target:
+              entity_id: !input mode_select
+            data:
+              option: '0'
               
       # FALL D: Recovery - Modus fiel ab, aber Zyklus ist noch aktiv
       - conditions:
@@ -721,18 +715,18 @@ actions:
               entity_id: !input integral_helper
             data:
               value: 0
-          # Modus auf 'Disabled' setzen
-          - action: select.select_option
-            target:
-              entity_id: !input mode_select
-            data:
-              option: '0'
-          # Power Limit auf 0 W
+          # 1. Power Limit auf 0 W setzen (Soft Stopp)
           - action: number.set_value
             target:
               entity_id: !input active_power_number
             data:
               value: 0
+         # 2. Modus-Wechsel zu 'Disabled'
+          - action: select.select_option
+            target:
+              entity_id: !input mode_select
+            data:
+              option: '0'
                       
   # -------------------------------------------------------------------------------------------------
   # PRÜFUNG: NUR ausführen wenn Modus aktiv ist UND (Zone 1 ODER Tag)!
