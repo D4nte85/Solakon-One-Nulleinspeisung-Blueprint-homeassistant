@@ -885,3 +885,15 @@ actions:
               output_entity: !input active_power_number
           - delay:
               seconds: "{{ wait_time_int }}"
+    default:
+      # Integral-Decay wenn PI nicht aufgerufen wird (Fehler innerhalb Toleranz)
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ states(integral_entity) | float(0) | abs > 10 }}"
+            sequence:
+              - action: input_number.set_value
+                target:
+                  entity_id: !input integral_helper
+                data:
+                  value: "{{ (states(integral_entity) | float(0) * 0.95) | round(2) }}"
