@@ -754,19 +754,18 @@ actions:
                   - action: input_boolean.turn_off
                     target:
                       entity_id: !input ac_charge_state_helper
-          - choose:
-              - conditions: "{{ states(solakon_mode) != '0' }}"
-                sequence:
-                  - action: select.select_option
-                    target:
-                      entity_id: !input mode_select
-                    data:
-                      option: '0'
+          # 2. Power Limit auf 0 W setzen (Soft Stopp)
           - action: number.set_value
             target:
               entity_id: !input active_power_number
             data:
               value: 0
+         # 3. Modus-Wechsel zu 'Disabled'
+          - action: select.select_option
+            target:
+              entity_id: !input mode_select
+            data:
+              option: '0'
 
       # FALL C: ZONE 3 - Absicherung (Zyklus OFF, Modus noch aktiv)
       - conditions:
@@ -779,14 +778,6 @@ actions:
             value_template: "{{ states(solakon_mode) != '0' }}"
         sequence:
           - choose:
-              - conditions: "{{ states(solakon_mode) != '0' }}"
-                sequence:
-                  - action: select.select_option
-                    target:
-                      entity_id: !input mode_select
-                    data:
-                      option: '0'
-          - choose:
               - conditions: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
                 sequence:
                   - action: input_boolean.turn_off
@@ -798,11 +789,18 @@ actions:
                   - action: input_boolean.turn_off
                     target:
                       entity_id: !input ac_charge_state_helper
+          # 2. Power Limit auf 0 W setzen (Soft Stopp)
           - action: number.set_value
             target:
               entity_id: !input active_power_number
             data:
               value: 0
+         # 3. Modus-Wechsel zu 'Disabled'
+          - action: select.select_option
+            target:
+              entity_id: !input mode_select
+            data:
+              option: '0'
 
       # FALL D: Recovery - Modus fiel ab, Zyklus noch aktiv
       # VOR Fall G! Excludiert Modus '3' (AC Laden läuft ungestört weiter).
@@ -942,16 +940,18 @@ actions:
                     data:
                       option: '1'
             default:
-              - action: select.select_option
-                target:
-                  entity_id: !input mode_select
-                data:
-                  option: '0'
+              # 2. Power Limit auf 0 W setzen (Soft Stopp)
               - action: number.set_value
                 target:
                   entity_id: !input active_power_number
                 data:
                   value: 0
+             # 3. Modus-Wechsel zu 'Disabled'
+              - action: select.select_option
+                target:
+                  entity_id: !input mode_select
+                data:
+                  option: '0'
 
       # FALL E: ZONE 2 - Batterieschonend START
       - conditions:
@@ -1024,16 +1024,18 @@ actions:
               entity_id: !input integral_helper
             data:
               value: 0
-          - action: select.select_option
-            target:
-              entity_id: !input mode_select
-            data:
-              option: '0'
+          # 2. Power Limit auf 0 W setzen (Soft Stopp)
           - action: number.set_value
             target:
               entity_id: !input active_power_number
             data:
               value: 0
+         # 3. Modus-Wechsel zu 'Disabled'
+          - action: select.select_option
+            target:
+              entity_id: !input mode_select
+            data:
+              option: '0'
 
   # -------------------------------------------------------------------------------------------------
   # PI-GATE: NUR ausführen wenn Modus '1' oder '3' UND (Zone 1 ODER Tag)
