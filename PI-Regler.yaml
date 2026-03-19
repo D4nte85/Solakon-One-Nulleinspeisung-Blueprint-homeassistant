@@ -4,6 +4,7 @@ blueprint:
     Ein reines Rechen-Script. Erwartet alle Entitäten und Werte als Variablen 
     beim Aufruf aus einer Automatisierung.
   domain: script
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/main/PI-Regler.yaml
 
 mode: single
 
