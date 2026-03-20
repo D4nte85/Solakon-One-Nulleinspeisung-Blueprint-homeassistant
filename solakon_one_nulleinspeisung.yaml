@@ -1011,6 +1011,69 @@ actions:
                 data:
                   option: '0'
 
+      # FALL I: Safety — Modus '3' aber AC Laden nicht aktiv
+      # Fängt externe Modussetzung auf '3' ab wenn AC Laden deaktiviert oder Helper off
+      - conditions:
+          - condition: template
+            value_template: "{{ states(solakon_mode) == '3' }}"
+          - condition: template
+            value_template: >
+              {{ not ac_charge_enabled_bool or
+                 not (ac_charge_entity_valid | bool(false)) or
+                 not is_state(ac_charge_state_entity, 'on') }}
+        sequence:
+          # 1. Logbuch-Eintrag
+          - action: logbook.log
+            data:
+              name: Solakon Safety
+              message: >
+                ⚠️ Fall I — Modus '3' erkannt, AC Laden nicht aktiv. Korrektur.
+                Zone {{ '1' if is_state(cycle_active, 'on') else '2' }}
+                — SOC: {{ states(soc) }}%
+              entity_id: !input mode_select
+          # 2. Integral zurücksetzen
+          - action: input_number.set_value
+            target:
+              entity_id: !input integral_helper
+            data:
+              value: 0
+          # 3. Zone 1 → Modus '1' (Timer-Toggle) | Zone 2 → Disabled + 0 W
+          - choose:
+              - conditions: "{{ is_state(cycle_active, 'on') }}"
+                sequence:
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                        sequence:
+                          - action: number.set_value
+                            target:
+                              entity_id: !input remote_timeout_set_number
+                            data:
+                              value: 3598
+                    default:
+                      - action: number.set_value
+                        target:
+                          entity_id: !input remote_timeout_set_number
+                        data:
+                          value: 3599
+                  - action: select.select_option
+                    target:
+                      entity_id: !input mode_select
+                    data:
+                      option: '1'
+            default:
+              - action: number.set_value
+                target:
+                  entity_id: !input active_power_number
+                data:
+                  value: 0
+              - action: select.select_option
+                target:
+                  entity_id: !input mode_select
+                data:
+                  option: '0'
+
       # FALL E: ZONE 2 - Batterieschonend START
       - conditions:
           - condition: template
