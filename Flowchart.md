@@ -1,4 +1,4 @@
-```mermaid
+````mermaid
 flowchart TD
     START([⚡ Trigger Grid / PV / SOC / Modus]) --> VAL
 
@@ -19,8 +19,8 @@ flowchart TD
     S0A --> ZONE_CHECK
     S0B --> ZONE_CHECK
 
-    %% ── Haupt-Logik: Falls A – F (+ G, H) ───────────────────────────────
-    ZONE_CHECK{{"SOC & Zyklus-Status?   (Falls A – F, G, H)"}}
+    %% ── Haupt-Logik: Falls A – F (+ G, H, I) ────────────────────────────
+    ZONE_CHECK{{"SOC & Zyklus-Status?   (Falls A – F, G, H, I)"}}
 
     %% ── Fall A: Zone 1 ───────────────────────────────────────────────────
     ZONE_CHECK -- "FALL A   SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
@@ -36,7 +36,7 @@ flowchart TD
 
     %% ── Fall D: Recovery ─────────────────────────────────────────────────
     ZONE_CHECK -- "FALL D   Zyklus = on   UND Modus ∉ {'1','3'} ← '3' explizit ausgenommen!   UND SOC > Zone-3-Schwelle" --> RECOVERY
-    RECOVERY["🔄 Recovery — Modus-Reaktivierung   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)   (kein Integral-Reset, kein Zonenwechsel)"]
+    RECOVERY["🔄 Recovery — Modus-Reaktivierung   Timer-Toggle (3598↔3599)   AC-Lade-Bool = on → Modus '3'   sonst → Modus '1'   (kein Integral-Reset, kein Zonenwechsel)"]
 
     %% ── Fall G: AC Laden Eintritt ────────────────────────────────────────
     ZONE_CHECK -- "FALL G   AC Laden aktiv   UND SOC < Ladeziel   UND Modus ≠ '3' ← Guard!   UND (Grid + Output) < −Toleranz" --> AC_START
@@ -49,6 +49,14 @@ flowchart TD
     AC_END -- "Zyklus = off (Zone 2)" --> AC_END_Z2
     AC_END_Z1["⚡ AC Laden beenden (Zone 1)   AC-Lade-Bool → off   Integral = 0   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
     AC_END_Z2["⚡ AC Laden beenden (Zone 2)   AC-Lade-Bool → off   Integral = 0   Modus → '0' (Disabled)   Output → 0 W"]
+
+    %% ── Fall I: Safety — Modus '3' ohne aktive AC-Lade-Session ──────────
+    ZONE_CHECK -- "FALL I   Modus = '3'   UND AC Laden nicht aktiv / Helper off" --> SAFETY_I
+    SAFETY_I{{"Aktuelle Zone?"}}
+    SAFETY_I -- "Zyklus = on (Zone 1)" --> SAFETY_I_Z1
+    SAFETY_I -- "Zyklus = off (Zone 2)" --> SAFETY_I_Z2
+    SAFETY_I_Z1["⚠️ Safety (Zone 1)   Integral = 0   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
+    SAFETY_I_Z2["⚠️ Safety (Zone 2)   Integral = 0   Modus → '0' (Disabled)   Output → 0 W"]
 
     %% ── Fall E: Zone 2 ───────────────────────────────────────────────────
     ZONE_CHECK -- "FALL E   Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = '0' UND NICHT Nacht" --> Z2_START
@@ -67,6 +75,8 @@ flowchart TD
     AC_START --> END_STOP([Ende])
     AC_END_Z1 --> END_STOP
     AC_END_Z2 --> END_STOP
+    SAFETY_I_Z1 --> END_STOP
+    SAFETY_I_Z2 --> END_STOP
     Z3_A --> END_STOP
     Z3_B --> END_STOP
     NIGHT --> END_STOP
@@ -135,6 +145,7 @@ flowchart TD
     class NIGHT night
     class RECOVERY recovery
     class AC_START,AC_END,AC_END_Z1,AC_END_Z2,AC_GATE,CALC_AC accharge
+    class SAFETY_I,SAFETY_I_Z1,SAFETY_I_Z2 recovery
     class CALC_NORMAL,DISCHARGE_SET,INTEGRAL_DECAY,NORMAL_GATE pi
     class END_STOP,END_SKIP,END_OK end_node
-```
+````
