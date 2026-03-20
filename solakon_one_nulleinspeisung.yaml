@@ -884,8 +884,7 @@ actions:
 
       # FALL G: AC LADEN — Eintritt
       # Erkennt externen PV-Überschuss anhand (Grid + Output) < −Toleranz.
-      # Guard: Modus muss '1' sein — verhindert Fehlauslösung aus unkontrolliertem Modus '0',
-      # wo actual_power_float = 0 ist und die Bedingung fälschlicherweise anschlagen würde.
+      # Startet aus jedem Modus außer '3' (AC Laden bereits aktiv).
       - conditions:
           # Funktion aktiviert
           - condition: template
@@ -893,9 +892,9 @@ actions:
           # SOC hat Ladeziel noch nicht erreicht
           - condition: template
             value_template: "{{ states(soc) | float(0) < soc_ac_charge_limit_int }}"
-          # Guard: Eintritt nur aus geregeltem Betrieb (Modus '1'), nicht aus Modus '0'
+          # Kein Re-Entry wenn AC Laden bereits läuft
           - condition: template
-            value_template: "{{ states(solakon_mode) == '1' }}"
+            value_template: "{{ states(solakon_mode) != '3' }}"
           # Echter Überschuss: Grid + aktueller Output liegt noch im negativen Bereich
           - condition: template
             value_template: "{{ (grid_power_float + actual_power_float) < (-1 * (tolerance_int | float(0))) }}"
@@ -1116,14 +1115,15 @@ actions:
               option: '0'
 
   # -------------------------------------------------------------------------------------------------
-  # PI-GATE: NUR ausführen wenn Modus '1' oder '3' UND (Zone 1 ODER Tag)
-  # Modus '3' (AC Laden) läuft auch nachts durch (Zone 1 analog).
-  # Modus '0' oder fehlender Zyklus bei Nacht → kein Output.
+  # PI-GATE: NUR ausführen wenn Modus '1' oder '3' UND (Zone 1 ODER AC Laden ODER Tag)
+  # Modus '3' und Zone 1 laufen auch nachts durch.
+  # Modus '0' oder Zone 2 bei Nacht → kein Output.
   # -------------------------------------------------------------------------------------------------
   - condition: template
     value_template: >
       {{ states(solakon_mode) in ['1', '3'] and
          (is_state(cycle_active, 'on') or
+          states(solakon_mode) == '3' or
           not night_shutdown_enabled_bool or
           (states(solar_power) | float(0)) >= pv_charge_reserve_int | float(0)) }}
 
