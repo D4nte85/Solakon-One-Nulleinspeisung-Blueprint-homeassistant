@@ -579,6 +579,16 @@ variables:
        ac_charge_state_entity is string and
        ac_charge_state_entity | length > 0 and
        states(ac_charge_state_entity) not in ['unknown', 'unavailable'] }}
+  # AC-Lade-Modus aktiv? Aus persistentem Helper lesen.
+  ac_charge_mode_active: "{{ ac_charge_entity_valid | bool(false) and is_state(ac_charge_state_entity, 'on') }}"
+  ac_charge_offset_static: !input ac_charge_offset
+  ac_charge_offset_entity_id: !input ac_charge_offset_entity
+  ac_charge_offset_int: >
+  {% if ac_charge_offset_entity_id is string and ac_charge_offset_entity_id | length > 0 and states(ac_charge_offset_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+    {{ states(ac_charge_offset_entity_id) | float(ac_charge_offset_static) }}
+  {% else %}
+    {{ ac_charge_offset_static }}
+  {% endif %}
 
 triggers:
   # Grid-Leistungsänderung 
@@ -1205,11 +1215,6 @@ actions:
       offset_1_entity_id: !input offset_1_entity
       offset_2_static: !input offset_2
       offset_2_entity_id: !input offset_2_entity
-      ac_charge_offset_static: !input ac_charge_offset
-      ac_charge_offset_entity_id: !input ac_charge_offset_entity
-
-      # AC-Lade-Modus aktiv? Aus persistentem Helper lesen.
-      ac_charge_mode_active: "{{ ac_charge_entity_valid | bool(false) and is_state(ac_charge_state_entity, 'on') }}"
 
       # Dynamischer Offset
       offset_1_int: >
@@ -1223,12 +1228,6 @@ actions:
           {{ states(offset_2_entity_id) | float(offset_2_static) }}
         {% else %}
           {{ offset_2_static }}
-        {% endif %}
-      ac_charge_offset_int: >
-        {% if ac_charge_offset_entity_id is string and ac_charge_offset_entity_id | length > 0 and states(ac_charge_offset_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
-          {{ states(ac_charge_offset_entity_id) | float(ac_charge_offset_static) }}
-        {% else %}
-          {{ ac_charge_offset_static }}
         {% endif %}
 
       target_offset: >
