@@ -878,12 +878,25 @@ actions:
                   entity_id: !input remote_timeout_set_number
                 data:
                   value: 3599
-          # 3. Modus → '1'
-          - action: select.select_option
-            target:
-              entity_id: !input mode_select
-            data:
-              option: '1'
+          # 3. Modus wiederherstellen: '3' wenn AC Laden aktiv, sonst '1'
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ ac_charge_entity_valid | bool(false) and
+                         is_state(ac_charge_state_entity, 'on') }}
+                sequence:
+                  - action: select.select_option
+                    target:
+                      entity_id: !input mode_select
+                    data:
+                      option: '3'
+            default:
+              - action: select.select_option
+                target:
+                  entity_id: !input mode_select
+                data:
+                  option: '1'
 
       # FALL G: AC LADEN — Eintritt
       # Guard: Modus ≠ '3' — verhindert Re-Eintritt wenn AC Laden bereits aktiv
