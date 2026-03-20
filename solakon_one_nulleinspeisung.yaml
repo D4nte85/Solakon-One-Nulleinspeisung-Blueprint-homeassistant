@@ -493,6 +493,36 @@ blueprint:
             selector:
               entity:
                 domain: input_boolean
+                
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # ⏰ ZEITBASIERTER TRIGGER (Optional)
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      time_trigger_parameter:
+        name: "⏰ ZEITBASIERTER TRIGGER (Optional):"
+        collapsed: true
+        input:
+          time_trigger_enabled:
+            name: ⏰ Zeitbasierter Trigger aktivieren
+            description: |
+              Löst die Regelung zusätzlich in festem Intervall aus.
+              Sinnvoll wenn Grid- oder PV-Sensor keine regelmäßigen State-Changes liefert.
+            default: false
+            selector:
+              boolean:
+
+          time_trigger_interval:
+            name: ⏰ Intervall (Sekunden)
+            description: Zeitabstand zwischen zeitbasierten Aufrufen.
+            default: "/5"
+            selector:
+              select:
+                options:
+                  - "/1"
+                  - "/2"
+                  - "/5"
+                  - "/10"
+                  - "/15"
+                  - "/30"
 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🌙 NACHTABSCHALTUNG (Optional)
@@ -617,6 +647,11 @@ triggers:
   - trigger: state
     entity_id: !input mode_select
     id: mode_change
+
+  # Zeitbasierter Trigger (optional)
+  - trigger: time_pattern
+    seconds: !input time_trigger_interval
+    id: time_trigger
 
 actions:
   # -------------------------------------------------------------------------------------------------
