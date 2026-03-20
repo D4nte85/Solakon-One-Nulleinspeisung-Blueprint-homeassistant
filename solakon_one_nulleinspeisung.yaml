@@ -498,7 +498,7 @@ blueprint:
         # ⏰ ZEITBASIERTER TRIGGER
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
       time_trigger_parameter:
-        name: "⏰ ZEITBASIERTER TRIGGER (Optional):"
+        name: "⏰ ZEITBASIERTER TRIGGER:"
         collapsed: true
         input:
           time_trigger_interval:
