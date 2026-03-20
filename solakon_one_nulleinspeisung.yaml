@@ -1373,8 +1373,8 @@ actions:
                 data:
                   value: "{{ integral_old }}"
           # Wartezeit
-          - delay:
-              seconds: "{{ wait_time_int }}"
+       #   - delay:
+       #       seconds: "{{ wait_time_int }}"
 
       # ZWEIG B: AC Laden — PI-Script mit ac_charge_mode=true (invertierte Fehlerberechnung)
       # at_max/at_min Guards entfallen: Fehlerrichtung ist im Script invertiert
@@ -1396,8 +1396,8 @@ actions:
               output_entity: !input active_power_number
               ac_charge_mode: true
           # Wartezeit
-          - delay:
-              seconds: "{{ wait_time_int }}"
+        #  - delay:
+        #      seconds: "{{ wait_time_int }}"
 
       # ZWEIG C: Normaler PI-Regler (Zone 1 / Zone 2)
       - conditions:
@@ -1422,8 +1422,8 @@ actions:
               output_entity: !input active_power_number
               ac_charge_mode: false
           # Wartezeit
-          - delay:
-              seconds: "{{ wait_time_int }}"
+        #  - delay:
+        #      seconds: "{{ wait_time_int }}"
 
     # STANDARD: Integral-Decay (Fehler innerhalb Toleranz oder At-Limit)
     default:
