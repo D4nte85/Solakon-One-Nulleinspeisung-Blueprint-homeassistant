@@ -280,7 +280,7 @@ blueprint:
             default: 30
             selector:
               number:
-                min: 0
+                min: -100
                 max: 100
                 unit_of_measurement: W
 
@@ -302,7 +302,7 @@ blueprint:
             default: 30
             selector:
               number:
-                min: 0
+                min: -100
                 max: 100
                 unit_of_measurement: W
 
@@ -460,6 +460,26 @@ blueprint:
                 min: 0
                 max: 300
                 unit_of_measurement: W
+
+          ac_charge_offset:
+            name: ⚡ AC Laden - Nullpunkt-Offset Statisch (Fallback)
+            description: |
+              Regelziel für Netzleistung im AC-Lade-Modus (z.B. −50 W).
+              Negativ = Einspeisung angestrebt (mehr laden).
+            default: -50
+            selector:
+              number:
+                min: -100
+                max: 100
+                unit_of_measurement: W
+
+          ac_charge_offset_entity:
+            name: ⚡ AC Laden - Dynamischer Nullpunkt-Offset (Optional)
+            description: Optionale input_number Entität. Überschreibt statischen Wert.
+            default: {}
+            selector:
+              entity:
+                domain: input_number
 
           ac_charge_state_helper:
             name: ⚡ AC-Lade-Zustand Speicher (input_boolean - nur für AC Laden)
@@ -1108,6 +1128,8 @@ actions:
       offset_1_entity_id: !input offset_1_entity
       offset_2_static: !input offset_2
       offset_2_entity_id: !input offset_2_entity
+      ac_charge_offset_static: !input ac_charge_offset
+      ac_charge_offset_entity_id: !input ac_charge_offset_entity
 
       # Dynamischer Offset
       offset_1_int: >
@@ -1122,8 +1144,17 @@ actions:
         {% else %}
           {{ offset_2_static }}
         {% endif %}
+      ac_charge_offset_int: >
+        {% if ac_charge_offset_entity_id is string and ac_charge_offset_entity_id | length > 0 and states(ac_charge_offset_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+          {{ states(ac_charge_offset_entity_id) | float(ac_charge_offset_static) }}
+        {% else %}
+          {{ ac_charge_offset_static }}
+        {% endif %}
+
       target_offset: >
-        {% if is_state(cycle_active, 'on') %}
+        {% if ac_charge_mode_active %}
+          {{ ac_charge_offset_int }}
+        {% elif is_state(cycle_active, 'on') %}
           {{ offset_1_int }}
         {% else %}
           {{ offset_2_int }}
