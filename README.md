@@ -263,9 +263,9 @@ Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
-| **Nullpunkt-Offset-1 (Statisch)** | 30 W | 0 | 100 W | Statischer Fallback für Zone 1. Auch Regelziel beim AC Laden in Zone 1. |
+| **Nullpunkt-Offset-1 (Statisch)** | 30 W | -100 | 100 W | Statischer Fallback für Zone 1. Auch Regelziel beim AC Laden in Zone 1. |
 | **Nullpunkt-Offset-1 (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
-| **Nullpunkt-Offset-2 (Statisch)** | 30 W | 0 | 100 W | Statischer Fallback für Zone 2. Auch Regelziel beim AC Laden in Zone 2. |
+| **Nullpunkt-Offset-2 (Statisch)** | 30 W | -100 | 100 W | Statischer Fallback für Zone 2. Auch Regelziel beim AC Laden in Zone 2. |
 | **Nullpunkt-Offset-2 (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
 | **PV-Ladereserve** | 50 W | 0 | 1000 W | Zone-2-Limit: `Max(0, PV − Reserve)`. Dient auch als PV-Schwelle für Nachtabschaltung. |
 
@@ -298,6 +298,8 @@ Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 | **SOC-Ladeziel** | 90 % | 10 % | 99 % | Laden stoppt bei diesem SOC. |
 | **Max. Ladeleistung** | 800 W | 50 | 1200 W | Obergrenze der AC-Ladeleistung (`max_power` ans Script). |
 | **Hysterese Ladeabbruch** | 50 W | 0 | 300 W | Laden endet erst wenn Grid wieder über diesen Wert steigt. |
+| **AC Laden Offset (Statisch)** | -50 W | -100 | 100 W | Regelziel im AC-Lade-Modus. Negativ = Einspeisung angestrebt → höhere Ladeleistung. |
+| **AC Laden Offset (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
 
 ---
 
@@ -538,7 +540,7 @@ Abbruch-Bedingung (Fall H):
 2. **Optionale Helper erstellen wenn Funktion aktiviert:** Surplus-Boolean für Zone 0; AC-Lade-Boolean für AC Laden
 3. **Kein input_select:** Ab V301 wird `input_boolean` für den Entladezyklus-Speicher verwendet
 4. **Netzleistungssensor:** Korrekte Polarität (positiv = Bezug, negativ = Einspeisung)
-5. **AC Laden Regelziel:** Der aktive `target_offset` (Zone 1 → Offset 1, Zone 2 → Offset 2) gilt auch als Regelziel für AC Laden
+5. **AC Laden Regelziel:** Eigener konfigurierbarer Offset (`ac_charge_offset`), unabhängig von Zone 1/2. Negativer Wert = Einspeisung angestrebt → PI erhöht Ladeleistung.
 6. **PI-Regler Tuning:** Bei AC Laden gelten dieselben P/I-Faktoren wie für die Nulleinspeisung
 7. **Integral-Helper:** Wird automatisch verwaltet — nicht manuell ändern
 8. **Toleranz-Decay:** Verhindert Integral-Windup — 5% Abbau wenn `|Integral| > 10` und Fehler ≤ Toleranz
