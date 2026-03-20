@@ -497,7 +497,7 @@ Aktion: Timer-Toggle → Modus '1'
 ```
 Bedingung: ac_charge_enabled
        UND SOC < soc_ac_charge_limit
-       UND Modus = '1'           ← Guard: verhindert Eintritt aus Modus '0'
+       UND Modus ≠ '3' ← Guard: verhindert Re-Eintritt wenn AC Laden bereits aktiv (Modus = '3')
        UND (grid + actual_power) < -tolerance
 ```
 Der Modus-Guard verhindert Fehlauslösung wenn `actual_power = 0` (Wechselrichter nicht im geregelten Betrieb).
