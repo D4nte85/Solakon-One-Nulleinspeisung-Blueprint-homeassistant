@@ -910,7 +910,7 @@ actions:
           - condition: template
             value_template: "{{ states(solakon_mode) != '3' }}"
           - condition: template
-            value_template: "{{ (grid_power_float + actual_power_float) < (-1 * (tolerance_int | float(0))) }}"
+            value_template: "{{ (grid_power_float + actual_power_float) < (-1 * (ac_charge_hysteresis_int | float(0))) }}"
         sequence:
           # 1. Logbuch-Eintrag
           - action: logbook.log
@@ -942,18 +942,19 @@ actions:
                   entity_id: !input remote_timeout_set_number
                 data:
                   value: 3599
-          # 4. Modus → '3' (INV Charge PV Priority)
-          - action: select.select_option
-            target:
-              entity_id: !input mode_select
-            data:
-              option: '3'
-          # 5. Output → 0 W (PI startet sauber)
+          # 4. Output → 0 W (PI startet sauber)
           - action: number.set_value
             target:
               entity_id: !input active_power_number
             data:
               value: 0
+          # 5. Modus → '3' (INV Charge PV Priority)
+          - action: select.select_option
+            target:
+              entity_id: !input mode_select
+            data:
+              option: '3'
+
 
       # FALL H: AC LADEN BEENDEN
       - conditions:
