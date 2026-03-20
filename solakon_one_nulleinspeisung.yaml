@@ -1131,6 +1131,9 @@ actions:
       ac_charge_offset_static: !input ac_charge_offset
       ac_charge_offset_entity_id: !input ac_charge_offset_entity
 
+      # AC-Lade-Modus aktiv? Aus persistentem Helper lesen.
+      ac_charge_mode_active: "{{ ac_charge_entity_valid | bool(false) and is_state(ac_charge_state_entity, 'on') }}"
+
       # Dynamischer Offset
       offset_1_int: >
         {% if offset_1_entity_id is string and offset_1_entity_id | length > 0 and states(offset_1_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
@@ -1176,9 +1179,6 @@ actions:
         {% else %}
           {{ [0, solar_power_float - (pv_charge_reserve_int | float(0))] | max }}
         {% endif %}
-
-      # AC-Lade-Modus aktiv? Aus persistentem Helper lesen.
-      ac_charge_mode_active: "{{ ac_charge_entity_valid | bool(false) and is_state(ac_charge_state_entity, 'on') }}"
 
       # Fehler für Guards (immer in Entlade-Richtung: grid − offset)
       # Absolutwert ist für beide Modi (normal + AC) identisch → grid_error_abs gilt für Toleranzprüfung
