@@ -558,19 +558,3 @@ Abbruch-Bedingung (Fall H):
 | SOC High | `soc_high` | Zone 1 Start (SOC > Zone-1-Schwelle) |
 | SOC Low | `soc_low` | Zone 3 Start (SOC < Zone-3-Schwelle) |
 | Mode Change | `mode_change` | Reagiert auf externe Modusänderungen, löst ggf. Recovery aus (Fall D) |
-
----
-
-## 🔁 Migration von V209 (experimentalAC)
-
-| Änderung | V209 | V302 |
-|:---------|:-----|:-----|
-| Zyklus-Speicher | `input_select` (on/off Optionen) | `input_boolean` |
-| AC-Lade-Zustand | Inline im Modus-Check | Persistenter `input_boolean` (`ac_charge_state_helper`) |
-| PI-Berechnung | Inline in Automation (Variables-Block) | Externes Script (`PI-Regler`) mit `ac_charge_mode`-Feld |
-| Timer-Mechanismus | Puls-Sequenz: 10s → 1s Pause → 3599s | Toggle: 3598↔3599 (kein Delay) |
-| Nacht-Schwelle | Separater Parameter `night_shutdown_pv_threshold` | Verwendet `pv_charge_reserve` |
-| Überschuss-Zone 0 | Nicht vorhanden | Neu: persistenter `surplus_state_helper` |
-| Fall D Modus-Ausschluss | `!= '1'` (überschreibt AC Laden) | `not in ['1', '3']` (AC Laden bleibt erhalten) |
-| Fall G Guard | Kein Modus-Guard | `states(solakon_mode) == '1'` (verhindert Eintritt aus Modus `'0'`) |
-| Action-Syntax | `data: entity_id:` | `target: entity_id:` |
