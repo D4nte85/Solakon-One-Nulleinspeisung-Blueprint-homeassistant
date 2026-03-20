@@ -495,21 +495,12 @@ blueprint:
                 domain: input_boolean
                 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
-        # ⏰ ZEITBASIERTER TRIGGER (Optional)
+        # ⏰ ZEITBASIERTER TRIGGER
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
       time_trigger_parameter:
         name: "⏰ ZEITBASIERTER TRIGGER (Optional):"
         collapsed: true
         input:
-          time_trigger_enabled:
-            name: ⏰ Zeitbasierter Trigger aktivieren
-            description: |
-              Löst die Regelung zusätzlich in festem Intervall aus.
-              Sinnvoll wenn Grid- oder PV-Sensor keine regelmäßigen State-Changes liefert.
-            default: false
-            selector:
-              boolean:
-
           time_trigger_interval:
             name: ⏰ Intervall (Sekunden)
             description: Zeitabstand zwischen zeitbasierten Aufrufen.
@@ -675,11 +666,6 @@ actions:
               message: "Solakon Fehler: SOC-Limits ungültig oder Entitäten offline. Abbruch."
           # 2. Automation abbrechen
           - stop: "Kritischer Fehler oder ungültige Konfiguration."
-
-  # Time-Trigger Guard: Stopp wenn Trigger = time_trigger aber Feature deaktiviert
-  - condition: template
-    value_template: >
-      {{ trigger.id != 'time_trigger' or time_trigger_enabled_bool | bool(false) }}
 
   # -------------------------------------------------------------------------------------------------
   # 0. ÜBERSCHUSS-LOGIK (ZONE 0) STATUS-UPDATE
