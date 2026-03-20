@@ -712,16 +712,16 @@ actions:
           - action: input_boolean.turn_on
             target:
               entity_id: !input cycle_active_boolean_helper
-          # Surplus-Bool zurücksetzen (nur wenn aktiv, vermeidet unnötigen Modbus-Call)
+          # Surplus-Bool zurücksetzen
           - choose:
-              - conditions: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
+              - conditions: "{{ surplus_entity_valid | bool(false) }}"
                 sequence:
                   - action: input_boolean.turn_off
                     target:
                       entity_id: !input surplus_state_helper
-          # AC-Lade-Bool zurücksetzen (nur wenn aktiv, vermeidet unnötigen Modbus-Call)
+          # AC-Lade-Bool zurücksetzen
           - choose:
-              - conditions: "{{ (ac_charge_entity_valid | bool(false)) and is_state(ac_charge_state_entity, 'on') }}"
+              - conditions: "{{ ac_charge_entity_valid | bool(false) }}"
                 sequence:
                   - action: input_boolean.turn_off
                     target:
@@ -778,16 +778,16 @@ actions:
           - action: input_boolean.turn_off
             target:
               entity_id: !input cycle_active_boolean_helper
-          # Surplus-Bool zurücksetzen (nur wenn aktiv)
+          # Surplus-Bool zurücksetzen
           - choose:
-              - conditions: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
+              - conditions: "{{ surplus_entity_valid | bool(false) }}"
                 sequence:
                   - action: input_boolean.turn_off
                     target:
                       entity_id: !input surplus_state_helper
-          # AC-Lade-Bool zurücksetzen (nur wenn aktiv)
+          # AC-Lade-Bool zurücksetzen
           - choose:
-              - conditions: "{{ (ac_charge_entity_valid | bool(false)) and is_state(ac_charge_state_entity, 'on') }}"
+              - conditions: "{{ ac_charge_entity_valid | bool(false) }}"
                 sequence:
                   - action: input_boolean.turn_off
                     target:
@@ -816,16 +816,16 @@ actions:
           - condition: template
             value_template: "{{ states(solakon_mode) != '0' }}"
         sequence:
-          # Surplus-Bool zurücksetzen (nur wenn aktiv)
+          # Surplus-Bool zurücksetzen
           - choose:
-              - conditions: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
+              - conditions: "{{ surplus_entity_valid | bool(false) }}"
                 sequence:
                   - action: input_boolean.turn_off
                     target:
                       entity_id: !input surplus_state_helper
-          # AC-Lade-Bool zurücksetzen (nur wenn aktiv)
+          # AC-Lade-Bool zurücksetzen
           - choose:
-              - conditions: "{{ (ac_charge_entity_valid | bool(false)) and is_state(ac_charge_state_entity, 'on') }}"
+              - conditions: "{{ ac_charge_entity_valid | bool(false) }}"
                 sequence:
                   - action: input_boolean.turn_off
                     target:
