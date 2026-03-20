@@ -138,7 +138,7 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
 | **B** | SOC < Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
 | **C** | SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
 | **D** | Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle | Recovery: Timer-Toggle, Modus → `'1'` (kein Integral-Reset) |
-| **G** | AC aktiv UND SOC < Ladeziel **UND Modus = `'1'`** UND (Grid + Output) < −Toleranz | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
+| **G** | AC aktiv UND SOC < Ladeziel **UND Modus ≠ `'3'`** UND (Grid + Output) < −Toleranz | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
 | **H** | Modus = `'3'` UND (SOC ≥ Ladeziel ODER Grid ≥ Hysterese) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` / Zone 2 → `'0'` |
 | **E** | Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Timer-Toggle, Modus → `'1'` |
 | **F** | Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Modus → `'0'`, Output → 0W |
@@ -171,7 +171,7 @@ Laden der Batterie wenn eine externe Einspeisung ins Netz erkannt wird. Die Erke
 * **Aktivierung:** Über den Parameter "AC Laden aktivieren"
 * **Eintritts-Bedingung (Fall G):**
   - AC Laden aktiviert UND SOC < Ladeziel
-  - **Modus muss `'1'` sein** (Guard verhindert Eintritt aus unkontrolliertem Modus `'0'`, wo `actual_power = 0` zu falsch-positiver Erkennung führen würde)
+  - **Modus darf nicht `'3'` sein** (Guard verhindert Re-Eintritt wenn AC Laden bereits aktiv)
   - (Grid + Ausgangsleistung) < −Toleranz
 * **Verbleib-Bedingung:**
   - Modus bleibt `'3'` solange SOC < Ladeziel UND Grid < Hysterese
@@ -507,7 +507,7 @@ Der Modus-Guard verhindert Fehlauslösung wenn `actual_power = 0` (Wechselrichte
 ```
 Eintritts-Bedingung (Fall G):
   ac_charge_enabled UND soc < soc_ac_charge_limit
-  UND mode = '1' UND (grid + output) < -tolerance
+  UND Modus ≠ '3' ← Guard: verhindert Re-Eintritt wenn AC Laden bereits aktiv (Modus = '3')
   → ac_charge_state_helper = on
   → Modus = '3', Output = 0W, Timer-Toggle
 
@@ -544,7 +544,7 @@ Abbruch-Bedingung (Fall H):
 8. **Toleranz-Decay:** Verhindert Integral-Windup — 5% Abbau wenn `|Integral| > 10` und Fehler ≤ Toleranz
 9. **Zone-0-Integral-Einfrieren:** In der Überschuss-Phase kein Decay, kein PI-Aufruf
 10. **Recovery:** Modus-Verlust bei aktivem Zyklus wird automatisch erkannt (Fall D) — AC-Laden-Modus `'3'` wird dabei nicht überschrieben
-11. **Fall G Guard:** Eintritt in AC Laden nur aus Modus `'1'` — verhindert Fehlauslösung bei `actual_power=0`
+11. **Fall G Guard:** Eintritt in AC Laden nur wenn Modus ≠ `'3'` — verhindert Re-Eintritt bei bereits aktivem AC Laden
 12. **Modus-Werte:** `'0'` = Disabled, `'1'` = INV Discharge PV Priority, `'3'` = INV Charge PV Priority
 
 ---
