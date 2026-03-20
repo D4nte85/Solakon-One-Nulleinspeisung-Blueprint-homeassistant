@@ -598,10 +598,12 @@ actions:
                   {{ is_state(soc, 'unknown') or is_state(soc, 'unavailable') or
                      is_state(timeout_countdown, 'unknown') or is_state(timeout_countdown, 'unavailable') }}
         sequence:
+          # 1. Fehler ins System-Log schreiben
           - action: system_log.write
             data:
               level: error
               message: "Solakon Fehler: SOC-Limits ungültig oder Entitäten offline. Abbruch."
+          # 2. Automation abbrechen
           - stop: "Kritischer Fehler oder ungültige Konfiguration."
 
   # -------------------------------------------------------------------------------------------------
@@ -620,11 +622,13 @@ actions:
               {{ (states(soc) | float(0) >= soc_export_limit_int) and
                  (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int)) }}
         sequence:
+          # 1. Logbuch-Eintrag
           - action: logbook.log
             data:
               name: Solakon Zonenwechsel
               message: "☀️ Zone 0 aktiviert (Überschuss-Einspeisung startet)"
               entity_id: !input solar_power_sensor
+          # 2. Surplus-Zustand → on
           - action: input_boolean.turn_on
             target:
               entity_id: !input surplus_state_helper
@@ -641,14 +645,17 @@ actions:
               {{ (states(soc) | float(0) < (soc_export_limit_int - surplus_exit_hysteresis_int)) or
                  (solar_power_float <= (actual_power_float + grid_power_float - surplus_pv_hysteresis_int)) }}
         sequence:
+          # 1. Logbuch-Eintrag
           - action: logbook.log
             data:
               name: Solakon Zonenwechsel
               message: "☁️ Zone 0 deaktiviert (Überschuss-Einspeisung beendet)"
               entity_id: !input solar_power_sensor
+          # 2. Surplus-Zustand → off
           - action: input_boolean.turn_off
             target:
               entity_id: !input surplus_state_helper
+          # 3. Integral zurücksetzen
           - action: input_number.set_value
             target:
               entity_id: !input integral_helper
@@ -876,7 +883,7 @@ actions:
                 (Zone {{ '1' if is_state(cycle_active, 'on') else '2' }})
                 — Grid: {{ grid_power_float }}W, SOC: {{ states(soc) }}%
               entity_id: !input soc_sensor
-          # 2. AC-Lade-Zustand setzen
+          # 2. AC-Lade-Zustand → on
           - action: input_boolean.turn_on
             target:
               entity_id: !input ac_charge_state_helper
@@ -934,7 +941,7 @@ actions:
               entity_id: !input integral_helper
             data:
               value: 0
-          # 3. AC-Lade-Zustand zurücksetzen
+          # 3. AC-Lade-Zustand → off
           - action: input_boolean.turn_off
             target:
               entity_id: !input ac_charge_state_helper
@@ -1225,16 +1232,19 @@ actions:
             value_template: "{{ surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on') }}"
         sequence:
           - parallel:
+              # Output → Hard Limit
               - action: number.set_value
                 target:
                   entity_id: !input active_power_number
                 data:
                   value: "{{ max_active_power_limit_int }}"
+              # Integral einfrieren (unverändert zurückschreiben)
               - action: input_number.set_value
                 target:
                   entity_id: !input integral_helper
                 data:
                   value: "{{ integral_old }}"
+          # Wartezeit
           - delay:
               seconds: "{{ wait_time_int }}"
 
@@ -1244,6 +1254,7 @@ actions:
           - condition: template
             value_template: "{{ ac_charge_mode_active and grid_error_abs > tolerance_int }}"
         sequence:
+          # PI-Script aufrufen (ac_charge_mode=true)
           - action: "{{ pi_script }}"
             data:
               grid_power: !input grid_power_sensor
@@ -1256,6 +1267,7 @@ actions:
               integral_entity: !input integral_helper
               output_entity: !input active_power_number
               ac_charge_mode: true
+          # Wartezeit
           - delay:
               seconds: "{{ wait_time_int }}"
 
@@ -1268,6 +1280,7 @@ actions:
                  not at_max_limit | bool(false) and
                  not at_min_limit | bool(false) }}
         sequence:
+          # PI-Script aufrufen (ac_charge_mode=false)
           - action: "{{ pi_script }}"
             data:
               grid_power: !input grid_power_sensor
@@ -1280,6 +1293,7 @@ actions:
               integral_entity: !input integral_helper
               output_entity: !input active_power_number
               ac_charge_mode: false
+          # Wartezeit
           - delay:
               seconds: "{{ wait_time_int }}"
 
@@ -1290,6 +1304,7 @@ actions:
               - condition: template
                 value_template: "{{ states(integral_entity) | float(0) | abs > 10 }}"
             sequence:
+              # Integral × 0,95 (5% Decay)
               - action: input_number.set_value
                 target:
                   entity_id: !input integral_helper
