@@ -39,7 +39,7 @@ flowchart TD
     RECOVERY["🔄 Recovery — Modus-Reaktivierung   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)   (kein Integral-Reset, kein Zonenwechsel)"]
 
     %% ── Fall G: AC Laden Eintritt ────────────────────────────────────────
-    ZONE_CHECK -- "FALL G   AC Laden aktiv   UND SOC < Ladeziel   UND Modus = '1' ← Guard!   UND (Grid + Output) < −Toleranz" --> AC_START
+    ZONE_CHECK -- "FALL G   AC Laden aktiv   UND SOC < Ladeziel   UND Modus ≠ '3' ← Guard!   UND (Grid + Output) < −Toleranz" --> AC_START
     AC_START["⚡ AC Laden aktivieren   AC-Lade-Bool → on   Timer-Toggle (3598↔3599)   Modus → '3' (INV Charge PV Priority)   Output → 0 W (PI startet sauber)"]
 
     %% ── Fall H: AC Laden Beenden ─────────────────────────────────────────
