@@ -495,27 +495,6 @@ blueprint:
                 domain: input_boolean
                 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
-        # ⏰ ZEITBASIERTER TRIGGER
-        # ═══════════════════════════════════════════════════════════════════════════════════════════════
-      time_trigger_parameter:
-        name: "⏰ ZEITBASIERTER TRIGGER:"
-        collapsed: true
-        input:
-          time_trigger_interval:
-            name: ⏰ Intervall (Sekunden)
-            description: Zeitabstand zwischen zeitbasierten Aufrufen.
-            default: "/5"
-            selector:
-              select:
-                options:
-                  - "/1"
-                  - "/2"
-                  - "/5"
-                  - "/10"
-                  - "/15"
-                  - "/30"
-
-        # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🌙 NACHTABSCHALTUNG (Optional)
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
       night_parameter:
@@ -638,11 +617,6 @@ triggers:
   - trigger: state
     entity_id: !input mode_select
     id: mode_change
-
-  # Zeitbasierter Trigger (optional)
-  - trigger: time_pattern
-    seconds: !input time_trigger_interval
-    id: time_trigger
 
 actions:
   # -------------------------------------------------------------------------------------------------
