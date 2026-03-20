@@ -215,7 +215,8 @@ blueprint:
             name: ⏱️ Wartezeit nach setzen des Ausgangs
             description: |
               Verzögerung (in Sekunden) nach dem Setzen der Ausgangsleistung.
-              ⚠️ WICHTIG: Modbus-Update-Einstellungen beachten!
+              Kompensiert die Reaktionszeit des Wechselrichters bevor der nächste
+              Trigger ausgewertet wird (z.B. 3 s).
             default: 3
             selector:
               number:
