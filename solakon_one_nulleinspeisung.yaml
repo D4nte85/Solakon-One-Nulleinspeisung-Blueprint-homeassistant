@@ -561,24 +561,29 @@ variables:
        states(ac_charge_state_entity) not in ['unknown', 'unavailable'] }}
 
 triggers:
+  # Grid-Leistungsänderung 
   - trigger: state
     entity_id: !input grid_power_sensor
     id: grid_power_change
 
+  # PV-Leistungsänderung
   - trigger: state
     entity_id: !input solar_power_sensor
     id: solar_power_change
 
+  # SOC überschreitet Zone-1-Schwelle
   - trigger: numeric_state
     entity_id: !input soc_sensor
     above: !input soc_fast_limit
     id: soc_high
 
+  # SOC unterschreitet Zone-3-Schwelle
   - trigger: numeric_state
     entity_id: !input soc_sensor
     below: !input soc_conservation_limit
     id: soc_low
 
+  # Externe Modusänderung
   - trigger: state
     entity_id: !input mode_select
     id: mode_change
@@ -861,7 +866,7 @@ actions:
               option: '1'
 
       # FALL G: AC LADEN — Eintritt
-      # Guard: Modus muss '1' sein — verhindert Eintritt aus Modus '0' (unkontrolliert, actual_power=0)
+      # Guard: Modus ≠ '3' — verhindert Re-Eintritt wenn AC Laden bereits aktiv
       - conditions:
           - condition: template
             value_template: "{{ ac_charge_enabled_bool }}"
@@ -870,7 +875,7 @@ actions:
           - condition: template
             value_template: "{{ states(soc) | float(0) < soc_ac_charge_limit_int }}"
           - condition: template
-            value_template: "{{ states(solakon_mode) == '1' }}"
+            value_template: "{{ states(solakon_mode) != '3' }}"
           - condition: template
             value_template: "{{ (grid_power_float + actual_power_float) < (-1 * (tolerance_int | float(0))) }}"
         sequence:
