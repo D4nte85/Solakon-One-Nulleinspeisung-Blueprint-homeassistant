@@ -101,7 +101,7 @@ flowchart TD
     AC_GATE -- Ja --> CALC_AC
     AC_GATE -- Nein --> NORMAL_GATE
 
-    CALC_AC["⚡ AC Laden — PI-Script (ac_charge_mode=true)   raw_error = target_offset − grid ← invertiert!   max_power = ac_charge_power_limit   Kapazitäts-Clamping   Integral += error → clamp(−1000, 1000)   Korrektur = P + I   new_power = current + Korrektur   clamp(0, Lade-Limit) → Output → WR   Integral speichern   Wartezeit   (at_max / at_min Guards NICHT angewendet)"]
+    CALC_AC["⚡ AC Laden — PI-Script (ac_charge_mode=true)   raw_error = ac_charge_offset − grid ← eigener Offset!   max_power = ac_charge_power_limit   Kapazitäts-Clamping   Integral += error → clamp(−1000, 1000)   Korrektur = P + I   new_power = current + Korrektur   clamp(0, Lade-Limit) → Output → WR   Integral speichern   Wartezeit   (at_max / at_min Guards NICHT angewendet)"]
 
     %% ── Normaler PI-Pfad ─────────────────────────────────────────────────
     NORMAL_GATE{{"Fehler > Toleranz?   UND kein At-Max / At-Min-Limit?"}}
