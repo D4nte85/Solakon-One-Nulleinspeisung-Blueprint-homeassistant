@@ -998,7 +998,13 @@ actions:
           - choose:
               - conditions: "{{ is_state(cycle_active, 'on') }}"
                 sequence:
-                  # 4a. Timer-Toggle (3598↔3599)
+                  # 4a. Output → 0 W (vor Moduswechsel)
+                  - action: number.set_value
+                    target:
+                      entity_id: !input active_power_number
+                    data:
+                      value: 0
+                  # 4b. Timer-Toggle (3598↔3599)
                   - choose:
                       - conditions:
                           - condition: template
@@ -1015,7 +1021,7 @@ actions:
                           entity_id: !input remote_timeout_set_number
                         data:
                           value: 3599
-                  # 4b. Modus → '1'
+                  # 4c. Modus → '1'
                   - action: select.select_option
                     target:
                       entity_id: !input mode_select
@@ -1065,6 +1071,13 @@ actions:
           - choose:
               - conditions: "{{ is_state(cycle_active, 'on') }}"
                 sequence:
+                  # 3a. Output → 0 W (vor Moduswechsel)
+                  - action: number.set_value
+                    target:
+                      entity_id: !input active_power_number
+                    data:
+                      value: 0
+                  # 3b. Timer-Toggle (3598↔3599)
                   - choose:
                       - conditions:
                           - condition: template
@@ -1081,17 +1094,20 @@ actions:
                           entity_id: !input remote_timeout_set_number
                         data:
                           value: 3599
+                  # 3c. Modus → '1'
                   - action: select.select_option
                     target:
                       entity_id: !input mode_select
                     data:
                       option: '1'
             default:
+              # 3a. Output → 0 W
               - action: number.set_value
                 target:
                   entity_id: !input active_power_number
                 data:
                   value: 0
+              # 3b. Modus → '0'
               - action: select.select_option
                 target:
                   entity_id: !input mode_select
