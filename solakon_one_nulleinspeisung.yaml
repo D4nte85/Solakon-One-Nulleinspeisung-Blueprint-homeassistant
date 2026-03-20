@@ -584,11 +584,11 @@ variables:
   ac_charge_offset_static: !input ac_charge_offset
   ac_charge_offset_entity_id: !input ac_charge_offset_entity
   ac_charge_offset_int: >
-  {% if ac_charge_offset_entity_id is string and ac_charge_offset_entity_id | length > 0 and states(ac_charge_offset_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
-    {{ states(ac_charge_offset_entity_id) | float(ac_charge_offset_static) }}
-  {% else %}
-    {{ ac_charge_offset_static }}
-  {% endif %}
+    {% if ac_charge_offset_entity_id is string and ac_charge_offset_entity_id | length > 0 and states(ac_charge_offset_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+      {{ states(ac_charge_offset_entity_id) | float(ac_charge_offset_static) }}
+    {% else %}
+      {{ ac_charge_offset_static }}
+    {% endif %}
 
 triggers:
   # Grid-Leistungsänderung 
