@@ -137,17 +137,24 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
 | **A** | SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'` |
 | **B** | SOC < Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
 | **C** | SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
-| **D** | Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle | Recovery: Timer-Toggle, Modus → `'1'` (kein Integral-Reset) |
+| **D** | Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle | Recovery: Timer-Toggle, Modus → `'3'` wenn AC-Lade-Bool = `on`, sonst `'1'` (kein Integral-Reset, kein Zonenwechsel) |
 | **G** | AC aktiv UND SOC < Ladeziel **UND Modus ≠ `'3'`** UND (Grid + Output) < −Toleranz | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
 | **H** | Modus = `'3'` UND (SOC ≥ Ladeziel ODER Grid ≥ Hysterese) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` / Zone 2 → `'0'` |
+| **I** | Modus = `'3'` UND (AC Laden deaktiviert ODER AC-Lade-Bool ≠ `on`) | Safety-Korrektur: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
 | **E** | Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Timer-Toggle, Modus → `'1'` |
 | **F** | Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Modus → `'0'`, Output → 0W |
 
-> **Reihenfolge ist entscheidend:** Fall D liegt vor Fall G. Dadurch prüft Recovery nur Modus ∉ `{'1','3'}` — AC-Laden-Modus `'3'` wird **nicht** durch Recovery überschrieben.
+> **Reihenfolge ist entscheidend:** Fall D liegt vor Fall G. Dadurch prüft Recovery nur Modus ∉ `{'1','3'}` — AC-Laden-Modus `'3'` wird **nicht** durch Recovery überschrieben. Fall I liegt nach H und fängt jeden Modus-`'3'`-Zustand ab, der nicht durch eine aktive AC-Lade-Session legitimiert ist.
 
 #### 🔄 Recovery-Mechanismus (Fall D)
 
 Falls der Modus des Wechselrichters extern zurückgesetzt wird (z.B. durch einen Neustart der Integration), während der Entladezyklus noch aktiv ist (Zyklus = `on`), erkennt der Blueprint diesen Zustand automatisch und reaktiviert den Modus über den Timer-Toggle — ohne Zonenwechsel oder Integral-Reset. Voraussetzung: SOC > Zone-3-Schwelle UND Modus ≠ `'1'` UND Modus ≠ `'3'`.
+
+Der wiederhergestellte Modus richtet sich nach dem AC-Lade-Zustand: Wenn der AC-Lade-Bool `on` ist, wird Modus `'3'` gesetzt; andernfalls Modus `'1'`.
+
+#### ⚠️ Safety-Mechanismus (Fall I)
+
+Fängt den Zustand ab, in dem der Wechselrichter Modus `'3'` hat, aber keine aktive AC-Lade-Session vorliegt (AC Laden deaktiviert, Helper `off` oder nicht verfügbar). Dies kann durch externe Modussetzung entstehen. Aktion: Integral zurücksetzen, Zone 1 → Modus `'1'` (Timer-Toggle), Zone 2 → Modus `'0'` + Output 0W.
 
 ---
 
@@ -197,7 +204,7 @@ Um die stabile Übernahme von Moduswechseln durch den Solakon ONE zu gewährleis
 - Wenn aktueller Timer-Wert = 3599 → schreibe 3598
 - Sonst → schreibe 3599
 
-Dies erzeugt eine Zustandsänderung, die den Wechselrichter zur sicheren Übernahme des neuen Modus veranlasst. Kein Delay erforderlich. Der Toggle wird bei jedem Moduswechsel (Falls A, D, E, G, H-Zone1) direkt vor dem Setzen des Modus durchgeführt.
+Dies erzeugt eine Zustandsänderung, die den Wechselrichter zur sicheren Übernahme des neuen Modus veranlasst. Kein Delay erforderlich. Der Toggle wird bei jedem Moduswechsel (Falls A, D, E, G, H-Zone1, I-Zone1) direkt vor dem Setzen des Modus durchgeführt.
 
 **Kontinuierlicher Timeout-Reset (Schritt 2):** Countdown < 120s → Timer-Toggle.
 
@@ -454,7 +461,6 @@ final_power  = Clamp(new_power, 0, max_power)
 ```
 
 ### Integral-Management (in Hauptautomatisierung)
-
 ```
 Zone 0 aktiv:              integral = integral_old (eingefroren)
 AC Laden aktiv (Zweig B):  → PI-Script aufgerufen (ac_charge_mode=true)
@@ -467,7 +473,6 @@ Sonst (Decay):
 ```
 
 ### Dynamisches Power-Limit
-
 ```
 Modus '3' (AC Laden): max_power = ac_charge_power_limit
 Zone 1 (cycle = on):  max_power = hard_limit
@@ -475,7 +480,6 @@ Zone 2 (cycle = off): max_power = Max(0, PV - pv_charge_reserve)
 ```
 
 ### Timer-Toggle Mechanismus
-
 ```
 Wenn timer_value == 3599 → schreibe 3598
 Sonst                    → schreibe 3599
@@ -483,19 +487,19 @@ Sonst                    → schreibe 3599
 ```
 Kein Delay erforderlich (keine 1s-Pause wie in V209).
 
-### Fall D / Recovery — Modus-Ausschluss
-
+### Fall D / Recovery — Modus-Ausschluss und Dual-Restore
 ```
 Bedingung: Zyklus = on
        UND Modus ∉ {'1', '3'}   ← '3' (AC Laden) explizit ausgenommen
        UND SOC > Zone-3-Schwelle
 
-Aktion: Timer-Toggle → Modus '1'
+Aktion: Timer-Toggle
+        → AC-Lade-Bool = on: Modus '3'
+        → sonst:              Modus '1'
         (kein Integral-Reset, kein Zonenwechsel)
 ```
 
 ### Fall G — Eintritts-Guard
-
 ```
 Bedingung: ac_charge_enabled
        UND SOC < soc_ac_charge_limit
@@ -504,8 +508,20 @@ Bedingung: ac_charge_enabled
 ```
 Der Modus-Guard verhindert Fehlauslösung wenn `actual_power = 0` (Wechselrichter nicht im geregelten Betrieb).
 
-### AC-Lade-Zustand State-Machine
+### Fall I — Safety-Guard für Modus '3'
+```
+Bedingung: Modus = '3'
+       UND (ac_charge_enabled = false
+            ODER ac_charge_entity_valid = false
+            ODER ac_charge_state_helper ≠ 'on')
 
+Aktion: Integral = 0
+        → Zyklus = on (Zone 1): Timer-Toggle + Modus '1'
+        → Zyklus = off (Zone 2): Output 0W + Modus '0'
+```
+Fängt externe Modussetzung auf `'3'` ab wenn AC Laden nicht aktiv ist.
+
+### AC-Lade-Zustand State-Machine
 ```
 Eintritts-Bedingung (Fall G):
   ac_charge_enabled UND soc < soc_ac_charge_limit
@@ -520,6 +536,12 @@ PI-Aufruf (Zweig B, jeder Trigger):
 Abbruch-Bedingung (Fall H):
   mode = '3' UND (soc >= soc_ac_charge_limit ODER grid >= hysteresis)
   → ac_charge_state_helper = off, integral = 0
+  → Zone 1: Timer-Toggle + Modus '1'
+  → Zone 2: Modus '0' + Output 0W
+
+Safety-Korrektur (Fall I):
+  mode = '3' UND ac_charge nicht aktiv/legitimiert
+  → integral = 0
   → Zone 1: Timer-Toggle + Modus '1'
   → Zone 2: Modus '0' + Output 0W
 ```
@@ -545,9 +567,10 @@ Abbruch-Bedingung (Fall H):
 7. **Integral-Helper:** Wird automatisch verwaltet — nicht manuell ändern
 8. **Toleranz-Decay:** Verhindert Integral-Windup — 5% Abbau wenn `|Integral| > 10` und Fehler ≤ Toleranz
 9. **Zone-0-Integral-Einfrieren:** In der Überschuss-Phase kein Decay, kein PI-Aufruf
-10. **Recovery:** Modus-Verlust bei aktivem Zyklus wird automatisch erkannt (Fall D) — AC-Laden-Modus `'3'` wird dabei nicht überschrieben
+10. **Recovery:** Modus-Verlust bei aktivem Zyklus wird automatisch erkannt (Fall D) — AC-Laden-Modus `'3'` wird dabei nicht überschrieben; bei aktivem AC-Lade-Bool wird `'3'` wiederhergestellt
 11. **Fall G Guard:** Eintritt in AC Laden nur wenn Modus ≠ `'3'` — verhindert Re-Eintritt bei bereits aktivem AC Laden
 12. **Modus-Werte:** `'0'` = Disabled, `'1'` = INV Discharge PV Priority, `'3'` = INV Charge PV Priority
+13. **Fall I Safety:** Externer Modus-`'3'`-Zustand ohne aktive AC-Lade-Session wird automatisch korrigiert
 
 ---
 
@@ -559,4 +582,4 @@ Abbruch-Bedingung (Fall H):
 | Solar Power Change | `solar_power_change` | Sofortige PI-Regelung bei PV-Leistungsänderung |
 | SOC High | `soc_high` | Zone 1 Start (SOC > Zone-1-Schwelle) |
 | SOC Low | `soc_low` | Zone 3 Start (SOC < Zone-3-Schwelle) |
-| Mode Change | `mode_change` | Reagiert auf externe Modusänderungen, löst ggf. Recovery aus (Fall D) |
+| Mode Change | `mode_change` | Reagiert auf externe Modusänderungen, löst ggf. Recovery (Fall D) oder Safety-Korrektur (Fall I) aus |
