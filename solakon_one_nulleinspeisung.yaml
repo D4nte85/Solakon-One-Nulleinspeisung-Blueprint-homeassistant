@@ -1290,7 +1290,7 @@ actions:
 
       # At-Limit Guards — nur für normalen Entlade-Modus relevant
       # Im AC-Modus ist die Fehlerrichtung invertiert, Guards würden PI fälschlich blockieren
-      at_max_limit: "{{ raw_error > 0 and current_active_power >= dynamic_max_power | float(0) }}"
+      at_max_limit: "{{ raw_error > 0 and current_active_power >= max_active_power_limit_int | float(0) }}"
       at_min_limit: "{{ raw_error < 0 and current_active_power <= 0 }}"
 
 
