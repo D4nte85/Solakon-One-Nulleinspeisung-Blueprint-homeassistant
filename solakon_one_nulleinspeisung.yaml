@@ -799,7 +799,7 @@ actions:
       grid_error_abs: "{{ (grid_power_float - (target_offset| float(0))) | abs }}"
       
       # Prüfung: Sind wir am Limit und wollen noch mehr?
-      at_max_limit: "{{ raw_error > 0 and current_active_power >= dynamic_max_power | float(0) }}"
+      at_max_limit: "{{ raw_error > 0 and current_active_power >= max_active_power_limit_int | float(0) }}"
       at_min_limit: "{{ raw_error < 0 and current_active_power <= 0 }}"
 
         
