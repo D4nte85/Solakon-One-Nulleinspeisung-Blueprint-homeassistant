@@ -980,7 +980,7 @@ actions:
           - condition: template
             value_template: >
               {{ states(soc) | float(0) >= soc_ac_charge_limit_int or
-                 (grid_power_float >= (ac_charge_offset_int | float(0) + ac_charge_hysteresis_int | float(0)) and (actual_power_float |float(0) = 0 ))}}
+                 (grid_power_float >= (ac_charge_offset_int | float(0) + ac_charge_hysteresis_int | float(0)) and (actual_power_float |float(0) == 0 ))}}
         sequence:
           # 1. Logbuch-Eintrag
           - action: logbook.log
