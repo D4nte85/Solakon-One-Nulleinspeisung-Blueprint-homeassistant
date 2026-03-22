@@ -109,7 +109,7 @@ blueprint:
     </details>
 
   domain: automation
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/experimentalAC/solakon_one_nulleinspeisung.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/main/solakon_one_nulleinspeisung.yaml
   input:
 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
