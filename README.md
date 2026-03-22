@@ -23,6 +23,10 @@ Der zugehörige **PI-Regler Script-Blueprint** muss ebenfalls importiert werden:
 
 ---
 
+Der zugehörige **PI-Regler Script-Blueprint** muss ebenfalls importiert werden:
+
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fmain%2FPI-Regler.yaml)
+
 ## 🛠️ Vorbereitung: Erstellung der erforderlichen Helper
 
 Der Blueprint benötigt **drei Pflicht-Helper** und ein **Script** sowie bis zu **zwei optionale Helper**, die Sie vor der Installation erstellen müssen.
@@ -119,6 +123,10 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
   - AC Laden aktiv → PI mit `ac_charge_mode=true`, `at_max/at_min`-Guards deaktiviert
   - Normal → PI nur wenn `|Fehler| > Toleranz` UND kein At-Limit
 
+* **PI-Aufruf-Guard (in Hauptautomatisierung):**
+  - Wird nur ausgeführt wenn `|Fehler| > Toleranz`
+  - Zusätzlich: kein Aufruf wenn `at_max_limit` (Fehler positiv UND Output bereits am Limit) oder `at_min_limit` (Fehler negativ UND Output bereits bei 0W)
+
 ---
 
 ### 2. 🔋 SOC-Zonen-Logik
@@ -156,9 +164,16 @@ Der wiederhergestellte Modus richtet sich nach dem AC-Lade-Zustand: Wenn der AC-
 
 Fängt den Zustand ab, in dem der Wechselrichter Modus `'3'` hat, aber keine aktive AC-Lade-Session vorliegt (AC Laden deaktiviert, Helper `off` oder nicht verfügbar). Dies kann durch externe Modussetzung entstehen. Aktion: Integral zurücksetzen, Zone 1 → Modus `'1'` (Timer-Toggle), Zone 2 → Modus `'0'` + Output 0W.
 
----
+| Fall | Bedingung | Aktion |
+|:-----|:----------|:-------|
+| **A** | SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Timer-Toggle, Modus → `'1'` |
+| **B** | SOC < Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Modus → `'0'`, Output → 0W |
+| **C** | SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Modus → `'0'`, Output → 0W |
+| **D** | Zyklus = `on` UND Modus ≠ `'1'` UND SOC > Zone-3-Schwelle | Recovery: Timer-Toggle, Modus → `'1'` (kein Integral-Reset) |
+| **E** | Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Timer-Toggle, Modus → `'1'` |
+| **F** | Nachtabschaltung aktiv UND PV < Reserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Modus → `'0'`, Output → 0W |
 
-### 3. ☀️ Überschuss-Einspeisung (Optional — Zone 0)
+#### 🔄 Recovery-Mechanismus (Fall D)
 
 Ermöglicht die Einspeisung von echtem PV-Überschuss ins Netz, wenn der Akku voll ist. SOC- und PV-Hysterese verhindern instabiles Hin- und Herschalten.
 

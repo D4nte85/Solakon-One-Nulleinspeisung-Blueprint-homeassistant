@@ -1532,6 +1532,7 @@ actions:
 
     # STANDARD: Integral-Decay (Fehler innerhalb Toleranz oder At-Limit)
     default:
+      # Integral-Decay wenn PI nicht aufgerufen wird (Fehler innerhalb Toleranz)
       - choose:
           - conditions:
               - condition: template
