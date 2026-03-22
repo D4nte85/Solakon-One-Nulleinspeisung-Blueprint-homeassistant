@@ -139,7 +139,7 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
 | **C** | SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
 | **D** | Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle | Recovery: Timer-Toggle, Modus → `'3'` wenn AC-Lade-Bool = `on`, sonst `'1'` (kein Integral-Reset, kein Zonenwechsel) |
 | **G** | AC aktiv UND SOC < Ladeziel **UND Modus ≠ `'3'`** UND (Grid + Output) < −Toleranz | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
-| **H** | Modus = `'3'` UND (SOC ≥ Ladeziel ODER Grid ≥ Hysterese) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` / Zone 2 → `'0'` |
+| **H** | Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ `ac_charge_offset + Hysterese` UND Output = 0 W)) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` / Zone 2 → `'0'` |
 | **I** | Modus = `'3'` UND (AC Laden deaktiviert ODER AC-Lade-Bool ≠ `on`) | Safety-Korrektur: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
 | **E** | Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Timer-Toggle, Modus → `'1'` |
 | **F** | Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Modus → `'0'`, Output → 0W |
@@ -181,14 +181,17 @@ Laden der Batterie wenn eine externe Einspeisung ins Netz erkannt wird. Die Erke
   - **Modus darf nicht `'3'` sein** (Guard verhindert Re-Eintritt wenn AC Laden bereits aktiv)
   - (Grid + Ausgangsleistung) < −Toleranz
 * **Verbleib-Bedingung:**
-  - Modus bleibt `'3'` solange SOC < Ladeziel UND Grid < Hysterese
+  - Modus bleibt `'3'` solange SOC < Ladeziel UND Grid < (ac_charge_offset + Hysterese)
 * **Abbruch-Bedingung (Fall H):**
-  - SOC ≥ Ladeziel ODER Grid ≥ Hysterese
+  - SOC ≥ Ladeziel ODER (Grid ≥ ac_charge_offset + Hysterese UND Output = 0 W)
+  - `Output = 0 W`-Guard verhindert Fehlauslösung während PI noch regelt
 * **PI-Regelung:**
   - Script wird mit `ac_charge_mode=true` aufgerufen → invertierte Fehlerberechnung: `target_offset − grid`
   - Positiver Fehler → Ladeleistung erhöhen (Grid zu negativ → mehr laden)
   - `max_power` = konfiguriertes Lade-Limit
   - `at_max/at_min`-Guards werden nicht angewendet (Richtung invertiert)
+  - **Separate P/I-Faktoren:** P klein (~0.3–0.5) wegen langer Hardware-Flanke (~25 s); I-Anteil macht die eigentliche Regelarbeit
+  - **Separate Wartezeit:** Hardware-Worst-Case-Flanke ~25 s (min→max) → 15 s als pragmatischer Kompromiss
 * **Zustandsspeicher:** `input_boolean` (`ac_charge_state_helper`) persistent — signalisiert PI-Script-Aufrufzweig
 * **Rückkehr:**
   - Zone 1 → Modus `'1'` (Timer-Toggle) + Integral Reset
@@ -252,7 +255,7 @@ Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 | **Toleranzbereich** | 25 W | 0 | 200 W | Totband um Regelziel. Keine PI-Korrektur innerhalb (stattdessen Integral-Decay). |
 | **Wartezeit** | 3 s | 0 | 30 s | Verzögerung nach Leistungsänderung. Kompensiert die Reaktionszeit des Wechselrichters. |
 
-**Hinweis:** P- und I-Faktor gelten für Zone 1 und Zone 2. Für den AC-Lade-Modus (Modus `'3'`) werden separate Faktoren verwendet — siehe [AC Laden Parameter](#-ac-laden-optional).
+> **Hinweis:** P- und I-Faktor gelten für Zone 1 und Zone 2. Für den AC-Lade-Modus (Modus `'3'`) werden separate Faktoren verwendet — siehe [AC Laden Parameter](#-ac-laden-optional).
 
 ---
 
@@ -272,9 +275,9 @@ Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
-| **Nullpunkt-Offset-1 (Statisch)** | 30 W | -100 | 100 W | Statischer Fallback für Zone 1. Auch Regelziel beim AC Laden in Zone 1. |
+| **Nullpunkt-Offset-1 (Statisch)** | 30 W | -100 | 100 W | Statischer Fallback für Zone 1. |
 | **Nullpunkt-Offset-1 (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
-| **Nullpunkt-Offset-2 (Statisch)** | 30 W | -100 | 100 W | Statischer Fallback für Zone 2. Auch Regelziel beim AC Laden in Zone 2. |
+| **Nullpunkt-Offset-2 (Statisch)** | 30 W | -100 | 100 W | Statischer Fallback für Zone 2. |
 | **Nullpunkt-Offset-2 (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
 | **PV-Ladereserve** | 50 W | 0 | 1000 W | Zone-2-Limit: `Max(0, PV − Reserve)`. Dient auch als PV-Schwelle für Nachtabschaltung. |
 
@@ -306,7 +309,7 @@ Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 | **AC Laden aktivieren** | false | — | — | Schalter für AC Laden. |
 | **SOC-Ladeziel** | 90 % | 10 % | 99 % | Laden stoppt bei diesem SOC. |
 | **Max. Ladeleistung** | 800 W | 50 | 1200 W | Obergrenze der AC-Ladeleistung (`max_power` ans Script). |
-| **Hysterese Ladeabbruch** | 50 W | 0 | 300 W | Laden endet erst wenn Grid wieder über diesen Wert steigt. |
+| **Hysterese Ladeabbruch** | 50 W | 0 | 300 W | Laden endet erst wenn Grid wieder über `ac_charge_offset + Hysterese` steigt (und Output = 0 W). |
 | **AC Laden Offset (Statisch)** | -50 W | -100 | 100 W | Regelziel im AC-Lade-Modus. Negativ = Einspeisung angestrebt → höhere Ladeleistung. |
 | **AC Laden Offset (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
 | **AC Laden P-Faktor** | 0.5 | 0.1 | 5.0 | Proportional-Verstärkung im AC-Lade-Modus. Klein halten wegen langer Hardware-Flanke (~25 s). |
@@ -402,10 +405,10 @@ AC Laden: false
 - Dynamisches Limit: `Max(0, PV - 50W)`; Batterie wird geladen
 
 **Morgens mit externer Einspeisung (SOC: 30%)**
-- (Grid + Output) < −Toleranz, Modus = `'1'` → Fall G greift
+- (Grid + Output) < −Toleranz, Modus ≠ `'3'` → Fall G greift
 - AC Laden startet: `ac_charge_state_helper` = `on`, Modus → `'3'`
 - PI-Script mit `ac_charge_mode=true` → invertierte Fehlerberechnung
-- Ladeleistung geregelt auf `target_offset`, begrenzt auf Max. Ladeleistung
+- Ladeleistung geregelt auf `ac_charge_offset`, begrenzt auf Max. Ladeleistung
 
 **Mittags (12:00 - SOC: 55%)**
 - Zone 1 aktiviert (Fall A); Max. Entladestrom: **40A**
@@ -513,6 +516,18 @@ Bedingung: ac_charge_enabled
 ```
 Der Modus-Guard verhindert Fehlauslösung wenn `actual_power = 0` (Wechselrichter nicht im geregelten Betrieb).
 
+### Fall H — Abbruch-Bedingung
+```
+Bedingung: Modus = '3'
+       UND (soc >= soc_ac_charge_limit
+            ODER (grid >= ac_charge_offset + hysteresis UND actual_power == 0))
+
+  → ac_charge_state_helper = off, integral = 0
+  → Zone 1: Timer-Toggle + Modus '1'
+  → Zone 2: Modus '0' + Output 0W
+```
+`actual_power == 0`-Guard verhindert Fehlauslösung während der PI noch aktiv regelt.
+
 ### Fall I — Safety-Guard für Modus '3'
 ```
 Bedingung: Modus = '3'
@@ -537,9 +552,11 @@ Eintritts-Bedingung (Fall G):
 PI-Aufruf (Zweig B, jeder Trigger):
   ac_charge_mode_active = true UND |grid_error_abs| > tolerance
   → PI-Script mit ac_charge_mode=true, max_power=ac_charge_power_limit
+  → separate P/I-Faktoren (ac_charge_p_factor, ac_charge_i_factor)
 
 Abbruch-Bedingung (Fall H):
-  mode = '3' UND (soc >= soc_ac_charge_limit ODER grid >= hysteresis)
+  mode = '3' UND (soc >= soc_ac_charge_limit
+                  ODER (grid >= ac_charge_offset + hysteresis UND actual_power == 0))
   → ac_charge_state_helper = off, integral = 0
   → Zone 1: Timer-Toggle + Modus '1'
   → Zone 2: Modus '0' + Output 0W
@@ -568,7 +585,7 @@ Safety-Korrektur (Fall I):
 3. **Kein input_select:** Ab V301 wird `input_boolean` für den Entladezyklus-Speicher verwendet
 4. **Netzleistungssensor:** Korrekte Polarität (positiv = Bezug, negativ = Einspeisung)
 5. **AC Laden Regelziel:** Eigener konfigurierbarer Offset (`ac_charge_offset`), unabhängig von Zone 1/2. Negativer Wert = Einspeisung angestrebt → PI erhöht Ladeleistung.
-6. **PI-Regler Tuning:** Bei AC Laden gelten dieselben P/I-Faktoren wie für die Nulleinspeisung
+6. **AC Laden P/I-Tuning:** Separate P/I-Faktoren (`ac_charge_p_factor`, `ac_charge_i_factor`). P-Faktor klein halten (~0.3–0.5) wegen langer Hardware-Flanke (~25 s) — der I-Anteil macht die eigentliche Regelarbeit.
 7. **Integral-Helper:** Wird automatisch verwaltet — nicht manuell ändern
 8. **Toleranz-Decay:** Verhindert Integral-Windup — 5% Abbau wenn `|Integral| > 10` und Fehler ≤ Toleranz
 9. **Zone-0-Integral-Einfrieren:** In der Überschuss-Phase kein Decay, kein PI-Aufruf
