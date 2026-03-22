@@ -35,7 +35,7 @@ fields:
     description: Die Entitäts-ID des input_number Helfers
   output_entity:
     name: Ziel-Entität (ID)
-    description: Die Entitäts-ID des Wechselrichter-Limits
+    description: Die Entitäts-ID der Ausgangsleistungs-Entität des Wechselrichters
   ac_charge_mode:
     name: AC Laden aktiv (Bool)
     description: >
