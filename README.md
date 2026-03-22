@@ -252,6 +252,8 @@ Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 | **Toleranzbereich** | 25 W | 0 | 200 W | Totband um Regelziel. Keine PI-Korrektur innerhalb (stattdessen Integral-Decay). |
 | **Wartezeit** | 3 s | 0 | 30 s | Verzögerung nach Leistungsänderung. Kompensiert die Reaktionszeit des Wechselrichters. |
 
+**Hinweis:** P- und I-Faktor gelten für Zone 1 und Zone 2. Für den AC-Lade-Modus (Modus `'3'`) werden separate Faktoren verwendet — siehe [AC Laden Parameter](#-ac-laden-optional).
+
 ---
 
 ### 🔋 SOC-Zonen-Parameter
@@ -307,6 +309,9 @@ Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 | **Hysterese Ladeabbruch** | 50 W | 0 | 300 W | Laden endet erst wenn Grid wieder über diesen Wert steigt. |
 | **AC Laden Offset (Statisch)** | -50 W | -100 | 100 W | Regelziel im AC-Lade-Modus. Negativ = Einspeisung angestrebt → höhere Ladeleistung. |
 | **AC Laden Offset (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
+| **AC Laden P-Faktor** | 0.5 | 0.1 | 5.0 | Proportional-Verstärkung im AC-Lade-Modus. Klein halten wegen langer Hardware-Flanke (~25 s). |
+| **AC Laden I-Faktor** | 0.07 | 0.01 | 0.2 | Integral-Verstärkung im AC-Lade-Modus. Macht bei langen Wartezeiten die eigentliche Regelarbeit. |
+| **Wartezeit AC Laden** | 15 s | 0 | 60 s | Separate Wartezeit nach Leistungsänderung im AC-Lade-Modus. Hardware-Worst-Case-Flanke ~25 s (min→max). Kleinere Korrekturen schwingen schneller ein — 15 s als pragmatischer Kompromiss. |
 
 ---
 
