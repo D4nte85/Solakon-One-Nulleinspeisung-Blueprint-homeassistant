@@ -1499,7 +1499,7 @@ actions:
       # at_max/at_min Guards entfallen: Fehlerrichtung ist im Script invertiert
       - conditions:
           - condition: template
-            value_template: "{{ ac_charge_mode_active and grid_error_abs > tolerance_int }}"
+            value_template: "{{ ac_charge_mode_active | bool(false) and grid_error_abs > tolerance_int }}"
         sequence:
           # PI-Script aufrufen (ac_charge_mode=true)
           - action: "{{ pi_script }}"
@@ -1522,7 +1522,7 @@ actions:
       - conditions:
           - condition: template
             value_template: >
-              {{ not ac_charge_mode_active and
+              {{ not ac_charge_mode_active | bool(false) and
                  grid_error_abs > tolerance_int and
                  not at_max_limit | bool(false) and
                  not at_min_limit | bool(false) }}
