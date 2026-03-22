@@ -1,10 +1,12 @@
 blueprint:
   name: PI-Regler
   description: >
-    Ein reines Rechen-Script. Erwartet alle Entitäten und Werte als Variablen 
+    Ein reines Rechen-Script. Erwartet alle Entitäten und Werte als Variablen
     beim Aufruf aus einer Automatisierung.
+    ac_charge_mode = true: invertierte Fehlerberechnung für AC-Laden (Ziel = target_offset - grid).
+    ac_charge_mode = false (Standard): normale Fehlerberechnung (Ziel = grid - target_offset).
   domain: script
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/main/PI-Regler.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/experimentalAC/PI-Regler.yaml
 
 mode: single
 
@@ -20,7 +22,7 @@ fields:
     description: Ziel-Netzbezug
   max_power:
     name: Max Leistung (Watt)
-    description: Limit des Wechselrichters
+    description: Limit des Wechselrichters (Hard Limit oder Lade-Limit)
   tolerance:
     name: Toleranz (Watt)
     description: Totband, in dem nicht geregelt wird
@@ -33,10 +35,17 @@ fields:
     description: Die Entitäts-ID des input_number Helfers
   output_entity:
     name: Ziel-Entität (ID)
-    description: Die Entitäts-ID des Wechselrichter-Limits
+    description: Die Entitäts-ID der Ausgangsleistungs-Entität des Wechselrichters
+  ac_charge_mode:
+    name: AC Laden aktiv (Bool)
+    description: >
+      true  = AC Laden: raw_error = target_offset − grid (Vorzeichen invertiert).
+              Positiver Fehler → Ladeleistung erhöhen.
+      false = Normal:   raw_error = grid − target_offset (Standard-Nulleinspeisung).
+    required: false
+    default: false
 
 variables:
-  # Berechnungen basierend auf den übergebenen Feldern
   grid_float: "{{ states(grid_power) | float(0) }}"
   current_float: "{{ current_power | float(0) }}"
   target_float: "{{ target_offset | float(0) }}"
@@ -44,23 +53,33 @@ variables:
   tol_float: "{{ tolerance | float(10) }}"
   p_val: "{{ p_factor | float(1.5) }}"
   i_val: "{{ i_factor | float(0.05) }}"
-  
-  raw_error: "{{ grid_float - target_float }}"
-  grid_error_abs: "{{ raw_error | abs }}"
-  error_float: >
-     {% if raw_error > 0 %}
-       {{ [raw_error, (max_pwr_float - current_float)] | min }}
-     {% else %}
-       {{ [raw_error, (0 - current_float)] | max }}
-     {% endif %}
-  
-  # Integral Logik
-  integral_old: "{{ states(integral_entity) | float(0) }}"
-  integral_new: "{{ (integral_old + error_float)| float(0) | clamp(-1000, 1000) }}"
 
-  # Endergebnis
+  # Fehlerrichtung je nach Modus:
+  #   Normal:    grid - target  → positiv bei Netzbezug (Output erhöhen)
+  #   AC Laden:  target - grid  → positiv wenn Grid < Sollwert (Ladeleistung erhöhen)
+  raw_error: >
+    {% if ac_charge_mode | bool(false) %}
+      {{ target_float - grid_float }}
+    {% else %}
+      {{ grid_float - target_float }}
+    {% endif %}
+  grid_error_abs: "{{ raw_error | abs }}"
+
+  # Kapazitäts-Clamping: begrenzt Fehler auf tatsächlich nutzbare Kapazität
+  error_float: >
+    {% if raw_error > 0 %}
+      {{ [raw_error, (max_pwr_float - current_float)] | min }}
+    {% else %}
+      {{ [raw_error, (0 - current_float)] | max }}
+    {% endif %}
+
+  # Integral mit Anti-Windup
+  integral_old: "{{ states(integral_entity) | float(0) }}"
+  integral_new: "{{ (integral_old + error_float) | float(0) | clamp(-1000, 1000) }}"
+
+  # PI-Korrektur und Endergebnis
   power_correction: "{{ (error_float * p_val) + (integral_new * i_val) }}"
-  final_power: "{{ (current_float + power_correction) | float(0) | round (0) | clamp(0,max_pwr_float) }}"
+  final_power: "{{ (current_float + power_correction) | float(0) | round(0) | clamp(0, max_pwr_float) }}"
 
 sequence:
   - parallel:
@@ -70,7 +89,7 @@ sequence:
           entity_id: "{{ integral_entity }}"
         data:
           value: "{{ integral_new }}"
-        
+
       # 2. Wert an die übergebene Entität senden
       - action: number.set_value
         target:
