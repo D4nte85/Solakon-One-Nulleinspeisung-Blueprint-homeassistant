@@ -499,12 +499,12 @@ blueprint:
             name: ⏱️ Wartezeit AC Laden (nach Leistungsänderung)
             description: |
               Separate Wartezeit für den AC-Lade-Modus (Modus '3').
-              Lade-PI reagiert träger als Entlade-PI → höherer Wert empfohlen (z.B. 5 s).
-            default: 5
+              Lade-PI reagiert VIEL träger als Entlade-PI → höherer Wert empfohlen (z.B. 15 s).
+            default: 15
             selector:
               number:
                 min: 0
-                max: 30
+                max: 60
                 step: 1
                 unit_of_measurement: s
                 
