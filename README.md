@@ -23,10 +23,6 @@ Der zugehörige **PI-Regler Script-Blueprint** muss ebenfalls importiert werden:
 
 ---
 
-Der zugehörige **PI-Regler Script-Blueprint** muss ebenfalls importiert werden:
-
-[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fmain%2FPI-Regler.yaml)
-
 ## 🛠️ Vorbereitung: Erstellung der erforderlichen Helper
 
 Der Blueprint benötigt **drei Pflicht-Helper** und ein **Script** sowie bis zu **zwei optionale Helper**, die Sie vor der Installation erstellen müssen.
