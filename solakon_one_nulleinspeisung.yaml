@@ -45,15 +45,15 @@ blueprint:
     | **3 — Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` | 0 A | Output = 0 W. Vollständiger Batterieschutz. Hat immer Vorrang. |
 
     **Steuer-Falls (Reihenfolge ist entscheidend):**
-    - **A** — Zone 1 Start: SOC > Zone-1-Schwelle UND Zyklus = `off`
-    - **B** — Zone 3 Stop: SOC < Zone-3-Schwelle UND Zyklus = `on`
-    - **C** — Zone 3 Absicherung: SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'`
-    - **D** — Recovery: Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle → Modus reaktivieren ohne Zonenwechsel
-    - **G** — AC Laden Start: AC aktiv UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + Output) < −Toleranz
-    - **H** — AC Laden Ende: Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND Output = 0 W))
-    - **I** — Safety: Modus = `'3'` ohne aktive AC-Lade-Session → Korrektur
-    - **E** — Zone 2 Start: Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht
-    - **F** — Nachtabschaltung: Nacht UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv
+    - **A** — Zone 1 Start: SOC > Zone-1-Schwelle UND Zyklus = `off` → Integral = 0, Zyklus = `on`, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'`
+    - **B** — Zone 3 Stop: SOC < Zone-3-Schwelle UND Zyklus = `on` → Integral = 0, Zyklus = `off`, Surplus/AC-Bool zurücksetzen, Output → 0W, Modus → `'0'`
+    - **C** — Zone 3 Absicherung: SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` → Surplus/AC-Bool zurücksetzen, Output → 0W, Modus → `'0'`
+    - **D** — Recovery: Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle → Timer-Toggle, Modus → `'3'` wenn AC-Lade-Bool = `on`, sonst `'1'` (kein Integral-Reset, kein Zonenwechsel)
+    - **G** — AC Laden Start: AC aktiv UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + Output) < −Hysterese → AC-Bool = `on`, Timer-Toggle, Output → 0W, Modus → `'3'`
+    - **H** — AC Laden Ende: Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND Output = 0W)) → Integral = 0, AC-Bool = `off`, Zone 1: Output → 0W, Timer-Toggle, Modus → `'1'` / Zone 2: Output → 0W, Modus → `'0'`
+    - **I** — Safety: Modus = `'3'` ohne aktive AC-Lade-Session → Integral = 0, Zone 1: Output → 0W, Timer-Toggle, Modus → `'1'` / Zone 2: Output → 0W, Modus → `'0'`
+    - **E** — Zone 2 Start: Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht → Integral = 0, Timer-Toggle, Modus → `'1'`
+    - **F** — Nachtabschaltung: Nacht UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv → Integral = 0, Output → 0W, Modus → `'0'`
 
     **Timer-Toggle:** Statt eines festen Werts wird zwischen 3598 und 3599 gewechselt — erzeugt eine Zustandsänderung damit der Solakon den neuen Modus sicher übernimmt. Wird bei jedem Moduswechsel direkt vor dem Modus-Setzen durchgeführt.
 
@@ -80,7 +80,7 @@ blueprint:
     Erkennung: `(Grid + Ausgangsleistung) < −Toleranz` — d.h. nach Abzug des Solakon-Beitrags liegt noch Überschuss an.
     Typischer Anwendungsfall: externe PV-Anlage speist Überschuss ins Netz.
 
-    - **Eintritt (Fall G):** AC Laden aktiviert UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + Output) < −Toleranz
+    - **Eintritt (Fall G):** AC Laden aktiviert UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + Output) < −Hysterese
       - Guard `Modus ≠ '3'` verhindert Re-Eintritt wenn AC Laden bereits läuft
     - **Verbleib:** Modus `'3'` solange SOC < Ladeziel UND Grid < (Offset + Hysterese)
     - **Abbruch (Fall H):** SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND Output = 0 W)
@@ -91,8 +91,8 @@ blueprint:
     - **Separate Wartezeit:** Hardware-Flanke ~25 s (min→max) → 15 s als Kompromiss
     - **Separate P/I-Faktoren:** P klein (~0.3–0.5), I macht die eigentliche Regelarbeit
     - **Rückkehr:**
-      - Zone 1 → Modus `'1'` (Timer-Toggle) + Integral Reset
-      - Zone 2 → Modus `'0'` + Output 0 W + Integral Reset
+      - Zone 1 → Integral = 0, AC-Bool = `off`, Output → 0 W, Timer-Toggle, Modus → `'1'`
+      - Zone 2 → Integral = 0, AC-Bool = `off`, Output → 0 W, Modus → `'0'`
     - **Priorität:** Zone 3 (SOC-Schutz) hat immer Vorrang
 
     </details>
