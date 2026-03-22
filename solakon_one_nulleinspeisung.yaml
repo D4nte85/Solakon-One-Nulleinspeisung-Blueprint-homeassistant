@@ -249,8 +249,8 @@ blueprint:
         input:
           regulator_factor:
             name: 🎛️ P-Faktor (Proportional-Verstärkung)
-            description: P-Anteil des PI-Reglers (z.B. 1.5). Höher = aggressiver.
-            default: 1.5
+            description: P-Anteil des PI-Reglers (z.B. 1.3). Höher = aggressiver.
+            default: 1.3
             selector:
               number:
                 min: 0.1
