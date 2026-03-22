@@ -40,14 +40,14 @@ flowchart TD
 
     %% ── Fall G: AC Laden Eintritt ────────────────────────────────────────
     ZONE_CHECK -- "FALL G   AC Laden aktiv   UND SOC < Ladeziel   UND Modus ≠ '3' ← Guard!   UND (Grid + Output) < −Toleranz" --> AC_START
-    AC_START["⚡ AC Laden aktivieren   AC-Lade-Bool → on   Timer-Toggle (3598↔3599)   Modus → '3' (INV Charge PV Priority)   Output → 0 W (PI startet sauber)"]
+    AC_START["⚡ AC Laden aktivieren   AC-Lade-Bool → on   Timer-Toggle (3598↔3599)   Output → 0 W (PI startet sauber)   Modus → '3' (INV Charge PV Priority)"]
 
     %% ── Fall H: AC Laden Beenden ─────────────────────────────────────────
-    ZONE_CHECK -- "FALL H   Modus = '3'   UND (SOC ≥ Ladeziel ODER Grid ≥ Hysterese)" --> AC_END
+    ZONE_CHECK -- "FALL H   Modus = '3'   UND (SOC ≥ Ladeziel ODER (Grid ≥ AC-Offset + Hysterese UND Output = 0 W))" --> AC_END
     AC_END{{"Aktuelle Zone?"}}
     AC_END -- "Zyklus = on (Zone 1)" --> AC_END_Z1
     AC_END -- "Zyklus = off (Zone 2)" --> AC_END_Z2
-    AC_END_Z1["⚡ AC Laden beenden (Zone 1)   AC-Lade-Bool → off   Integral = 0   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
+    AC_END_Z1["⚡ AC Laden beenden (Zone 1)   AC-Lade-Bool → off   Integral = 0   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
     AC_END_Z2["⚡ AC Laden beenden (Zone 2)   AC-Lade-Bool → off   Integral = 0   Modus → '0' (Disabled)   Output → 0 W"]
 
     %% ── Fall I: Safety — Modus '3' ohne aktive AC-Lade-Session ──────────
@@ -55,7 +55,7 @@ flowchart TD
     SAFETY_I{{"Aktuelle Zone?"}}
     SAFETY_I -- "Zyklus = on (Zone 1)" --> SAFETY_I_Z1
     SAFETY_I -- "Zyklus = off (Zone 2)" --> SAFETY_I_Z2
-    SAFETY_I_Z1["⚠️ Safety (Zone 1)   Integral = 0   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
+    SAFETY_I_Z1["⚠️ Safety (Zone 1)   Integral = 0   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
     SAFETY_I_Z2["⚠️ Safety (Zone 2)   Integral = 0   Modus → '0' (Disabled)   Output → 0 W"]
 
     %% ── Fall E: Zone 2 ───────────────────────────────────────────────────
@@ -111,14 +111,14 @@ flowchart TD
     AC_GATE -- Ja --> CALC_AC
     AC_GATE -- Nein --> NORMAL_GATE
 
-    CALC_AC["⚡ AC Laden — PI-Script (ac_charge_mode=true)   raw_error = ac_charge_offset − grid ← eigener Offset!   max_power = ac_charge_power_limit   Kapazitäts-Clamping   Integral += error → clamp(−1000, 1000)   Korrektur = P + I   new_power = current + Korrektur   clamp(0, Lade-Limit) → Output → WR   Integral speichern   Wartezeit   (at_max / at_min Guards NICHT angewendet)"]
+    CALC_AC["⚡ AC Laden — PI-Script (ac_charge_mode=true)   raw_error = ac_charge_offset − grid ← eigener Offset!   max_power = ac_charge_power_limit   Kapazitäts-Clamping   Integral += error → clamp(−1000, 1000)   Korrektur = P·error + I·integral   (separate ac_charge_p/i_factor)   new_power = current + Korrektur   clamp(0, Lade-Limit) → Output → WR   Integral speichern   Wartezeit AC Laden   (at_max / at_min Guards NICHT angewendet)"]
 
     %% ── Normaler PI-Pfad ─────────────────────────────────────────────────
     NORMAL_GATE{{"Fehler > Toleranz?   UND kein At-Max / At-Min-Limit?"}}
     NORMAL_GATE -- Ja --> CALC_NORMAL
     NORMAL_GATE -- Nein --> INTEGRAL_DECAY
 
-    CALC_NORMAL["🧠 PI-Script (ac_charge_mode=false)   raw_error = grid − target_offset   dynamic_max:      Zone 1 → Hard Limit      Zone 2 → Max(0, PV − Reserve)   Kapazitäts-Clamping   Integral += error → clamp(−1000, 1000)   Korrektur = P + I   new_power = current + Korrektur   clamp(0, dynamic_max) → Output → WR   Integral speichern   Wartezeit"]
+    CALC_NORMAL["🧠 PI-Script (ac_charge_mode=false)   raw_error = grid − target_offset   dynamic_max:      Zone 1 → Hard Limit      Zone 2 → Max(0, PV − Reserve)   Kapazitäts-Clamping   Integral += error → clamp(−1000, 1000)   Korrektur = P·error + I·integral   new_power = current + Korrektur   clamp(0, dynamic_max) → Output → WR   Integral speichern   Wartezeit"]
 
     INTEGRAL_DECAY["📉 Integral-Decay   |Integral| > 10 → Integral × 0,95   sonst → kein Update"]
 
