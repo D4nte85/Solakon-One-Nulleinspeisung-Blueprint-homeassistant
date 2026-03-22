@@ -134,6 +134,8 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
 
 | Fall | Bedingung | Aktion |
 |:-----|:----------|:-------|
+| **0A** | Surplus-Bool = `off` UND SOC ≥ Export-Schwelle UND PV > Output + Grid + PV-Hysterese | Zone 0 Start: Surplus-Bool → `on` |
+| **0B** | Surplus-Bool = `on` UND (SOC < Export-Schwelle − SOC-Hysterese ODER PV ≤ Output + Grid − PV-Hysterese) | Zone 0 Ende: Surplus-Bool → `off`, Integral = 0 |
 | **A** | SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'` |
 | **B** | SOC < Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
 | **C** | SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
@@ -340,6 +342,59 @@ Passt den Nullpunkt-Offset vollautomatisch an die aktuelle Netz-Volatilität an 
 | Unruhig | 80 W | 128 W |
 | Sehr unruhig | 160 W | 228 W |
 | Extrem | 250 W+ | 250 W *(Maximum)* |
+
+---
+
+## 🔧 PI-Regler Einstellung
+
+Der Regler wird in drei Schritten eingestellt.
+
+### Schritt 1: Wartezeit finden (P = 1, I = 0)
+
+```yaml
+P-Faktor: 1.0
+I-Faktor: 0.0
+```
+
+P=1 liefert einen sauberen, gut sichtbaren Sprung in der Ausgangsleistung — damit lässt sich die Systemantwort klar ablesen.
+
+Die Gesamtverzögerung setzt sich aus mehreren Teilen zusammen:
+
+1. **Modbus-Schreiben** — HA wartet automatisch auf die Bestätigung dass der Sollwert erfolgreich geschrieben wurde, bevor die Automation weiterläuft (typisch 0.5–2 s je nach Bus-Last). Das zählt **nicht** zur Wartezeit — die Wartezeit beginnt erst danach.
+2. **Wechselrichter-Reaktion** — der Solakon ONE braucht nach dem erfolgreichen Schreiben eine gewisse Zeit um die Ausgangsleistung tatsächlich anzupassen (Hardware-Flanke). Das ist der Hauptanteil der Wartezeit.
+3. **Messlatenz** — Shelly und Solakon-Integration lesen die neuen Werte über eigenes Modbus-Polling aus; auch dieser Zeitversatz gehört zur Wartezeit.
+
+Die **Wartezeit** deckt Punkte 2 und 3 ab. Beispiel für die Gesamtstrecke vom Schreibbefehl bis zum stabilen Messwert:
+
+```
+number.set_value abgesendet
+  + 0.5–2.0 s   Modbus-Schreiben + Write-Bestätigung   → Wartezeit beginnt hier
+  + 0.5–1.5 s   Wechselrichter passt Ausgangsleistung an (Hardware-Flanke)
+  + 0.5–1.5 s   Shelly + Solakon-Integration lesen neue Werte per Polling
+─────────────────────────────────────────────────────
+  = 1.5–5.0 s   Gesamtverzögerung
+  → sinnvolle Wartezeit: 1–3 s
+```
+
+Die eigenen Zeitstempel lassen sich am einfachsten in den **Aktivitätslogs** von Home Assistant ablesen (Einstellungen → System → Protokolle → Aktivitätslog), wo jeder Service-Call mit Zeitstempel erscheint. Zu kurz → Regler liest veraltete Messwerte und schwingt. Zu lang → träge Regelung.
+
+### Schritt 2: P-Faktor finden (I = 0)
+
+P schrittweise erhöhen (0.2 → 0.5 → 0.8 → …). Ziel: die **kritische Verstärkung** finden — den Punkt wo Output und Grid-Leistung dauerhaft um den Sollwert pendeln. Dann P auf ca. **50–60% dieses Werts** zurücknehmen. Man sucht also bewusst die Stabilitätsgrenze und geht dann einen Schritt zurück.
+
+Typischer Arbeitsbereich nach diesem Verfahren: **0.8–1.5**.
+
+### Schritt 3: I-Faktor hinzufügen
+
+Mit P allein verbleibt eine bleibende Regelabweichung wenn der Hausverbrauch sich ändert. Der I-Anteil korrigiert das über Zeit. Klein anfangen und langsam erhöhen.
+
+```yaml
+I-Faktor: 0.02  # Startpunkt
+```
+
+Zeichen für zu hohes I: System schwingt langsam mit langer Periode. Der **Anti-Windup** begrenzt das Integral auf ±1000, der **Toleranz-Decay** (5%/Zyklus bei Fehler ≤ Toleranz) baut es bei Ruhe automatisch ab.
+
+Typischer Arbeitsbereich: **0.03–0.08**. Für AC Laden separat tunen — dort wegen der langen Hardware-Flanke (~25 s) P besonders klein halten (~0.3–0.5) und I die eigentliche Arbeit machen lassen.
 
 ---
 
