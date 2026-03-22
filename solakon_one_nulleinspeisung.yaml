@@ -18,7 +18,7 @@ blueprint:
     - **Integral-Reset:** Bei jedem Zonenwechsel auf 0.
     - **Integral-Decay:** 5 % Abbau pro Zyklus solange Fehler ≤ Toleranz und |Integral| > 10 (in Hauptautomatisierung).
     - **Integral-Einfrieren:** In Zone 0 (Überschuss) kein Decay, kein PI-Aufruf.
-    - **Fehlerberechnung (modusbabhängig, im Script):**
+    - **Fehlerberechnung (modusabhängig, im Script):**
       - Normal (`ac_charge_mode=false`): `raw_error = grid − target_offset`
       - AC Laden (`ac_charge_mode=true`): `raw_error = target_offset − grid` (invertiert)
     - **Kapazitäts-Clamping:** Fehler wird auf tatsächlich verfügbare Kapazität begrenzt.
@@ -77,7 +77,7 @@ blueprint:
     <summary><b>⚡ AC Laden (Optional)</b> 👈</summary>
 
     Lädt die Batterie wenn eine externe Einspeisung ins Netz erkannt wird.
-    Erkennung: `(Grid + Ausgangsleistung) < −Toleranz` — d.h. nach Abzug des Solakon-Beitrags liegt noch Überschuss an.
+    Erkennung: `(Grid + Ausgangsleistung) < −Hysterese` — d.h. nach Abzug des Solakon-Beitrags liegt noch Überschuss an.
     Typischer Anwendungsfall: externe PV-Anlage speist Überschuss ins Netz.
 
     - **Eintritt (Fall G):** AC Laden aktiviert UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + Output) < −Hysterese
@@ -88,7 +88,6 @@ blueprint:
     - **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`
       - Positiver Fehler (Grid zu negativ) → Ladeleistung erhöhen
       - `at_max/at_min`-Guards deaktiviert (Richtung invertiert)
-    - **Separate Wartezeit:** Hardware-Flanke ~25 s (min→max) → 15 s als Kompromiss
     - **Separate P/I-Faktoren:** P klein (~0.3–0.5), I macht die eigentliche Regelarbeit
     - **Rückkehr:**
       - Zone 1 → Integral = 0, AC-Bool = `off`, Output → 0 W, Timer-Toggle, Modus → `'1'`
@@ -302,7 +301,7 @@ blueprint:
             name: 🔋 SOC-Schwelle "Zone 1 Start"
             description: |
               Obere Schwelle (z.B. 50 %). Überschreiten aktiviert Zone 1.
-              Zone 1 läuft bis SOC < Zone-3-Schwelle fällt (kein Yo-Yo-Effekt).
+              Zone 1 läuft bis SOC unter die Zone-3-Schwelle fällt (kein Yo-Yo-Effekt).
             default: 50
             selector:
               number:
@@ -454,8 +453,8 @@ blueprint:
           surplus_pv_hysteresis:
             name: ☀️ PV-Überschuss Hysterese
             description: |
-              Totband um den Hausverbrauch. Eintritt erst wenn PV um diesen Wert über dem
-              Verbrauch liegt, Austritt wenn PV darunter fällt.
+              Totband um den Hausverbrauch.
+              Eintritt: PV ≥ Verbrauch + Hysterese; Austritt: PV ≤ Verbrauch − Hysterese.
             default: 50
             selector:
               number:
@@ -479,14 +478,14 @@ blueprint:
       ac_charge_parameter:
         name: "⚡ AC LADEN (Optional):"
         description: |
-          Laden der Batterie wenn externe Einspeisung erkannt wird (Grid + Output < −Toleranz).
+          Laden der Batterie wenn externe Einspeisung erkannt wird (Grid + Output < −Hysterese).
           Aktiv in Zone 1 und Zone 2. SOC-Schutz (Zone 3) bleibt vollständig aktiv.
         collapsed: true
         input:
           ac_charge_enabled:
             name: ⚡ AC Laden aktivieren
             description: |
-              ✅ EIN: Modus ≠ '3' UND (Grid + Output) < −Toleranz → Modus 3 (INV Charge PV Priority)
+              ✅ EIN: Modus ≠ '3' UND (Grid + Output) < −Hysterese → Modus 3 (INV Charge PV Priority)
               ❌ AUS: Funktion deaktiviert
             default: false
             selector:
@@ -515,9 +514,11 @@ blueprint:
                 unit_of_measurement: W
 
           ac_charge_hysteresis:
-            name: 📏 Hysterese Ladeabbruch (W)
+            name: 📏 Hysterese AC Laden (W)
             description: |
-              Laden endet erst wenn Grid wieder über diesen Wert steigt.
+              Totband für Ein- und Austritt.
+              Eintritt: (Grid + Output) < −Hysterese.
+              Austritt: Grid ≥ (Offset + Hysterese) UND Output = 0 W.
               Verhindert Flackern bei wechselnder Einspeisung (z.B. 50 W).
             default: 50
             selector:
@@ -576,7 +577,7 @@ blueprint:
             name: 🎛️ I-Faktor AC Laden
             description: |
               Integral-Verstärkung für den AC-Lade-Modus.
-              Macht bei langen Wartezeiten die eigentliche Regelarbeit.
+              Macht bei langer Hardware-Flanke (~25 s) die eigentliche Regelarbeit.
               Empfehlung: 0.05–0.1.
             default: 0.07
             selector:
@@ -584,7 +585,7 @@ blueprint:
                 min: 0
                 max: 0.2
                 step: 0.01
-                
+
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🌙 NACHTABSCHALTUNG (Optional)
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -597,7 +598,7 @@ blueprint:
             description: |
               Deaktiviert Zone 2 nachts automatisch (bei PV < PV-Ladereserve).
               ⚠️ Zone 1 und AC Laden laufen auch nachts weiter!
-              ⚠️ Die PV-Schwelle für "Nacht" ist die PV-Ladereserve aus Zone 2 - Parameter.
+              ⚠️ Die PV-Schwelle für "Nacht" ist die PV-Ladereserve aus den Zone-2-Parametern.
             default: false
             selector:
               boolean:
@@ -953,7 +954,7 @@ actions:
               option: '0'
 
       # FALL D: Recovery - Modus fiel ab, Zyklus noch aktiv
-      # VOR Fall G! Excludiert Modus '3' (AC Laden läuft ungestört weiter).
+      # VOR Fall G! Schließt Modus '3' aus (AC Laden läuft ungestört weiter).
       - conditions:
           - condition: state
             entity_id: !input cycle_active_boolean_helper
