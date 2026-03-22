@@ -343,56 +343,6 @@ Passt den Nullpunkt-Offset vollautomatisch an die aktuelle Netz-Volatilität an 
 
 ---
 
-## 🔧 Empfohlene Einstellungen
-
-### Für konservative Batterienutzung (Langlebigkeit):
-```yaml
-SOC Zone 1 Start: 60%
-SOC Zone 3 Stopp: 30%
-Nullpunkt-Offset: 50W
-PV-Ladereserve: 100W
-P-Faktor: 1.5
-I-Faktor: 0.05
-Toleranzbereich: 30W
-Überschuss-Einspeisung: false
-AC Laden: false
-```
-
-### Für maximale Eigenverbrauchsoptimierung:
-```yaml
-SOC Zone 1 Start: 40%
-SOC Zone 3 Stopp: 15%
-Nullpunkt-Offset: 20W
-PV-Ladereserve: 30W
-P-Faktor: 2.0
-I-Faktor: 0.08
-Toleranzbereich: 20W
-Überschuss-Einspeisung: true
-SOC-Schwelle Überschuss: 95%
-Hysterese Überschuss-Austritt: 5%
-AC Laden: true
-SOC-Ladeziel: 90%
-Max. Ladeleistung: 800W
-Hysterese Ladeabbruch: 50W
-```
-
-### Für ausgewogenen Betrieb (Standard):
-```yaml
-SOC Zone 1 Start: 50%
-SOC Zone 3 Stopp: 20%
-Nullpunkt-Offset: 30W
-PV-Ladereserve: 50W
-P-Faktor: 1.5
-I-Faktor: 0.05
-Max. Ausgangsleistung: 800W
-Toleranzbereich: 25W
-Max. Entladestrom Zone 1: 40A
-Überschuss-Einspeisung: false
-AC Laden: false
-```
-
----
-
 ## 🛑 Wichtige Fehlermeldungen
 
 | Meldung | Ursache | Lösung |
