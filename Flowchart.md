@@ -39,7 +39,7 @@ flowchart TD
     RECOVERY["🔄 Recovery — Modus-Reaktivierung   Timer-Toggle (3598↔3599)   AC-Lade-Bool = on → Modus '3'   sonst → Modus '1'   (kein Integral-Reset, kein Zonenwechsel)"]
 
     %% ── Fall G: AC Laden Eintritt ────────────────────────────────────────
-    ZONE_CHECK -- "FALL G   AC Laden aktiv   UND SOC < Ladeziel   UND Modus ≠ '3' ← Guard!   UND (Grid + Output) < −Toleranz" --> AC_START
+    ZONE_CHECK -- "FALL G   AC Laden aktiviert   UND SOC < Ladeziel   UND Modus ≠ '3' ← Guard!   UND (Grid + Output) < −Hysterese" --> AC_START
     AC_START["⚡ AC Laden aktivieren   AC-Lade-Bool → on   Timer-Toggle (3598↔3599)   Output → 0 W (PI startet sauber)   Modus → '3' (INV Charge PV Priority)"]
 
     %% ── Fall H: AC Laden Beenden ─────────────────────────────────────────
@@ -82,7 +82,7 @@ flowchart TD
     NIGHT --> END_STOP
 
     %% ── PI-Regler Gate ───────────────────────────────────────────────────
-    PI_GATE{{"Modus ∈ {'1','3'}?   UND (Zyklus = on ODER Tag?)"}}
+    PI_GATE{{"Modus ∈ {'1','3'}?   UND (Zyklus = on ODER Nacht-Sperre inaktiv ODER PV ≥ Reserve)"}}
     PI_GATE -- Nein --> END_SKIP([Ende — kein Output])
     PI_GATE -- Ja --> DISCHARGE_SET
 
@@ -111,7 +111,7 @@ flowchart TD
     AC_GATE -- Ja --> CALC_AC
     AC_GATE -- Nein --> NORMAL_GATE
 
-    CALC_AC["⚡ AC Laden — PI-Script (ac_charge_mode=true)   raw_error = ac_charge_offset − grid ← eigener Offset!   max_power = ac_charge_power_limit   Kapazitäts-Clamping   Integral += error → clamp(−1000, 1000)   Korrektur = P·error + I·integral   (separate ac_charge_p/i_factor)   new_power = current + Korrektur   clamp(0, Lade-Limit) → Output → WR   Integral speichern   Wartezeit AC Laden   (at_max / at_min Guards NICHT angewendet)"]
+    CALC_AC["⚡ AC Laden — PI-Script (ac_charge_mode=true)   raw_error = ac_charge_offset − grid ← eigener Offset!   max_power = ac_charge_power_limit   Kapazitäts-Clamping   Integral += error → clamp(−1000, 1000)   Korrektur = P·error + I·integral   (separate ac_charge_p/i_factor)   new_power = current + Korrektur   clamp(0, Lade-Limit) → Output → WR   Integral speichern   Wartezeit   (at_max / at_min Guards NICHT angewendet)"]
 
     %% ── Normaler PI-Pfad ─────────────────────────────────────────────────
     NORMAL_GATE{{"Fehler > Toleranz?   UND kein At-Max / At-Min-Limit?"}}
