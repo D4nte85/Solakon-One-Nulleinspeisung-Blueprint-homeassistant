@@ -494,6 +494,19 @@ blueprint:
             selector:
               entity:
                 domain: input_boolean
+
+          ac_charge_wait_time:
+            name: ⏱️ Wartezeit AC Laden (nach Leistungsänderung)
+            description: |
+              Separate Wartezeit für den AC-Lade-Modus (Modus '3').
+              Lade-PI reagiert träger als Entlade-PI → höherer Wert empfohlen (z.B. 5 s).
+            default: 5
+            selector:
+              number:
+                min: 0
+                max: 30
+                step: 1
+                unit_of_measurement: s
                 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🌙 NACHTABSCHALTUNG (Optional)
@@ -1235,6 +1248,7 @@ actions:
 
       # Konfiguration
       wait_time_int: !input wait_time
+      ac_charge_wait_time_int: !input ac_charge_wait_time
       pi_script: !input PI_regler_script
       max_active_power_limit_int: !input max_active_power_limit
       regulator_factor_float: !input regulator_factor
@@ -1409,7 +1423,7 @@ actions:
               ac_charge_mode: true
           # Wartezeit
           - delay:
-              seconds: "{{ wait_time_int }}"
+              seconds: "{{ ac_charge_wait_time_int }}"
 
       # ZWEIG C: Normaler PI-Regler (Zone 1 / Zone 2)
       - conditions:
