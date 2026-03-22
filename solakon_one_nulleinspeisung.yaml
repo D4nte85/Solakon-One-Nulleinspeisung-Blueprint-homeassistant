@@ -1,47 +1,113 @@
 blueprint:
   name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V302)
   description: |
-    ### Dynamische Nulleinspeisung mit SOC-Zonenlogik
-      Dieser Home Assistant Blueprint implementiert eine dynamische Nulleinspeisung für den Solakon ONE Wechselrichter.
-      Er nutzt einen PI-Regler (Proportional-Integral-Regler) zur präzisen Steuerung der AC-Ausgangsleistung und eine dreistufige State-of-Charge (SOC)-Logik zur effizienten Verwaltung des Batteriespeichers.
-      Ziel dieses Blueprints ist es PV-Energie direkt auszugeben ohne den Umweg über die Batterie, dies verhindert das "flackern" das die App mit ihrer (lade ein Prozent -> entlade ein Prozent -> repeat) Funktionsweise verursacht und soll die Batterie schonen.
+    Dynamische Nulleinspeisung für den Solakon ONE Wechselrichter mit PI-Regler, SOC-Zonenlogik,
+    optionaler Überschuss-Einspeisung und optionalem AC Laden aus externer Einspeisung.
 
-    ---
+    <details>
+    <summary><b>🧠 PI-Regler & Steuerlogik</b> 👈</summary>
 
-    ### 🧠 PI-Regler & Steuerlogik
-    Der Kern des Blueprints ist ein PI-Regler (Proportional-Integral-Regler), der das AC-Output-Limit (Entladeleistung) dynamisch anpasst.
-    * **Messprinzip:** Die Regelung basiert auf dem Shelly/Netzleistungssensor. **WICHTIG:** Positive Werte = Bezug, NEGATIVE WERTE = Einspeisung.
-    * **P-Anteil (Proportional):** Reagiert auf die aktuelle Abweichung mit konfigurierbarer Aggressivität (Regelungs-Faktor).
-    * **I-Anteil (Integral):** Summiert Abweichungen über die Zeit auf und eliminiert bleibende Regelabweichungen. Wird bei Zonenwechseln zurückgesetzt (Anti-Windup).
+    Der Kern des Blueprints ist ein PI-Regler, der das AC-Output-Limit dynamisch anpasst.
+    Die Rechenlogik ist in ein separates Script-Blueprint (`PI-Regler`) ausgelagert.
 
-    ---
+    - **Regelgröße:** Netzleistung (Shelly/Stromzähler). Positiv = Bezug, negativ = Einspeisung.
+    - **Stellgröße:** AC-Ausgangsleistung des Wechselrichters.
+    - **P-Anteil:** Reagiert sofort auf die aktuelle Abweichung vom Sollwert.
+    - **I-Anteil:** Summiert Abweichungen über die Zeit auf — eliminiert bleibende Regelabweichungen.
+    - **Anti-Windup:** Integral wird auf ±1000 begrenzt (im Script).
+    - **Integral-Reset:** Bei jedem Zonenwechsel auf 0.
+    - **Integral-Decay:** 5 % Abbau pro Zyklus solange Fehler ≤ Toleranz und |Integral| > 10 (in Hauptautomatisierung).
+    - **Integral-Einfrieren:** In Zone 0 (Überschuss) kein Decay, kein PI-Aufruf.
+    - **Fehlerberechnung (modusbabhängig, im Script):**
+      - Normal (`ac_charge_mode=false`): `raw_error = grid − target_offset`
+      - AC Laden (`ac_charge_mode=true`): `raw_error = target_offset − grid` (invertiert)
+    - **Kapazitäts-Clamping:** Fehler wird auf tatsächlich verfügbare Kapazität begrenzt.
+    - **Dynamisches Power-Limit (`max_power` ans Script):**
+      - Zone 1: Hard Limit
+      - Zone 2: `Max(0, PV − Reserve)`
+      - AC Laden (Modus `'3'`): konfigurierbares Lade-Limit
+    - **PI-Aufruf-Guard:**
+      - Zone 0 aktiv → kein PI-Aufruf, Integral eingefroren
+      - AC Laden aktiv → PI mit `ac_charge_mode=true`, `at_max/at_min`-Guards deaktiviert
+      - Normal → PI nur wenn `|Fehler| > Toleranz` UND kein At-Limit
+    - **Separate P/I-Faktoren für AC Laden:** Wegen langer Hardware-Flanke (~25 s) empfiehlt sich ein kleiner P-Faktor (~0.3–0.5); der I-Anteil macht die eigentliche Regelarbeit.
 
-    ### 🔋 SOC-Zonenlogik (3 oder 4 Zonen je nach Konfiguration)
+    </details>
 
-    #### 0. Zone: Überschuss-Einspeisung (Optional)
-    * **Eintritts-Bedingung:** SOC ≥ konfigurierte Schwelle UND PV > Ausgangsleistung + Grid + PV-Hysterese.
-    * **Aktion:** AC-Output-Limit auf Maximum, Entladestrom 2 A, Integral einfrieren.
+    <details>
+    <summary><b>🔋 SOC-Zonenlogik</b> 👈</summary>
 
-    #### 1. Zone: Aggressive Regelung (Entladezyklus / Hoher SOC)
-    * **Bedingung:** SOC > Zone-1-Schwelle ODER Entladezyklus aktiv.
-    * **Aktion:** Max. Entladestrom auf konfigurierten Maximalwert. PI-Regler via externem Script.
+    | Zone | Bedingung | Modus | Entladestrom | Besonderheit |
+    |:-----|:----------|:------|:------------|:-------------|
+    | **0 — Überschuss** | SOC ≥ Export-Schwelle UND PV > Output + Grid + PV-Hysterese | `'1'` | 2 A | Optional. Integral eingefroren. |
+    | **1 — Aggressiv** | SOC > Zone-1-Schwelle | `'1'` | Max (z.B. 40 A) | Läuft bis SOC ≤ Zone-3-Schwelle. Auch nachts aktiv. |
+    | **2 — Batterieschonend** | Zone-3 < SOC ≤ Zone-1, Zyklus = off | `'1'` | 0 A | Dynamisches Limit: `Max(0, PV − Reserve)`. Optional: Nachtabschaltung. |
+    | **3 — Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` | 0 A | Output = 0 W. Vollständiger Batterieschutz. Hat immer Vorrang. |
 
-    #### 2. Zone: Batterieschonende Regelung (Zwischen-SOC)
-    * **Bedingung:** SOC zwischen Zone-3- und Zone-1-Schwelle, Entladezyklus inaktiv.
-    * **Aktion:** Max. Entladestrom 0 A. PI-Regler via externem Script. Dynamisches PV-Limit.
+    **Steuer-Falls (Reihenfolge ist entscheidend):**
+    - **A** — Zone 1 Start: SOC > Zone-1-Schwelle UND Zyklus = `off`
+    - **B** — Zone 3 Stop: SOC < Zone-3-Schwelle UND Zyklus = `on`
+    - **C** — Zone 3 Absicherung: SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'`
+    - **D** — Recovery: Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle → Modus reaktivieren ohne Zonenwechsel
+    - **G** — AC Laden Start: AC aktiv UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + Output) < −Toleranz
+    - **H** — AC Laden Ende: Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND Output = 0 W))
+    - **I** — Safety: Modus = `'3'` ohne aktive AC-Lade-Session → Korrektur
+    - **E** — Zone 2 Start: Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht
+    - **F** — Nachtabschaltung: Nacht UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv
 
-    #### 3. Zone: Sicherheits-Stopp (Niedriger SOC)
-    * **Bedingung:** SOC fällt unter den Unteren Schwellenwert.
-    * **Aktion:** Sofortiges Umschalten auf Disabled, Output 0 W.
+    **Timer-Toggle:** Statt eines festen Werts wird zwischen 3598 und 3599 gewechselt — erzeugt eine Zustandsänderung damit der Solakon den neuen Modus sicher übernimmt. Wird bei jedem Moduswechsel direkt vor dem Modus-Setzen durchgeführt.
 
-    ---
+    </details>
 
-    ### ⚡ AC Laden (Optional)
-    Laden der Batterie wenn externe Einspeisung erkannt wird.
-    * **Eintritts-Bedingung:** AC Laden aktiv UND SOC < Ladeziel UND Modus = '1' UND (Grid + Output) < −Toleranz.
-    * **Verbleib:** Modus bleibt '3' solange SOC < Ladeziel und Grid < Hysterese.
-    * **PI-Regler:** Externes Script mit ac_charge_mode=true (invertierte Fehlerberechnung: target − grid).
-    * **Abbruch:** SOC ≥ Ladeziel ODER Grid ≥ Hysterese.
+    <details>
+    <summary><b>☀️ Überschuss-Einspeisung (Zone 0, Optional)</b> 👈</summary>
+
+    Ermöglicht aktives Einspeisen von PV-Überschuss wenn der Akku voll ist.
+
+    - **Eintritt:** SOC ≥ Export-Schwelle UND PV > (Output + Grid + PV-Hysterese)
+    - **Austritt:** SOC < (Export-Schwelle − SOC-Hysterese) ODER PV ≤ (Output + Grid − PV-Hysterese)
+    - **Persistenz:** Zustand in `input_boolean` — überlebt mehrere Automation-Läufe
+    - **Verhalten:** Output → Hard Limit, Entladestrom → 2 A (Stabilitätspuffer), Integral eingefroren
+    - **Hysterese:** Doppelte Absicherung (SOC + PV) verhindert instabiles Hin- und Herschalten
+    - **Deaktiviert:** Klassische Nulleinspeisung, kein aktives Einspeisen
+
+    </details>
+
+    <details>
+    <summary><b>⚡ AC Laden (Optional)</b> 👈</summary>
+
+    Lädt die Batterie wenn eine externe Einspeisung ins Netz erkannt wird.
+    Erkennung: `(Grid + Ausgangsleistung) < −Toleranz` — d.h. nach Abzug des Solakon-Beitrags liegt noch Überschuss an.
+    Typischer Anwendungsfall: externe PV-Anlage speist Überschuss ins Netz.
+
+    - **Eintritt (Fall G):** AC Laden aktiviert UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + Output) < −Toleranz
+      - Guard `Modus ≠ '3'` verhindert Re-Eintritt wenn AC Laden bereits läuft
+    - **Verbleib:** Modus `'3'` solange SOC < Ladeziel UND Grid < (Offset + Hysterese)
+    - **Abbruch (Fall H):** SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND Output = 0 W)
+      - `Output = 0 W`-Guard verhindert Fehlauslösung während PI noch regelt
+    - **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`
+      - Positiver Fehler (Grid zu negativ) → Ladeleistung erhöhen
+      - `at_max/at_min`-Guards deaktiviert (Richtung invertiert)
+    - **Separate Wartezeit:** Hardware-Flanke ~25 s (min→max) → 15 s als Kompromiss
+    - **Separate P/I-Faktoren:** P klein (~0.3–0.5), I macht die eigentliche Regelarbeit
+    - **Rückkehr:**
+      - Zone 1 → Modus `'1'` (Timer-Toggle) + Integral Reset
+      - Zone 2 → Modus `'0'` + Output 0 W + Integral Reset
+    - **Priorität:** Zone 3 (SOC-Schutz) hat immer Vorrang
+
+    </details>
+
+    <details>
+    <summary><b>🌙 Nachtabschaltung (Optional)</b> 👈</summary>
+
+    Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
+
+    - **Schwelle:** PV-Leistung unter dem Wert der PV-Ladereserve (kein separater Parameter)
+    - **Verhalten:** Modus → `'0'`, Integral reset, Output 0 W
+    - **Zone 1:** Läuft durch — hoher SOC, aggressive Entladung weiterhin gewünscht
+    - **Zone 2 Reaktivierung:** Sobald PV wieder über die PV-Ladereserve steigt, greift Fall E
+
+    </details>
 
   domain: automation
   source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/experimentalAC/solakon_one_nulleinspeisung.yaml
@@ -277,7 +343,6 @@ blueprint:
             name: ⚙️ Zone 1 - Nullpunkt-Offset Statisch (Fallback)
             description: |
               Statischer Zielwert für Netzleistung in Zone 1 (z.B. 30 W).
-              ⚠️ Wird auch als Regelziel beim AC Laden in Zone 1 verwendet.
             default: 30
             selector:
               number:
@@ -299,7 +364,6 @@ blueprint:
             name: ⚙️ Zone 2 - Nullpunkt-Offset Statisch (Fallback)
             description: |
               Statischer Zielwert für Netzleistung in Zone 2 (z.B. 30 W).
-              ⚠️ Wird auch als Regelziel beim AC Laden in Zone 2 verwendet.
             default: 30
             selector:
               number:
@@ -422,7 +486,7 @@ blueprint:
           ac_charge_enabled:
             name: ⚡ AC Laden aktivieren
             description: |
-              ✅ EIN: Modus '1' UND (Grid + Output) < −Toleranz → Modus 3 (INV Charge PV Priority)
+              ✅ EIN: Modus ≠ '3' UND (Grid + Output) < −Toleranz → Modus 3 (INV Charge PV Priority)
               ❌ AUS: Funktion deaktiviert
             default: false
             selector:
