@@ -495,6 +495,32 @@ blueprint:
               entity:
                 domain: input_boolean
 
+          ac_charge_p_factor:
+            name: 🎛️ P-Faktor AC Laden
+            description: |
+              Proportional-Verstärkung für den AC-Lade-Modus.
+              Bei langer Hardware-Flanke (~25 s) klein halten → wenig Überschwingen.
+              Empfehlung: 0.3–0.5.
+            default: 0.5
+            selector:
+              number:
+                min: 0.1
+                max: 5
+                step: 0.1
+
+          ac_charge_i_factor:
+            name: 🎛️ I-Faktor AC Laden
+            description: |
+              Integral-Verstärkung für den AC-Lade-Modus.
+              Macht bei langen Wartezeiten die eigentliche Regelarbeit.
+              Empfehlung: 0.05–0.1.
+            default: 0.07
+            selector:
+              number:
+                min: 0
+                max: 0.2
+                step: 0.01
+          
           ac_charge_wait_time:
             name: ⏱️ Wartezeit AC Laden (nach Leistungsänderung)
             description: |
@@ -1253,6 +1279,8 @@ actions:
       max_active_power_limit_int: !input max_active_power_limit
       regulator_factor_float: !input regulator_factor
       ki_factor_float: !input ki_factor
+      ac_charge_p_factor_float: !input ac_charge_p_factor
+      ac_charge_i_factor_float: !input ac_charge_i_factor
       offset_1_static: !input offset_1
       offset_1_entity_id: !input offset_1_entity
       offset_2_static: !input offset_2
@@ -1416,8 +1444,8 @@ actions:
               target_offset: "{{ target_offset }}"
               max_power: "{{ dynamic_max_power }}"
               tolerance: "{{ tolerance_int }}"
-              p_factor: "{{ regulator_factor_float }}"
-              i_factor: "{{ ki_factor_float }}"
+              p_factor: "{{ ac_charge_p_factor_float }}"
+              i_factor: "{{ ac_charge_i_factor_float }}"
               integral_entity: !input integral_helper
               output_entity: !input active_power_number
               ac_charge_mode: true
