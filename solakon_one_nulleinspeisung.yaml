@@ -604,8 +604,7 @@ blueprint:
               boolean:
 
 
-mode: queued
-max: 5
+mode: single
 max_exceeded: silent
 
 variables:
