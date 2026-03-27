@@ -797,7 +797,7 @@ actions:
       # FALL A: ZONE 1 - Aggressive Entladung START
       - conditions:
           - condition: template
-            value_template: "{{ not (ac_charge_mode_active | bool(false) }}"
+            value_template: "{{ not (ac_charge_mode_active | bool(false)) }}"
           - condition: template
             value_template: "{{ states(soc) | float(0) > soc_fast_limit_int }}"
           - condition: state
@@ -863,7 +863,7 @@ actions:
       # FALL B: ZONE 3 - Sicherheits-STOPP (Zyklus ON)
       - conditions:
           - condition: template
-            value_template: "{{ not (ac_charge_mode_active | bool(false) }}"
+            value_template: "{{ not (ac_charge_mode_active | bool(false)) }}"
           - condition: template
             value_template: "{{ states(soc) | float(0) < soc_conservation_limit_int }}"
           - condition: state
@@ -916,7 +916,7 @@ actions:
       # FALL C: ZONE 3 - Absicherung (Zyklus OFF, Modus noch aktiv)
       - conditions:
           - condition: template
-            value_template: "{{ not (ac_charge_mode_active | bool(false) }}"
+            value_template: "{{ not (ac_charge_mode_active | bool(false)) }}"
           - condition: template
             value_template: "{{ states(soc) | float(0) < soc_conservation_limit_int }}"
           - condition: state
@@ -1218,7 +1218,7 @@ actions:
       # FALL E: ZONE 2 - Batterieschonend START
       - conditions:
           - condition: template
-            value_template: "{{ not (ac_charge_mode_active | bool(false) }}"
+            value_template: "{{ not (ac_charge_mode_active | bool(false)) }}"
           - condition: template
             value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int and states(soc) | float(0) <= soc_fast_limit_int }}"
           - condition: state
@@ -1272,7 +1272,7 @@ actions:
       # FALL F: Nachtabschaltung (Zone 2 bei PV < PV-Ladereserve)
       - conditions:
           - condition: template
-            value_template: "{{ not (ac_charge_mode_active | bool(false) }}"
+            value_template: "{{ not (ac_charge_mode_active | bool(false)) }}"
           - condition: template
             value_template: "{{ night_shutdown_enabled_bool }}"
           - condition: template
