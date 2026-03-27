@@ -454,7 +454,7 @@ blueprint:
             name: ☀️ PV-Überschuss Hysterese
             description: |
               Totband um den Hausverbrauch.
-              Eintritt: PV ≥ Verbrauch + Hysterese; Austritt: PV ≤ Verbrauch − Hysterese.
+              Eintritt: PV > Verbrauch + Hysterese; Austritt: PV ≤ Verbrauch − Hysterese.
             default: 50
             selector:
               number:
@@ -485,7 +485,7 @@ blueprint:
           ac_charge_enabled:
             name: ⚡ AC Laden aktivieren
             description: |
-              ✅ EIN: Modus ≠ '3' UND (Grid + Output) < −Hysterese → Modus 3 (INV Charge PV Priority)
+              ✅ EIN: SOC < Ladeziel UND Modus ≠ '3' UND (Grid + Output) < −Hysterese → Modus 3 (INV Charge PV Priority)
               ❌ AUS: Funktion deaktiviert
             default: false
             selector:
