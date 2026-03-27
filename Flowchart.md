@@ -44,19 +44,19 @@ flowchart TD
 
     %% ── Fall H: AC Laden Beenden ─────────────────────────────────────────
     ZONE_CHECK -- "FALL H   Modus = '3'   UND (SOC ≥ Ladeziel ODER (Grid ≥ AC-Offset + Hysterese UND Output = 0 W))" --> AC_END
-    AC_END{{"Aktuelle Zone?"}}
+    AC_END{{"Integral = 0   AC-Lade-Bool → off   Aktuelle Zone?"}}
     AC_END -- "Zyklus = on (Zone 1)" --> AC_END_Z1
     AC_END -- "Zyklus = off (Zone 2)" --> AC_END_Z2
-    AC_END_Z1["⚡ AC Laden beenden (Zone 1)   AC-Lade-Bool → off   Integral = 0   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
-    AC_END_Z2["⚡ AC Laden beenden (Zone 2)   AC-Lade-Bool → off   Integral = 0   Modus → '0' (Disabled)   Output → 0 W"]
+    AC_END_Z1["⚡ AC Laden beenden (Zone 1)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
+    AC_END_Z2["⚡ AC Laden beenden (Zone 2)   Modus → '0' (Disabled)   Output → 0 W"]
 
     %% ── Fall I: Safety — Modus '3' ohne aktive AC-Lade-Session ──────────
     ZONE_CHECK -- "FALL I   Modus = '3'   UND AC Laden nicht aktiv / Helper off" --> SAFETY_I
-    SAFETY_I{{"Aktuelle Zone?"}}
+    SAFETY_I{{"Integral = 0   Aktuelle Zone?"}}
     SAFETY_I -- "Zyklus = on (Zone 1)" --> SAFETY_I_Z1
     SAFETY_I -- "Zyklus = off (Zone 2)" --> SAFETY_I_Z2
-    SAFETY_I_Z1["⚠️ Safety (Zone 1)   Integral = 0   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
-    SAFETY_I_Z2["⚠️ Safety (Zone 2)   Integral = 0   Modus → '0' (Disabled)   Output → 0 W"]
+    SAFETY_I_Z1["⚠️ Safety (Zone 1)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
+    SAFETY_I_Z2["⚠️ Safety (Zone 2)   Modus → '0' (Disabled)   Output → 0 W"]
 
     %% ── Fall E: Zone 2 ───────────────────────────────────────────────────
     ZONE_CHECK -- "FALL E   Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = '0' UND NICHT Nacht" --> Z2_START
