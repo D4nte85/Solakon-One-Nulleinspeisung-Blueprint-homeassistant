@@ -1062,6 +1062,7 @@ actions:
               entity_id: !input mode_select
             data:
               option: '3'
+          - stop: ""
 
 
       # FALL H: AC LADEN BEENDEN
@@ -1125,6 +1126,7 @@ actions:
                       entity_id: !input mode_select
                     data:
                       option: '1'
+                  - stop: ""
             default:
               # 4a. Output → 0 W
               - action: number.set_value
@@ -1198,6 +1200,7 @@ actions:
                       entity_id: !input mode_select
                     data:
                       option: '1'
+                  - stop: ""
             default:
               # 3a. Output → 0 W
               - action: number.set_value
