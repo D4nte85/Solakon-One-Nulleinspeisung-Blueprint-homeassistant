@@ -64,7 +64,7 @@ blueprint:
 
     Ermöglicht aktives Einspeisen von PV-Überschuss wenn der Akku voll ist.
 
-    - **Eintritt:** SOC ≥ Export-Schwelle UND PV > (Output + Grid + PV-Hysterese)
+    - **Eintritt:** SOC ≥ Export-Schwelle UND (PV > (Output + Grid + PV-Hysterese) ODER PV = 0)
     - **Austritt:** SOC < (Export-Schwelle − SOC-Hysterese) ODER PV ≤ (Output + Grid − PV-Hysterese)
     - **Persistenz:** Zustand in `input_boolean` — überlebt mehrere Automation-Läufe
     - **Verhalten:** Output → Hard Limit, Entladestrom → 2 A (Stabilitätspuffer), Integral eingefroren
@@ -420,7 +420,7 @@ blueprint:
           surplus_export_enabled:
             name: ☀️ Überschuss-Einspeisung aktivieren
             description: |
-              ✅ EIN: SOC ≥ Schwelle UND PV > Verbrauch + PV-Hysterese → Output auf Maximum.
+              ✅ EIN: SOC ≥ Schwelle UND (PV > Verbrauch + PV-Hysterese ODER PV = 0) → Output auf Maximum.
               ❌ AUS: Klassische Nulleinspeisung.
             default: false
             selector:
@@ -747,7 +747,7 @@ actions:
           - condition: template
             value_template: >
               {{ (states(soc) | float(0) >= soc_export_limit_int) and
-                 (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int)) }}
+                 (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int) or solar_power_float == 0) }}
         sequence:
           # 1. Logbuch-Eintrag
           - action: logbook.log
