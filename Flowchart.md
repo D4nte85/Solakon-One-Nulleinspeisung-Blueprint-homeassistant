@@ -12,7 +12,7 @@ flowchart TD
     SURPLUS_UPDATE -- "FALL 0A   Surplus-Bool = off   UND SOC ≥ Export-Schwelle   UND PV > Output + Grid + PV-Hysterese" --> S0A
     S0A["☀️ Zone 0 aktivieren   Surplus-Bool → on"]
 
-    SURPLUS_UPDATE -- "FALL 0B   Surplus-Bool = on   UND (SOC < Export − SOC-Hysterese   ODER PV ≤ Output + Grid − PV-Hysterese)" --> S0B
+    SURPLUS_UPDATE -- "FALL 0A   Surplus-Bool = off   UND SOC ≥ Export-Schwelle   UND (PV > Output + Grid + PV-Hysterese   ODER PV = 0)" --> S0A
     S0B["☁️ Zone 0 deaktivieren   Surplus-Bool → off   Integral = 0"]
 
     SURPLUS_UPDATE -- "Kein Surplus-Update" --> ZONE_CHECK
@@ -23,15 +23,15 @@ flowchart TD
     ZONE_CHECK{{"SOC & Zyklus-Status?   (Falls A – F, G, H, I)"}}
 
     %% ── Fall A: Zone 1 ───────────────────────────────────────────────────
-    ZONE_CHECK -- "FALL A   SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
+    ZONE_CHECK -- "FALL A   NICHT AC-Lade-Bool = on   UND SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
     Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
 
     %% ── Fall B: Zone 3 (Zyklus on) ──────────────────────────────────────
-    ZONE_CHECK -- "FALL B   SOC < Zone-3-Schwelle UND Zyklus = on" --> Z3_A
+    ZONE_CHECK -- "FALL B   NICHT AC-Lade-Bool = on   UND SOC < Zone-3-Schwelle UND Zyklus = on" --> Z3_A
     Z3_A["🛑 Zone 3 aktivieren   Zyklus = off   Integral = 0   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Modus → '0' (Disabled)   Output → 0 W"]
 
     %% ── Fall C: Zone 3 (Absicherung) ────────────────────────────────────
-    ZONE_CHECK -- "FALL C   SOC < Zone-3-Schwelle UND Zyklus = off UND Modus ≠ '0'" --> Z3_B
+    ZONE_CHECK -- "FALL C   NICHT AC-Lade-Bool = on   UND SOC < Zone-3-Schwelle UND Zyklus = off UND Modus ≠ '0'" --> Z3_B
     Z3_B["🛑 Zone 3 Absicherung   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Modus → '0' (Disabled)   Output → 0 W"]
 
     %% ── Fall D: Recovery ─────────────────────────────────────────────────
@@ -59,11 +59,11 @@ flowchart TD
     SAFETY_I_Z2["⚠️ Safety (Zone 2)   Modus → '0' (Disabled)   Output → 0 W"]
 
     %% ── Fall E: Zone 2 ───────────────────────────────────────────────────
-    ZONE_CHECK -- "FALL E   Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = '0' UND NICHT Nacht" --> Z2_START
+    ZONE_CHECK -- "FALL E   NICHT AC-Lade-Bool = on   UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = '0' UND NICHT Nacht" --> Z2_START
     Z2_START["🔋 Zone 2 aktivieren   Integral = 0   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
 
     %% ── Fall F: Nachtabschaltung ─────────────────────────────────────────
-    ZONE_CHECK -- "FALL F   Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = off UND Modus aktiv" --> NIGHT
+    ZONE_CHECK -- "FALL F   NICHT AC-Lade-Bool = on   UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = off UND Modus aktiv" --> NIGHT
     NIGHT["🌙 Nachtabschaltung   Integral = 0   Modus → '0' (Disabled)   Output → 0 W"]
 
     %% ── Kein Zonenwechsel ────────────────────────────────────────────────
