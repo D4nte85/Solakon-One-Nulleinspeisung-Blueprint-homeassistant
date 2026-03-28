@@ -531,7 +531,8 @@ blueprint:
             name: ⚡ AC Laden - Nullpunkt-Offset Statisch (Fallback)
             description: |
               Regelziel für Netzleistung im AC-Lade-Modus (z.B. −50 W).
-              Negativ = Einspeisung angestrebt (mehr laden).
+              Negativ = leichte Einspeisung angestrebt, damit die Batterie
+              ausschließlich aus PV-Überschuss geladen wird und kein Netzbezug entsteht.
             default: -50
             selector:
               number:
@@ -577,9 +578,10 @@ blueprint:
             name: 🎛️ I-Faktor AC Laden
             description: |
               Integral-Verstärkung für den AC-Lade-Modus.
-              Macht bei langer Hardware-Flanke (~25 s) die eigentliche Regelarbeit.
-              Empfehlung: 0.05–0.1.
-            default: 0.07
+              Der P-Anteil dämpft bereits — ein zu früh eingesetzter I-Faktor
+              führt zu Überschwingen. Startwert: 0 (sicher). Nur erhöhen
+              wenn P allein eine bleibende Regelabweichung hinterlässt.
+            default: 0
             selector:
               number:
                 min: 0
