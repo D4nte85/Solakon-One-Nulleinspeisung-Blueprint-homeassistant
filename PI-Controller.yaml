@@ -1,0 +1,98 @@
+blueprint:
+  name: PI Controller
+  description: >
+    A pure calculation script. Expects all entities and values as variables
+    passed from an automation.
+    ac_charge_mode = true: inverted error calculation for AC Charging (target = target_offset - grid).
+    ac_charge_mode = false (default): normal error calculation (target = grid - target_offset).
+  domain: script
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/Solakon-ONE-Zero-Export/PI-Controller.yaml
+
+mode: single
+
+fields:
+  grid_power:
+    name: Grid Power (Watts)
+    description: Current value from the grid meter
+  current_power:
+    name: Current Inverter Output (Watts)
+    description: Current output of the inverter
+  target_offset:
+    name: Setpoint (Watts)
+    description: Target grid power
+  max_power:
+    name: Max Power (Watts)
+    description: Inverter limit (hard limit or charge limit)
+  tolerance:
+    name: Tolerance (Watts)
+    description: Deadband within which no correction occurs
+  p_factor:
+    name: P Factor
+  i_factor:
+    name: I Factor
+  integral_entity:
+    name: Integral Helper (ID)
+    description: The entity ID of the input_number helper
+  output_entity:
+    name: Target Entity (ID)
+    description: The entity ID of the inverter output power entity
+  ac_charge_mode:
+    name: AC Charging Active (Bool)
+    description: >
+      true  = AC Charging: raw_error = target_offset − grid (sign inverted).
+              Positive error → increase charge power.
+      false = Normal:       raw_error = grid − target_offset (standard zero export).
+    required: false
+    default: false
+
+variables:
+  grid_float: "{{ states(grid_power) | float(0) }}"
+  current_float: "{{ current_power | float(0) }}"
+  target_float: "{{ target_offset | float(0) }}"
+  max_pwr_float: "{{ max_power | float(800) }}"
+  tol_float: "{{ tolerance | float(10) }}"
+  p_val: "{{ p_factor | float(1.5) }}"
+  i_val: "{{ i_factor | float(0.05) }}"
+
+  # Error direction depending on mode:
+  #   Normal:      grid - target  → positive with grid import (increase output)
+  #   AC Charging: target - grid  → positive when Grid < setpoint (increase charge power)
+  raw_error: >
+    {% if ac_charge_mode | bool(false) %}
+      {{ target_float - grid_float }}
+    {% else %}
+      {{ grid_float - target_float }}
+    {% endif %}
+  grid_error_abs: "{{ raw_error | abs }}"
+
+  # Capacity clamping: limits error to actually usable capacity
+  error_float: >
+    {% if raw_error > 0 %}
+      {{ [raw_error, (max_pwr_float - current_float)] | min }}
+    {% else %}
+      {{ [raw_error, (0 - current_float)] | max }}
+    {% endif %}
+
+  # Integral with Anti-Windup
+  integral_old: "{{ states(integral_entity) | float(0) }}"
+  integral_new: "{{ (integral_old + error_float) | float(0) | clamp(-1000, 1000) }}"
+
+  # PI correction and final result
+  power_correction: "{{ (error_float * p_val) + (integral_new * i_val) }}"
+  final_power: "{{ (current_float + power_correction) | float(0) | round(0) | clamp(0, max_pwr_float) }}"
+
+sequence:
+  - parallel:
+      # 1. Always update integral
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ integral_entity }}"
+        data:
+          value: "{{ integral_new }}"
+
+      # 2. Send value to the provided entity
+      - action: number.set_value
+        target:
+          entity_id: "{{ output_entity }}"
+        data:
+          value: "{{ final_power }}"
