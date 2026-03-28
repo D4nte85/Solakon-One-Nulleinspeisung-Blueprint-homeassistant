@@ -347,16 +347,15 @@ Passt den Nullpunkt-Offset vollautomatisch an die aktuelle Netz-Volatilität an 
 
 ## 🔧 PI-Regler Einstellung
 
-Der Regler wird in drei Schritten eingestellt.
+Der Regler wird in drei Schritten eingestellt. Ziel ist ein System, das schnell und präzise auf Änderungen reagiert, aber nicht dauerhaft hin- und herschwingt. Die Grundidee: **klein anfangen, langsam steigern, beim ersten Zittern stoppen und einen kleinen Schritt zurückgehen**.
 
 ### Schritt 1: Wartezeit finden (P = 1, I = 0)
-
 ```yaml
 P-Faktor: 1.0
 I-Faktor: 0.0
 ```
 
-P=1 liefert einen sauberen, gut sichtbaren Sprung in der Ausgangsleistung — damit lässt sich die Systemantwort klar ablesen.
+P=1 erzeugt einen gut sichtbaren Sprung in der Ausgangsleistung — damit lässt sich die Systemantwort klar ablesen.
 
 Die Gesamtverzögerung setzt sich aus mehreren Teilen zusammen:
 
@@ -365,7 +364,6 @@ Die Gesamtverzögerung setzt sich aus mehreren Teilen zusammen:
 3. **Messlatenz** — Shelly und Solakon-Integration lesen die neuen Werte über eigenes Modbus-Polling aus; auch dieser Zeitversatz gehört zur Wartezeit.
 
 Die **Wartezeit** deckt Punkte 2 und 3 ab. Beispiel für die Gesamtstrecke vom Schreibbefehl bis zum stabilen Messwert:
-
 ```
 number.set_value abgesendet
   + 0.5–2.0 s   Modbus-Schreiben + Write-Bestätigung   → Wartezeit beginnt hier
@@ -379,22 +377,41 @@ number.set_value abgesendet
 Die eigenen Zeitstempel lassen sich am einfachsten in den **Aktivitätslogs** von Home Assistant ablesen (Einstellungen → System → Protokolle → Aktivitätslog), wo jeder Service-Call mit Zeitstempel erscheint. Zu kurz → Regler liest veraltete Messwerte und schwingt. Zu lang → träge Regelung.
 
 ### Schritt 2: P-Faktor finden (I = 0)
+```yaml
+P-Faktor: 0.3   # Startpunkt
+I-Faktor: 0.0
+```
 
-P schrittweise erhöhen (0.2 → 0.5 → 0.8 → …). Ziel: die **kritische Verstärkung** finden — den Punkt wo Output und Grid-Leistung dauerhaft um den Sollwert pendeln. Dann P auf ca. **50–60% dieses Werts** zurücknehmen. Man sucht also bewusst die Stabilitätsgrenze und geht dann einen Schritt zurück.
+**Vorgehen:** P klein anfangen und schrittweise erhöhen. Nach jeder Änderung das System einige Minuten beobachten — am besten wenn gerade ein wechselnder Verbraucher läuft (Waschmaschine, Herd o.ä.).
+
+| Was ist zu sehen? | Bedeutung | Aktion |
+|:------------------|:----------|:-------|
+| Output reagiert kaum, Netz bleibt weit vom Ziel | P zu klein | P erhöhen (+0.2 pro Schritt) |
+| Output schwingt leicht um den Zielwert, beruhigt sich aber | Guter Bereich | Hier bleiben oder noch minimal erhöhen |
+| Output und Netzleistung pendeln dauerhaft hin und her ohne sich zu beruhigen | P zu groß, System schwingt | **Letzten Schritt zurück!** |
+
+**Ziel:** Den Punkt finden wo es gerade eben anfängt leicht zu zittern — dann P um **einen Schritt zurücknehmen** (z.B. von 1.4 auf 1.2). Das ist der optimale Arbeitsbereich.
 
 Typischer Arbeitsbereich nach diesem Verfahren: **0.8–1.5**.
 
+> **Tipp:** Das Schwingen sieht man am besten in einem Verlaufsgraph der Netzleistung (z.B. in Energie → Netz, oder einem HA-Verlaufsgraph für den Shelly-Sensor). Stabiles Pendeln mit kleiner Amplitude ist normal — erst wenn der Output dauerhaft auf und ab fährt ohne Tendenz zum Einpendeln ist es zu viel.
+
 ### Schritt 3: I-Faktor hinzufügen
-
-Mit P allein verbleibt eine bleibende Regelabweichung wenn der Hausverbrauch sich ändert. Der I-Anteil korrigiert das über Zeit. Klein anfangen und langsam erhöhen.
-
 ```yaml
-I-Faktor: 0.02  # Startpunkt
+I-Faktor: 0.02   # Startpunkt
 ```
 
-Zeichen für zu hohes I: System schwingt langsam mit langer Periode. Der **Anti-Windup** begrenzt das Integral auf ±1000, der **Toleranz-Decay** (5%/Zyklus bei Fehler ≤ Toleranz) baut es bei Ruhe automatisch ab.
+Mit P allein verbleibt eine bleibende Regelabweichung wenn sich der Hausverbrauch ändert. Der I-Anteil korrigiert das langsam aber sicher. **Dasselbe Vorgehen wie bei P:** klein anfangen und beobachten.
+
+| Was ist zu sehen? | Bedeutung | Aktion |
+|:------------------|:----------|:-------|
+| Regler trifft Zielwert nicht dauerhaft, braucht sehr lange | I zu klein | I erhöhen (+0.01 pro Schritt) |
+| Regler trifft Zielwert zuverlässig, System bleibt stabil | Gut | Fertig |
+| Langsames, lang-periodisches Schwingen (mehrere Minuten) | I zu groß | I leicht reduzieren |
 
 Typischer Arbeitsbereich: **0.03–0.08**. Für AC Laden separat tunen — dort wegen der langen Hardware-Flanke (~25 s) P besonders klein halten (~0.3–0.5) und I die eigentliche Arbeit machen lassen.
+
+Zeichen für zu hohes I: System schwingt langsam mit langer Periode. Der **Anti-Windup** begrenzt das Integral auf ±1000, der **Toleranz-Decay** (5%/Zyklus bei Fehler ≤ Toleranz) baut es bei Ruhe automatisch ab.
 
 ---
 
