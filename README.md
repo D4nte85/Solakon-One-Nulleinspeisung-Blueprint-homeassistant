@@ -134,17 +134,17 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
 
 | Fall | Bedingung | Aktion |
 |:-----|:----------|:-------|
-| **0A** | Surplus-Bool = `off` UND SOC ≥ Export-Schwelle UND PV > Output + Grid + PV-Hysterese | Zone 0 Start: Surplus-Bool → `on` |
+| **0A** | Surplus-Bool = `off` UND SOC ≥ Export-Schwelle UND (PV > Output + Grid + PV-Hysterese ODER PV = 0) | Zone 0 Start: Surplus-Bool → `on` |
 | **0B** | Surplus-Bool = `on` UND (SOC < Export-Schwelle − SOC-Hysterese ODER PV ≤ Output + Grid − PV-Hysterese) | Zone 0 Ende: Surplus-Bool → `off`, Integral = 0 |
-| **A** | SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'` |
-| **B** | SOC < Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
-| **C** | SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
+| **A** | NICHT AC-Lade-Bool = `on` UND SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'` |
+| **B** | NICHT AC-Lade-Bool = `on` UND SOC < Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
+| **C** | NICHT AC-Lade-Bool = `on` UND SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
 | **D** | Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle | Recovery: Timer-Toggle, Modus → `'3'` wenn AC-Lade-Bool = `on`, sonst `'1'` (kein Integral-Reset, kein Zonenwechsel) |
 | **G** | AC aktiv UND SOC < Ladeziel **UND Modus ≠ `'3'`** UND (Grid + Output) < −Hysterese | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
 | **H** | Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ `ac_charge_offset + Hysterese` UND Output = 0 W)) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` / Zone 2 → `'0'` |
 | **I** | Modus = `'3'` UND (AC Laden deaktiviert ODER AC-Lade-Bool ≠ `on`) | Safety-Korrektur: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
-| **E** | Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Timer-Toggle, Modus → `'1'` |
-| **F** | Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Modus → `'0'`, Output → 0W |
+| **E** | NICHT AC-Lade-Bool = `on` UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Timer-Toggle, Modus → `'1'` |
+| **F** | NICHT AC-Lade-Bool = `on` UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Modus → `'0'`, Output → 0W |
 
 > **Reihenfolge ist entscheidend:** Fall D liegt vor Fall G. Dadurch prüft Recovery nur Modus ∉ `{'1','3'}` — AC-Laden-Modus `'3'` wird **nicht** durch Recovery überschrieben. Fall I liegt nach H und fängt jeden Modus-`'3'`-Zustand ab, der nicht durch eine aktive AC-Lade-Session legitimiert ist.
 
@@ -165,7 +165,7 @@ Fängt den Zustand ab, in dem der Wechselrichter Modus `'3'` hat, aber keine akt
 Ermöglicht aktives Einspeisen von PV-Überschuss wenn der Akku voll ist. SOC- und PV-Hysterese verhindern instabiles Hin- und Herschalten.
 
 * **Aktivierung:** Über den Parameter "Überschuss-Einspeisung aktivieren"
-* **Eintritts-Bedingung:** SOC ≥ Export-Schwelle UND PV > (Output + Grid + PV-Hysterese)
+* **Eintritts-Bedingung:** SOC ≥ Export-Schwelle UND (PV > (Output + Grid + PV-Hysterese) ODER PV = 0)
 * **Austritts-Bedingung:** SOC < (Export-Schwelle − SOC-Hysterese) ODER PV ≤ (Output + Grid − PV-Hysterese)
 * **Persistenz:** Zustand wird in `input_boolean` gespeichert — überlebt mehrere Automation-Läufe
 * **Verhalten:** Output auf Hard Limit, Entladestrom 2 A (Stabilitätspuffer), Integral eingefroren (kein Decay, kein PI-Aufruf)
