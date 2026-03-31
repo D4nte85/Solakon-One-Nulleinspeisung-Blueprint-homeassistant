@@ -9,21 +9,21 @@ flowchart TD
     %% ── Zone 0: Status-Update (vor Haupt-Logik) ─────────────────────────
     SURPLUS_UPDATE{{"☀️ Zone 0 Status-Update   (Falls 0A / 0B)"}}
 
-    SURPLUS_UPDATE -- "FALL 0A   Surplus-Bool = off   UND SOC ≥ Export-Schwelle   UND PV > Output + Grid + PV-Hysterese" --> S0A
+    SURPLUS_UPDATE -- "FALL 0A   Surplus-Bool = off   UND SOC ≥ Export-Schwelle   UND (PV > Output + Grid + PV-Hysterese   ODER PV = 0)" --> S0A
     S0A["☀️ Zone 0 aktivieren   Surplus-Bool → on"]
 
-    SURPLUS_UPDATE -- "FALL 0A   Surplus-Bool = off   UND SOC ≥ Export-Schwelle   UND (PV > Output + Grid + PV-Hysterese   ODER PV = 0)" --> S0A
+    SURPLUS_UPDATE -- "FALL 0B   Surplus-Bool = on   UND (SOC < Export-Schwelle − SOC-Hysterese   ODER PV ≤ Output + Grid − PV-Hysterese)" --> S0B
     S0B["☁️ Zone 0 deaktivieren   Surplus-Bool → off   Integral = 0"]
 
     SURPLUS_UPDATE -- "Kein Surplus-Update" --> ZONE_CHECK
     S0A --> ZONE_CHECK
     S0B --> ZONE_CHECK
 
-    %% ── Haupt-Logik: Falls A – F (+ G, H, I) ────────────────────────────
-    ZONE_CHECK{{"SOC & Zyklus-Status?   (Falls A – F, G, H, I)"}}
+    %% ── Haupt-Logik: Falls A – F (+ GT, G, HT, H, I) ───────────────────
+    ZONE_CHECK{{"SOC & Zyklus-Status?   (Falls A – F, GT, G, HT, H, I)"}}
 
     %% ── Fall A: Zone 1 ───────────────────────────────────────────────────
-    ZONE_CHECK -- "FALL A   NICHT AC-Lade-Bool = on   UND SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
+    ZONE_CHECK -- "FALL A   NICHT AC-Lade-Bool = on   UND NICHT Entladesperre (Preis < teuer)   UND SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
     Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
 
     %% ── Fall B: Zone 3 (Zyklus on) ──────────────────────────────────────
@@ -36,11 +36,23 @@ flowchart TD
 
     %% ── Fall D: Recovery ─────────────────────────────────────────────────
     ZONE_CHECK -- "FALL D   Zyklus = on   UND Modus ∉ {'1','3'} ← '3' explizit ausgenommen!   UND SOC > Zone-3-Schwelle" --> RECOVERY
-    RECOVERY["🔄 Recovery — Modus-Reaktivierung   Timer-Toggle (3598↔3599)   AC-Lade-Bool = on → Modus '3'   sonst → Modus '1'   (kein Integral-Reset, kein Zonenwechsel)"]
+    RECOVERY["🔄 Recovery — Modus-Reaktivierung   Timer-Toggle (3598↔3599)   AC-Lade-Bool = on ODER Tarif-Lade-Bool = on → Modus '3'   sonst → Modus '1'   (kein Integral-Reset, kein Zonenwechsel)"]
+
+    %% ── Fall GT: Tarif-Laden Eintritt ────────────────────────────────────
+    ZONE_CHECK -- "FALL GT   Tarif-Arbitrage aktiviert   UND Preis < Günstig-Schwelle   UND SOC < Tarif-Ladeziel   UND Modus ≠ '3' ← Guard!" --> TARIFF_START
+    TARIFF_START["💹 Tarif-Laden aktivieren   Tarif-Lade-Bool → on   Timer-Toggle (3598↔3599)   Output → Ladeleistung (direkt, kein PI)   Modus → '3' (INV Charge PV Priority)"]
 
     %% ── Fall G: AC Laden Eintritt ────────────────────────────────────────
-    ZONE_CHECK -- "FALL G   AC Laden aktiviert   UND SOC < Ladeziel   UND Modus ≠ '3' ← Guard!   UND (Grid + Output) < −Hysterese" --> AC_START
+    ZONE_CHECK -- "FALL G   AC Laden aktiviert   UND SOC < Ladeziel   UND Modus ≠ '3' ← Guard!   UND NICHT Tarif-Lade-Bool = on   UND (Grid + Output) < −Hysterese" --> AC_START
     AC_START["⚡ AC Laden aktivieren   AC-Lade-Bool → on   Timer-Toggle (3598↔3599)   Output → 0 W (PI startet sauber)   Modus → '3' (INV Charge PV Priority)"]
+
+    %% ── Fall HT: Tarif-Laden Beenden ─────────────────────────────────────
+    ZONE_CHECK -- "FALL HT   Modus = '3'   UND Tarif-Lade-Bool = on   UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Tarif-Ladeziel)" --> TARIFF_END
+    TARIFF_END{{"Integral = 0   Tarif-Lade-Bool → off   Aktuelle Zone?"}}
+    TARIFF_END -- "Zyklus = on (Zone 1)" --> TARIFF_END_Z1
+    TARIFF_END -- "Zyklus = off (Zone 2)" --> TARIFF_END_Z2
+    TARIFF_END_Z1["💹 Tarif-Laden beenden (Zone 1)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
+    TARIFF_END_Z2["💹 Tarif-Laden beenden (Zone 2)   Output → 0 W   Modus → '0' (Disabled)"]
 
     %% ── Fall H: AC Laden Beenden ─────────────────────────────────────────
     ZONE_CHECK -- "FALL H   Modus = '3'   UND (SOC ≥ Ladeziel ODER (Grid ≥ AC-Offset + Hysterese UND Output = 0 W))" --> AC_END
@@ -50,8 +62,8 @@ flowchart TD
     AC_END_Z1["⚡ AC Laden beenden (Zone 1)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
     AC_END_Z2["⚡ AC Laden beenden (Zone 2)   Modus → '0' (Disabled)   Output → 0 W"]
 
-    %% ── Fall I: Safety — Modus '3' ohne aktive AC-Lade-Session ──────────
-    ZONE_CHECK -- "FALL I   Modus = '3'   UND AC Laden nicht aktiv / Helper off" --> SAFETY_I
+    %% ── Fall I: Safety — Modus '3' ohne aktive Lade-Session ─────────────
+    ZONE_CHECK -- "FALL I   Modus = '3'   UND NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on" --> SAFETY_I
     SAFETY_I{{"Integral = 0   Aktuelle Zone?"}}
     SAFETY_I -- "Zyklus = on (Zone 1)" --> SAFETY_I_Z1
     SAFETY_I -- "Zyklus = off (Zone 2)" --> SAFETY_I_Z2
@@ -59,7 +71,7 @@ flowchart TD
     SAFETY_I_Z2["⚠️ Safety (Zone 2)   Modus → '0' (Disabled)   Output → 0 W"]
 
     %% ── Fall E: Zone 2 ───────────────────────────────────────────────────
-    ZONE_CHECK -- "FALL E   NICHT AC-Lade-Bool = on   UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = '0' UND NICHT Nacht" --> Z2_START
+    ZONE_CHECK -- "FALL E   NICHT AC-Lade-Bool = on   UND NICHT Entladesperre (Preis < teuer)   UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = '0' UND NICHT Nacht" --> Z2_START
     Z2_START["🔋 Zone 2 aktivieren   Integral = 0   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
 
     %% ── Fall F: Nachtabschaltung ─────────────────────────────────────────
@@ -72,7 +84,10 @@ flowchart TD
     Z1_START --> PI_GATE
     Z2_START --> PI_GATE
     RECOVERY --> PI_GATE
-    AC_START --> END_STOP([Ende])
+    TARIFF_START --> END_STOP([Ende])
+    TARIFF_END_Z1 --> END_STOP
+    TARIFF_END_Z2 --> END_STOP
+    AC_START --> END_STOP
     AC_END_Z1 --> END_STOP
     AC_END_Z2 --> END_STOP
     SAFETY_I_Z1 --> END_STOP
@@ -101,10 +116,17 @@ flowchart TD
     %% ── Schritt 3: Output & Integral ─────────────────────────────────────
     PI_DECISION{{"Surplus-Bool = on?   → Zone 0 aktiv"}}
     PI_DECISION -- Ja --> CALC_SURPLUS
-    PI_DECISION -- Nein --> AC_GATE
+    PI_DECISION -- Nein --> TARIFF_GATE
 
     %% ── Zone 0 Pfad ──────────────────────────────────────────────────────
     CALC_SURPLUS["☀️ Zone 0 — Überschuss-Einspeisung   Output → Hard Limit   Integral einfrieren (integral_old unverändert)   Wartezeit"]
+
+    %% ── Tarif-Laden Pfad ─────────────────────────────────────────────────
+    TARIFF_GATE{{"Tarif-Lade-Bool = on?"}}
+    TARIFF_GATE -- Ja --> CALC_TARIFF
+    TARIFF_GATE -- Nein --> AC_GATE
+
+    CALC_TARIFF["💹 Tarif-Laden — Direkt setzen (kein PI)   Output → tariff_charge_power   Wartezeit"]
 
     %% ── AC Laden Pfad ────────────────────────────────────────────────────
     AC_GATE{{"AC-Lade-Bool = on?   UND |Grid-Fehler| > Toleranz?"}}
@@ -123,6 +145,7 @@ flowchart TD
     INTEGRAL_DECAY["📉 Integral-Decay   |Integral| > 10 → Integral × 0,95   sonst → kein Update"]
 
     CALC_SURPLUS --> END_OK([Ende])
+    CALC_TARIFF --> END_OK
     CALC_AC --> END_OK
     CALC_NORMAL --> END_OK
     INTEGRAL_DECAY --> END_OK
@@ -135,6 +158,7 @@ flowchart TD
     classDef night fill:#e2d9f3,stroke:#6f42c1,color:#000
     classDef recovery fill:#fde8d0,stroke:#e07b20,color:#000
     classDef accharge fill:#d0e8ff,stroke:#0066cc,color:#000
+    classDef tariff fill:#d4f1d4,stroke:#1a7f1a,color:#000
     classDef pi fill:#cce5ff,stroke:#004085,color:#000
     classDef end_node fill:#f8f9fa,stroke:#6c757d,color:#000
 
@@ -146,6 +170,7 @@ flowchart TD
     class RECOVERY recovery
     class AC_START,AC_END,AC_END_Z1,AC_END_Z2,AC_GATE,CALC_AC accharge
     class SAFETY_I,SAFETY_I_Z1,SAFETY_I_Z2 recovery
+    class TARIFF_START,TARIFF_END,TARIFF_END_Z1,TARIFF_END_Z2,TARIFF_GATE,CALC_TARIFF tariff
     class CALC_NORMAL,DISCHARGE_SET,INTEGRAL_DECAY,NORMAL_GATE pi
     class END_STOP,END_SKIP,END_OK end_node
 ````
