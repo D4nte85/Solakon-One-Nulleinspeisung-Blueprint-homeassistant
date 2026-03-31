@@ -2,7 +2,8 @@ blueprint:
   name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V302)
   description: |
     Dynamische Nulleinspeisung für den Solakon ONE Wechselrichter mit PI-Regler, SOC-Zonenlogik,
-    optionaler Überschuss-Einspeisung und optionalem AC Laden aus externer Einspeisung.
+    optionaler Überschuss-Einspeisung, optionalem AC Laden aus externer Einspeisung und
+    optionaler Tarif-Arbitrage (günstig laden, Entladesperre bei günstigem/neutralem Tarif).
 
     <details>
     <summary><b>🧠 PI-Regler & Steuerlogik</b> 👈</summary>
@@ -29,6 +30,7 @@ blueprint:
     - **PI-Aufruf-Guard:**
       - Zone 0 aktiv → kein PI-Aufruf, Integral eingefroren
       - AC Laden aktiv → PI mit `ac_charge_mode=true`, `at_max/at_min`-Guards deaktiviert
+      - Tarif-Laden aktiv → direkt Ladeleistung setzen, kein PI
       - Normal → PI nur wenn `|Fehler| > Toleranz` UND kein At-Limit
     - **Separate P/I-Faktoren für AC Laden:** Wegen langer Hardware-Flanke (~25 s) empfiehlt sich ein kleiner P-Faktor (~0.3–0.5); der I-Anteil macht die eigentliche Regelarbeit.
 
@@ -45,17 +47,19 @@ blueprint:
     | **3 — Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` | 0 A | Output = 0 W. Vollständiger Batterieschutz. Hat immer Vorrang. |
 
     **Steuer-Falls (Reihenfolge ist entscheidend):**
-    - **A** — Zone 1 Start: SOC > Zone-1-Schwelle UND Zyklus = `off` → Integral = 0, Zyklus = `on`, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'`
+    - **A** — Zone 1 Start: SOC > Zone-1-Schwelle UND Zyklus = `off` UND Entladesperre inaktiv → Integral = 0, Zyklus = `on`, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'`
     - **B** — Zone 3 Stop: SOC < Zone-3-Schwelle UND Zyklus = `on` → Integral = 0, Zyklus = `off`, Surplus/AC-Bool zurücksetzen, Output → 0W, Modus → `'0'`
     - **C** — Zone 3 Absicherung: SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` → Surplus/AC-Bool zurücksetzen, Output → 0W, Modus → `'0'`
-    - **D** — Recovery: Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle → Timer-Toggle, Modus → `'3'` wenn AC-Lade-Bool = `on`, sonst `'1'` (kein Integral-Reset, kein Zonenwechsel)
-    - **G** — AC Laden Start: AC aktiv UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + Output) < −Hysterese → AC-Bool = `on`, Timer-Toggle, Output → 0W, Modus → `'3'`
-    - **H** — AC Laden Ende: Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND Output = 0W)) → Integral = 0, AC-Bool = `off`, Zone 1: Output → 0W, Timer-Toggle, Modus → `'1'` / Zone 2: Output → 0W, Modus → `'0'`
-    - **I** — Safety: Modus = `'3'` ohne aktive AC-Lade-Session → Integral = 0, Zone 1: Output → 0W, Timer-Toggle, Modus → `'1'` / Zone 2: Output → 0W, Modus → `'0'`
-    - **E** — Zone 2 Start: Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht → Integral = 0, Timer-Toggle, Modus → `'1'`
+    - **D** — Recovery: Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle → Timer-Toggle, Modus → `'3'` wenn AC-Lade-Bool oder Tarif-Lade-Bool = `on`, sonst `'1'`
+    - **GT** — Tarif-Laden Start: Tarif aktiv UND Preis < Günstig-Schwelle UND SOC < Ladeziel UND Modus ≠ `'3'` → Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung, Modus → `'3'`
+    - **G** — AC Laden Start: AC aktiv UND SOC < Ladeziel UND Modus ≠ `'3'` UND NICHT Tarif-Lade-Bool = `on` UND (Grid + Output) < −Hysterese → AC-Bool = `on`, Timer-Toggle, Output → 0W, Modus → `'3'`
+    - **HT** — Tarif-Laden Ende: Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Ladeziel) → Tarif-Bool = `off`, Integral = 0, Zone 1 → `'1'` / Zone 2 → `'0'`
+    - **H** — AC Laden Ende: Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND Output = 0W)) → Integral = 0, AC-Bool = `off`, Zone 1 → `'1'` / Zone 2 → `'0'`
+    - **I** — Safety: Modus = `'3'` ohne aktive AC-Lade- oder Tarif-Lade-Session → Integral = 0, Zone 1: Output → 0W, Timer-Toggle, Modus → `'1'` / Zone 2: Output → 0W, Modus → `'0'`
+    - **E** — Zone 2 Start: Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht UND Entladesperre inaktiv → Integral = 0, Timer-Toggle, Modus → `'1'`
     - **F** — Nachtabschaltung: Nacht UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv → Integral = 0, Output → 0W, Modus → `'0'`
 
-    **Timer-Toggle:** Statt eines festen Werts wird zwischen 3598 und 3599 gewechselt — erzeugt eine Zustandsänderung damit der Solakon den neuen Modus sicher übernimmt. Wird bei jedem Moduswechsel direkt vor dem Modus-Setzen durchgeführt.
+    **Timer-Toggle:** Statt eines festen Werts wird zwischen 3598 und 3599 gewechselt — erzeugt eine Zustandsänderung damit der Solakon den neuen Modus sicher übernimmt.
 
     </details>
 
@@ -80,19 +84,29 @@ blueprint:
     Erkennung: `(Grid + Ausgangsleistung) < −Hysterese` — d.h. nach Abzug des Solakon-Beitrags liegt noch Überschuss an.
     Typischer Anwendungsfall: externe PV-Anlage speist Überschuss ins Netz.
 
-    - **Eintritt (Fall G):** AC Laden aktiviert UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + Output) < −Hysterese
-      - Guard `Modus ≠ '3'` verhindert Re-Eintritt wenn AC Laden bereits läuft
+    - **Eintritt (Fall G):** AC Laden aktiviert UND SOC < Ladeziel UND Modus ≠ `'3'` UND NICHT Tarif-Lade-Bool = `on` UND (Grid + Output) < −Hysterese
     - **Verbleib:** Modus `'3'` solange SOC < Ladeziel UND Grid < (Offset + Hysterese)
     - **Abbruch (Fall H):** SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND Output = 0 W)
-      - `Output = 0 W`-Guard verhindert Fehlauslösung während PI noch regelt
-    - **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`
-      - Positiver Fehler (Grid zu negativ) → Ladeleistung erhöhen
-      - `at_max/at_min`-Guards deaktiviert (Richtung invertiert)
+    - **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung
     - **Separate P/I-Faktoren:** P klein (~0.3–0.5), I macht die eigentliche Regelarbeit
-    - **Rückkehr:**
-      - Zone 1 → Integral = 0, AC-Bool = `off`, Output → 0 W, Timer-Toggle, Modus → `'1'`
-      - Zone 2 → Integral = 0, AC-Bool = `off`, Output → 0 W, Modus → `'0'`
+    - **Rückkehr:** Zone 1 → `'1'` / Zone 2 → `'0'`
     - **Priorität:** Zone 3 (SOC-Schutz) hat immer Vorrang
+
+    </details>
+
+    <details>
+    <summary><b>💹 Tarif-Arbitrage (Optional)</b> 👈</summary>
+
+    Lädt die Batterie bei günstigem Strompreis und sperrt die Entladung bei günstigem/neutralem Tarif.
+
+    - **Preis < Günstig-Schwelle:** Tarif-Laden aktiv UND Entladesperre aktiv (Falls A/E blockiert)
+    - **Günstig ≤ Preis < Teuer-Schwelle:** nur Entladesperre aktiv (kein aktives Laden)
+    - **Preis ≥ Teuer-Schwelle:** normale SOC-Zonen-Logik (kein Eingriff)
+    - **Laden (Fall GT):** Direkt konfigurierte Ladeleistung setzen — kein PI-Regler
+    - **Ende (Fall HT):** Preis steigt über Günstig-Schwelle ODER SOC-Ladeziel erreicht
+    - **Unabhängig:** Vollständig unabhängig von AC-Laden-Parametern (eigenes SOC-Ziel, eigene Leistung)
+    - **Sensor:** Generisch — Einheit muss zu den konfigurierten Schwellwerten passen
+    - **Fallback:** Bei nicht verfügbarem Sensor → weder laden noch sperren
 
     </details>
 
@@ -109,7 +123,7 @@ blueprint:
     </details>
 
   domain: automation
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/main/solakon_one_nulleinspeisung.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/experimental-AC-tarif/solakon_one_nulleinspeisung.yaml
   input:
 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -531,8 +545,7 @@ blueprint:
             name: ⚡ AC Laden - Nullpunkt-Offset Statisch (Fallback)
             description: |
               Regelziel für Netzleistung im AC-Lade-Modus (z.B. −50 W).
-              Negativ = leichte Einspeisung angestrebt, damit die Batterie
-              ausschließlich aus PV-Überschuss geladen wird und kein Netzbezug entsteht.
+              Negativ = Einspeisung angestrebt (mehr laden).
             default: -50
             selector:
               number:
@@ -578,15 +591,105 @@ blueprint:
             name: 🎛️ I-Faktor AC Laden
             description: |
               Integral-Verstärkung für den AC-Lade-Modus.
-              Der P-Anteil dämpft bereits — ein zu früh eingesetzter I-Faktor
-              führt zu Überschwingen. Startwert: 0 (sicher). Nur erhöhen
-              wenn P allein eine bleibende Regelabweichung hinterlässt.
-            default: 0
+              Macht bei langer Hardware-Flanke (~25 s) die eigentliche Regelarbeit.
+              Empfehlung: 0.05–0.1.
+            default: 0.07
             selector:
               number:
                 min: 0
                 max: 0.2
                 step: 0.01
+
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 💹 TARIF-ARBITRAGE (Optional)
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      tariff_parameter:
+        name: "💹 TARIF-ARBITRAGE (Optional):"
+        description: |
+          Laden bei günstigem Tarif, Entladesperre bei günstigem/neutralem Tarif.
+          Preis < günstig: Laden + Entladesperre.
+          günstig ≤ Preis < teuer: nur Entladesperre (Akku passiv).
+          Preis ≥ teuer: normale SOC-Zonen-Logik.
+        collapsed: true
+        input:
+          tariff_arbitrage_enabled:
+            name: 💹 Tarif-Arbitrage aktivieren
+            description: |
+              ✅ EIN: Tarif-gesteuertes Laden und Entladesperre aktiv.
+              ❌ AUS: Funktion deaktiviert.
+            default: false
+            selector:
+              boolean:
+
+          price_sensor:
+            name: 📈 Strompreis-Sensor
+            description: |
+              Sensor für den aktuellen Strompreis (z.B. Tibber, Awattar, eigene input_number).
+              ⚠️ Einheit ist egal — Sensor-Wert und Schwellwerte müssen dieselbe Einheit verwenden.
+            default: {}
+            selector:
+              entity:
+                domain: sensor
+
+          cheap_threshold:
+            name: 💚 Günstig-Schwelle (Laden + Entladesperre)
+            description: |
+              Unter diesem Wert: Batterie laden (Tarif-Laden) UND Entladesperre aktiv.
+              Einheit muss zum Preissensor passen (z.B. 10 für 10 ct/kWh).
+            default: 10
+            selector:
+              number:
+                min: -100
+                max: 100
+                step: 0.1
+
+          expensive_threshold:
+            name: 🔴 Teuer-Schwelle (Entladesperre aufheben)
+            description: |
+              Ab diesem Wert: Entladesperre aufgehoben, normale SOC-Zonen-Logik greift.
+              Zwischen günstig und teuer: nur Entladesperre (kein aktives Laden).
+            default: 25
+            selector:
+              number:
+                min: -100
+                max: 100
+                step: 0.1
+
+          tariff_soc_charge_target:
+            name: 🔋 SOC-Ladeziel Tarif-Laden (%)
+            description: |
+              Tarif-Laden stoppt wenn SOC diesen Wert erreicht.
+              Unabhängig vom AC-Laden-Ladeziel konfigurierbar.
+            default: 90
+            selector:
+              number:
+                min: 10
+                max: 99
+                unit_of_measurement: "%"
+
+          tariff_charge_power:
+            name: ⚡ Ladeleistung Tarif-Laden (W)
+            description: |
+              Direkt gesetzter Leistungs-Sollwert im Tarif-Lade-Modus (kein PI-Regler).
+              Typisch: Geräte-Maximum z.B. 1200 W.
+            default: 800
+            selector:
+              number:
+                min: 50
+                max: 1200
+                unit_of_measurement: W
+
+          tariff_charge_state_helper:
+            name: 💹 Tarif-Lade-Zustand Speicher (input_boolean)
+            description: |
+              input_boolean Helper für persistentes Tracking des Tarif-Lade-Zustands.
+              ⚠️ Nur erforderlich wenn Tarif-Arbitrage aktiviert ist.
+              Einstellungen → Helfer erstellen → Schalter
+              - Name: z.B. 'Solakon Tarif Laden Aktiv'
+            default: input_boolean.solakon_tarif_laden_aktiv
+            selector:
+              entity:
+                domain: input_boolean
 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🌙 NACHTABSCHALTUNG (Optional)
@@ -684,8 +787,38 @@ variables:
       {{ ac_charge_offset_static }}
     {% endif %}
 
+  # Tarif-Arbitrage
+  tariff_arbitrage_enabled_bool: !input tariff_arbitrage_enabled
+  tariff_cheap_threshold_float: !input cheap_threshold
+  tariff_expensive_threshold_float: !input expensive_threshold
+  tariff_soc_charge_target_int: !input tariff_soc_charge_target
+  tariff_charge_power_int: !input tariff_charge_power
+  tariff_charge_state_entity: !input tariff_charge_state_helper
+  tariff_charge_entity_valid: >
+    {{ tariff_arbitrage_enabled_bool and
+       tariff_charge_state_entity is string and
+       tariff_charge_state_entity | length > 0 and
+       states(tariff_charge_state_entity) not in ['unknown', 'unavailable'] }}
+  tariff_charge_mode_active: "{{ tariff_charge_entity_valid | bool(false) and is_state(tariff_charge_state_entity, 'on') }}"
+  price_sensor_entity: !input price_sensor
+  price_sensor_valid: >
+    {{ tariff_arbitrage_enabled_bool and
+       price_sensor_entity is string and
+       price_sensor_entity | length > 0 and
+       states(price_sensor_entity) not in ['unknown', 'unavailable'] }}
+  # Fallback: teuer+1 wenn Sensor nicht verfügbar → weder laden noch sperren
+  current_price_float: >
+    {% if price_sensor_valid | bool(false) %}
+      {{ states(price_sensor_entity) | float(tariff_expensive_threshold_float + 1) }}
+    {% else %}
+      {{ tariff_expensive_threshold_float + 1 }}
+    {% endif %}
+  price_is_cheap: "{{ price_sensor_valid | bool(false) and current_price_float < tariff_cheap_threshold_float }}"
+  # Entladesperre gilt für günstig UND neutral (alles unter teuer-Schwelle)
+  price_discharge_locked: "{{ tariff_arbitrage_enabled_bool and price_sensor_valid | bool(false) and current_price_float < tariff_expensive_threshold_float }}"
+
 triggers:
-  # Grid-Leistungsänderung 
+  # Grid-Leistungsänderung
   - trigger: state
     entity_id: !input grid_power_sensor
     id: grid_power_change
@@ -793,13 +926,15 @@ actions:
 
   # -------------------------------------------------------------------------------------------------
   # HAUPT-LOGIK: Modus- und Zyklus-Steuerung
-  # Reihenfolge: A, B, C, D (vor G!), G, H, E, F
+  # Reihenfolge: A, B, C, D (vor GT/G!), GT, G, HT, H, I, E, F
   # -------------------------------------------------------------------------------------------------
   - choose:
       # FALL A: ZONE 1 - Aggressive Entladung START
       - conditions:
           - condition: template
             value_template: "{{ not (ac_charge_mode_active | bool(false)) }}"
+          - condition: template
+            value_template: "{{ not (price_discharge_locked | bool(false)) }}"
           - condition: template
             value_template: "{{ states(soc) | float(0) > soc_fast_limit_int }}"
           - condition: state
@@ -955,7 +1090,7 @@ actions:
               option: '0'
 
       # FALL D: Recovery - Modus fiel ab, Zyklus noch aktiv
-      # VOR Fall G! Schließt Modus '3' aus (AC Laden läuft ungestört weiter).
+      # VOR Fall GT/G! Schließt Modus '3' aus (AC/Tarif-Laden laufen ungestört weiter).
       - conditions:
           - condition: state
             entity_id: !input cycle_active_boolean_helper
@@ -988,13 +1123,15 @@ actions:
                   entity_id: !input remote_timeout_set_number
                 data:
                   value: 3599
-          # 3. Modus wiederherstellen: '3' wenn AC Laden aktiv, sonst '1'
+          # 3. Modus wiederherstellen: '3' wenn AC Laden oder Tarif-Laden aktiv, sonst '1'
           - choose:
               - conditions:
                   - condition: template
                     value_template: >
-                      {{ ac_charge_entity_valid | bool(false) and
-                         is_state(ac_charge_state_entity, 'on') }}
+                      {{ (ac_charge_entity_valid | bool(false) and
+                          is_state(ac_charge_state_entity, 'on')) or
+                         (tariff_charge_entity_valid | bool(false) and
+                          is_state(tariff_charge_state_entity, 'on')) }}
                 sequence:
                   - action: select.select_option
                     target:
@@ -1008,8 +1145,67 @@ actions:
                 data:
                   option: '1'
 
+      # FALL GT: TARIF-LADEN — Eintritt
+      # Guard: Modus ≠ '3' — verhindert Re-Eintritt wenn Tarif-Laden bereits aktiv
+      - conditions:
+          - condition: template
+            value_template: "{{ tariff_arbitrage_enabled_bool }}"
+          - condition: template
+            value_template: "{{ tariff_charge_entity_valid | bool(false) }}"
+          - condition: template
+            value_template: "{{ price_is_cheap | bool(false) }}"
+          - condition: template
+            value_template: "{{ states(soc) | float(0) < tariff_soc_charge_target_int }}"
+          - condition: template
+            value_template: "{{ states(solakon_mode) != '3' }}"
+        sequence:
+          # 1. Logbuch-Eintrag
+          - action: logbook.log
+            data:
+              name: Solakon Tarif-Arbitrage
+              message: >
+                💹 Tarif-Laden aktiviert
+                (Zone {{ '1' if is_state(cycle_active, 'on') else '2' }})
+                — Preis: {{ states(price_sensor_entity) }}, SOC: {{ states(soc) }}%
+              entity_id: !input soc_sensor
+          # 2. Tarif-Lade-Zustand → on
+          - action: input_boolean.turn_on
+            target:
+              entity_id: !input tariff_charge_state_helper
+          # 3. Timer-Toggle (3598↔3599)
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                sequence:
+                  - action: number.set_value
+                    target:
+                      entity_id: !input remote_timeout_set_number
+                    data:
+                      value: 3598
+            default:
+              - action: number.set_value
+                target:
+                  entity_id: !input remote_timeout_set_number
+                data:
+                  value: 3599
+          # 4. Output → Ladeleistung (direkt, kein PI)
+          - action: number.set_value
+            target:
+              entity_id: !input active_power_number
+            data:
+              value: "{{ tariff_charge_power_int }}"
+          # 5. Modus → '3' (INV Charge PV Priority)
+          - action: select.select_option
+            target:
+              entity_id: !input mode_select
+            data:
+              option: '3'
+          - stop: ""
+
       # FALL G: AC LADEN — Eintritt
       # Guard: Modus ≠ '3' — verhindert Re-Eintritt wenn AC Laden bereits aktiv
+      # Guard: NICHT Tarif-Lade-Bool = on — Tarif-Laden hat Vorrang (Fall GT gewinnt)
       - conditions:
           - condition: template
             value_template: "{{ ac_charge_enabled_bool }}"
@@ -1019,6 +1215,8 @@ actions:
             value_template: "{{ states(soc) | float(0) < soc_ac_charge_limit_int }}"
           - condition: template
             value_template: "{{ states(solakon_mode) != '3' }}"
+          - condition: template
+            value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
           - condition: template
             value_template: "{{ (grid_power_float + actual_power_float) < (-1 * (ac_charge_hysteresis_int | float(0))) }}"
         sequence:
@@ -1066,6 +1264,84 @@ actions:
               option: '3'
           - stop: ""
 
+      # FALL HT: TARIF-LADEN BEENDEN
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ tariff_arbitrage_enabled_bool and
+                 states(solakon_mode) == '3' and
+                 (tariff_charge_mode_active | bool(false)) }}
+          - condition: template
+            value_template: >
+              {{ states(soc) | float(0) >= tariff_soc_charge_target_int or
+                 not (price_is_cheap | bool(false)) }}
+        sequence:
+          # 1. Logbuch-Eintrag
+          - action: logbook.log
+            data:
+              name: Solakon Tarif-Arbitrage
+              message: >
+                💹 Tarif-Laden beendet
+                (Zone {{ '1' if is_state(cycle_active, 'on') else '2' }})
+                — Preis: {{ states(price_sensor_entity) }}, SOC: {{ states(soc) }}%
+              entity_id: !input soc_sensor
+          # 2. Integral zurücksetzen
+          - action: input_number.set_value
+            target:
+              entity_id: !input integral_helper
+            data:
+              value: 0
+          # 3. Tarif-Lade-Zustand → off
+          - action: input_boolean.turn_off
+            target:
+              entity_id: !input tariff_charge_state_helper
+          # 4. Zone 1 → Modus '1' (Timer-Toggle) | Zone 2 → Disabled + 0 W
+          - choose:
+              - conditions: "{{ is_state(cycle_active, 'on') }}"
+                sequence:
+                  # 4a. Output → 0 W (vor Moduswechsel)
+                  - action: number.set_value
+                    target:
+                      entity_id: !input active_power_number
+                    data:
+                      value: 0
+                  # 4b. Timer-Toggle (3598↔3599)
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                        sequence:
+                          - action: number.set_value
+                            target:
+                              entity_id: !input remote_timeout_set_number
+                            data:
+                              value: 3598
+                    default:
+                      - action: number.set_value
+                        target:
+                          entity_id: !input remote_timeout_set_number
+                        data:
+                          value: 3599
+                  # 4c. Modus → '1'
+                  - action: select.select_option
+                    target:
+                      entity_id: !input mode_select
+                    data:
+                      option: '1'
+                  - stop: ""
+            default:
+              # 4a. Output → 0 W
+              - action: number.set_value
+                target:
+                  entity_id: !input active_power_number
+                data:
+                  value: 0
+              # 4b. Modus → '0'
+              - action: select.select_option
+                target:
+                  entity_id: !input mode_select
+                data:
+                  option: '0'
 
       # FALL H: AC LADEN BEENDEN
       - conditions:
@@ -1143,23 +1419,26 @@ actions:
                 data:
                   option: '0'
 
-      # FALL I: Safety — Modus '3' aber AC Laden nicht aktiv
-      # Fängt externe Modussetzung auf '3' ab wenn AC Laden deaktiviert oder Helper off
+      # FALL I: Safety — Modus '3' aber weder AC Laden noch Tarif-Laden aktiv
+      # Fängt externe Modussetzung auf '3' ab wenn keine Lade-Session legitimiert ist
       - conditions:
           - condition: template
             value_template: "{{ states(solakon_mode) == '3' }}"
           - condition: template
             value_template: >
-              {{ not ac_charge_enabled_bool or
-                 not (ac_charge_entity_valid | bool(false)) or
-                 not is_state(ac_charge_state_entity, 'on') }}
+              {{ (not ac_charge_enabled_bool or
+                  not (ac_charge_entity_valid | bool(false)) or
+                  not is_state(ac_charge_state_entity, 'on')) and
+                 (not tariff_arbitrage_enabled_bool or
+                  not (tariff_charge_entity_valid | bool(false)) or
+                  not is_state(tariff_charge_state_entity, 'on')) }}
         sequence:
           # 1. Logbuch-Eintrag
           - action: logbook.log
             data:
               name: Solakon Safety
               message: >
-                ⚠️ Fall I — Modus '3' erkannt, AC Laden nicht aktiv. Korrektur.
+                ⚠️ Fall I — Modus '3' erkannt, keine aktive Lade-Session. Korrektur.
                 Zone {{ '1' if is_state(cycle_active, 'on') else '2' }}
                 — SOC: {{ states(soc) }}%
               entity_id: !input mode_select
@@ -1221,6 +1500,8 @@ actions:
       - conditions:
           - condition: template
             value_template: "{{ not (ac_charge_mode_active | bool(false)) }}"
+          - condition: template
+            value_template: "{{ not (price_discharge_locked | bool(false)) }}"
           - condition: template
             value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int and states(soc) | float(0) <= soc_fast_limit_int }}"
           - condition: state
@@ -1369,12 +1650,16 @@ actions:
       integral_old: "{{ states(integral_entity) | float(0) }}"
 
       # Dynamisches Power-Limit (zonenabhängig)
-      # Modus '3' (AC Laden) → Lade-Limit als max_power ans Script
+      # Modus '3' (AC/Tarif-Laden) → jeweiliges Lade-Limit als max_power ans Script
       # Zone 1               → Hard Limit
       # Zone 2               → Max(0, PV - Reserve)
       dynamic_max_power: >
         {% if states(solakon_mode) == '3' %}
-          {{ ac_charge_power_limit_int }}
+          {% if tariff_charge_mode_active | bool(false) %}
+            {{ tariff_charge_power_int }}
+          {% else %}
+            {{ ac_charge_power_limit_int }}
+          {% endif %}
         {% elif is_state(cycle_active, 'on') %}
           {{ max_active_power_limit_int }}
         {% else %}
@@ -1382,19 +1667,17 @@ actions:
         {% endif %}
 
       # Fehler für Guards (immer in Entlade-Richtung: grid − offset)
-      # Absolutwert ist für beide Modi (normal + AC) identisch → grid_error_abs gilt für Toleranzprüfung
       raw_error: "{{ grid_power_float - (target_offset | float(0)) }}"
       grid_error_abs: "{{ (grid_power_float - (target_offset | float(0))) | abs }}"
 
       # At-Limit Guards — nur für normalen Entlade-Modus relevant
-      # Im AC-Modus ist die Fehlerrichtung invertiert, Guards würden PI fälschlich blockieren
       at_max_limit: "{{ raw_error > 0 and current_active_power >= max_active_power_limit_int | float(0) }}"
       at_min_limit: "{{ raw_error < 0 and current_active_power <= 0 }}"
 
 
   # SCHRITT 1: Entladestrom setzen
   - choose:
-      # SCHRITT 1a: Zone 1 — Max-Wert (nur wenn Surplus NICHT aktiv UND NICHT AC Laden)
+      # SCHRITT 1a: Zone 1 — Max-Wert (nur wenn Surplus NICHT aktiv UND NICHT AC/Tarif-Laden)
       - conditions:
           - condition: state
             entity_id: !input cycle_active_boolean_helper
@@ -1424,7 +1707,7 @@ actions:
             data:
               value: 2
 
-      # SCHRITT 1c: Zone 2 oder AC Laden — 0 A
+      # SCHRITT 1c: Zone 2 oder AC/Tarif-Laden — 0 A
       - conditions:
           - condition: template
             value_template: >
@@ -1485,6 +1768,21 @@ actions:
           - delay:
               seconds: "{{ wait_time_int }}"
 
+      # ZWEIG BT: Tarif-Laden — Direkt setzen (kein PI-Regler)
+      - conditions:
+          - condition: template
+            value_template: "{{ tariff_charge_mode_active | bool(false) }}"
+        sequence:
+          # Output → Ladeleistung (direkt)
+          - action: number.set_value
+            target:
+              entity_id: !input active_power_number
+            data:
+              value: "{{ tariff_charge_power_int }}"
+          # Wartezeit
+          - delay:
+              seconds: "{{ wait_time_int }}"
+
       # ZWEIG B: AC Laden — PI-Script mit ac_charge_mode=true (invertierte Fehlerberechnung)
       # at_max/at_min Guards entfallen: Fehlerrichtung ist im Script invertiert
       - conditions:
@@ -1513,6 +1811,7 @@ actions:
           - condition: template
             value_template: >
               {{ not (ac_charge_mode_active | bool(false)) and
+                 not (tariff_charge_mode_active | bool(false)) and
                  grid_error_abs > tolerance_int and
                  not at_max_limit | bool(false) and
                  not at_min_limit | bool(false) }}
