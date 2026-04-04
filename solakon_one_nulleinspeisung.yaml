@@ -687,6 +687,19 @@ blueprint:
                 max: 99
                 unit_of_measurement: "%"
 
+          tariff_soc_charge_hysteresis:
+            name: 🔋 Hysterese SOC-Ladeziel Tarif
+            description: |
+              GT feuert nur wenn SOC unter (Ladeziel − Hysterese) fällt.
+              Verhindert GT/HT-Oszillation um die Ladeschwelle.
+            default: 5
+            selector:
+              number:
+                min: 1
+                max: 20
+                unit_of_measurement: "%"
+
+
           tariff_charge_power:
             name: ⚡ Ladeleistung Tarif-Laden
             description: |
@@ -823,6 +836,8 @@ variables:
     {% endif %}
   ac_charge_p_factor_float: !input ac_charge_p_factor
   ac_charge_i_factor_float: !input ac_charge_i_factor
+  tariff_soc_charge_hysteresis_int: !input tariff_soc_charge_hysteresis
+
 
   # Tarif-Arbitrage
   tariff_arbitrage_enabled_bool: !input tariff_arbitrage_enabled
@@ -1202,7 +1217,7 @@ actions:
           - condition: template
             value_template: "{{ price_is_cheap | bool(false) }}"
           - condition: template
-            value_template: "{{ states(soc) | float(0) < tariff_soc_charge_target_int }}"
+            value_template: "{{ states(soc) | float(0) < (tariff_soc_charge_target_int - tariff_soc_charge_hysteresis_int) }}"
           - condition: template
             value_template: "{{ states(solakon_mode) != '3' }}"
           - condition: template
@@ -1329,9 +1344,7 @@ actions:
           - condition: template
             value_template: "{{ price_sensor_valid | bool(false) }}"
           - condition: template
-            value_template: >
-              {{ current_price_float >= tariff_cheap_threshold_float and
-                 current_price_float < tariff_expensive_threshold_float }}
+            value_template: "{{ price_discharge_locked | bool(false) }}"
           - condition: template
             value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
           - condition: template
