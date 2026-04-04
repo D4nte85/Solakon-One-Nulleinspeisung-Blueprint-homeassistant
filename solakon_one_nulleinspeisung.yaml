@@ -495,7 +495,7 @@ blueprint:
             name: 🔋 SOC-Ladeziel (%)
             description: |
               Laden stoppt wenn SOC diesen Wert erreicht.
-              ⚠️ Empfohlen: ≤ Zone-1-Schwelle, damit nach dem Laden Zone 1 nahtlos übernimmt.
+              ⚠️ Empfohlen: > Zone-1-Schwelle, damit nach dem Laden direkt Zone 1 übernimmt und Nulleinspeisung fährt.
             default: 90
             selector:
               number:
