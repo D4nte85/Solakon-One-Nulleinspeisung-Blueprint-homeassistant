@@ -22,7 +22,7 @@ input_number-Entität konfiguriert haben.
 ```
 
 domain: automation
-source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/experimental_multi_instancing/solakon_leistungsverteilung.yaml
+source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant
 input:
 
 ```
