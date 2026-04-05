@@ -184,7 +184,7 @@ blueprint:
             description: |
               Die Entität zur Steuerung des maximalen Entladestroms (A).
               ⚠️ WICHTIG: Standardmäßig deaktiviert.
-              Einstellungen → Geräte & Dienste → Integrationen → Solakone ONE → Konfiguration → Deaktivierte Entität aktivieren
+              Einstellungen → Geräte & Dienste → Integrationen → Solakon ONE → Konfiguration → Deaktivierte Entität aktivieren
             default: number.solakon_one_maximaler_entladestrom
             selector:
               entity:
