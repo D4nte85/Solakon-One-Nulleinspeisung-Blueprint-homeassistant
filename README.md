@@ -21,7 +21,23 @@ Der zugehörige **PI-Regler Script-Blueprint** muss ebenfalls importiert werden:
 
 [![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fexperimental_multi_instancing%2FPI-Regler.yaml)
 
+Für das Multi instancing:
+
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fexperimental_multi_instancing%2Fsolakon_leistungsverteilung.yaml)
+
 ---
+| Artefakt | Instanz 1 | Instanz 2 |
+| :--- | :--- | :--- |
+| `input_boolean` Zyklus | `...entladezyklus_status_i1` | `...entladezyklus_status_i2` |
+| `input_number` Integral | `...integral_i1` | `...integral_i2` |
+| `input_boolean` Surplus | `...surplus_aktiv_i1` | `...surplus_aktiv_i2` |
+| `input_boolean` AC Laden | `...ac_laden_aktiv_i1` | `...ac_laden_aktiv_i2` |
+| `input_boolean` Tarif Laden | `...tarif_laden_aktiv_i1` | `...tarif_laden_aktiv_i2` |
+| PI-Regler Script | `script.pi_regler_i1` | `script.pi_regler_i2` |
+| **NEU** `input_number` Hard Limit | `...instanz1_limit` | `...instanz2_limit` |
+
+> **Hinweis:** Der Netz-Sensor (Shelly) wird von beiden Instanzen gleichzeitig gelesen — kein Problem, da nur lesend.
+...
 
 ## 🛠️ Vorbereitung: Erstellung der erforderlichen Helper
 
