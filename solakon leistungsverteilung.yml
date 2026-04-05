@@ -1,23 +1,12 @@
 blueprint:
   name: "Solakon Leistungsverteilung (Multi-Instancing)"
-  description: |
-    Verteilt die verfügbare Ausgangsleistung adaptiv auf 2–4 Solakon-Nulleinspeisung-Instanzen.
-
-    Erkennungslogik: Modus = '1' (INV Discharge PV Priority) → Instanz aktiv.
-    Inaktive Instanzen (Modus '0' oder '3') erhalten Global-Max als sicheren Fallback.
-
-    Verteilungsformel (Gleichverteilung = Aus):
-      Gesamtleistung = Global-Max × (1 − PV-Einfluss) + min(PV, Global-Max) × PV-Einfluss
-      SOC-Anteil  = 1 − Schieberegler
-      PV-Anteil   = Schieberegler
-      Gewicht_i   = SOC-Anteil × (SOC_i / ΣSOC) + PV-Anteil × (PV_i / ΣPV)
-      Limit_i     = Gesamtleistung × Gewicht_i
-
-    Voraussetzung: Jede Solakon-Instanz-Automation muss den Parameter
-    "Max. Ausgangsleistung — Dynamisch (Multi-Instancing)" mit der jeweiligen
-    input_number-Entität konfiguriert haben.
-
-    ⚠️  Die input_number-Entitäten müssen min: 0, max: ≥ Global-Max haben.
+  description: >-
+    Verteilt Ausgangsleistung adaptiv auf 2-4 Solakon-Nulleinspeisung-Instanzen.
+    Erkennung aktiver Instanzen via Modus '1' (INV Discharge PV Priority).
+    Gesamtleistung per PV-Einfluss-Parameter steuerbar (0=Global-Max, 1=PV-Cap).
+    Verteilung per Umschalter Gleichverteilung oder SOC/PV-Schieberegler gewichtet.
+    Voraussetzung: input_number-Entitaet pro Instanz als "Max. Ausgangsleistung Dynamisch"
+    in der jeweiligen Nulleinspeisung-Automation eintragen.
   domain: automation
   source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/experimental_multi_instancing/solakon_leistungsverteilung.yaml
   input:
