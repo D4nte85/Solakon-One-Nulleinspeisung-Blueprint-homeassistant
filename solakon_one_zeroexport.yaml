@@ -139,7 +139,7 @@ blueprint:
           actual_power_sensor:
             name: ⚡ Solakon ONE - Actual Output Power
             description: The actual AC output power of the inverter.
-            default: sensor.solakon_one_leistung
+            default: sensor.solakon_one_active_power
             selector:
               entity:
                 domain: sensor
@@ -148,7 +148,7 @@ blueprint:
           solar_power_sensor:
             name: ☀️ Solakon ONE - Solar Power (PV Generation)
             description: The current total PV generation in Watts.
-            default: sensor.solakon_one_pv_leistung
+            default: sensor.solakon_one_pv_power
             selector:
               entity:
                 domain: sensor
@@ -157,7 +157,7 @@ blueprint:
           soc_sensor:
             name: 🔋 Solakon ONE - Battery State of Charge (SOC)
             description: The current battery state of charge in %.
-            default: sensor.solakon_one_batterie_ladestand
+            default: sensor.solakon_one_battery_state_of_charge
             selector:
               entity:
                 domain: sensor
@@ -166,7 +166,7 @@ blueprint:
           remote_timeout_countdown_sensor:
             name: ⏱️ Solakon ONE - Remote Timeout Countdown
             description: Sensor showing the remaining timeout countdown.
-            default: sensor.solakon_one_fernsteuerung_zeituberschreitung
+            default: sensor.solakon_one_remote_timeout_countdown
             selector:
               entity:
                 domain: sensor
@@ -174,15 +174,18 @@ blueprint:
           active_power_number:
             name: ⚙️ Solakon ONE - Output Power Controller
             description: The entity for setting the power setpoint (Remote Active Power).
-            default: number.solakon_one_fernsteuerung_leistung
+            default: number.solakon_one_remote_control_power
             selector:
               entity:
                 domain: number
 
           max_discharge_current_number:
             name: 🔋 Solakon ONE - Max. Discharge Current
-            description: The entity for controlling the maximum discharge current (A).
-            default: number.solakon_one_maximaler_entladestrom
+            description: |
+              The entity for controlling the maximum discharge current (A).
+              ⚠️ IMPORTANT: Disabled by default.
+              Settings → Devices & Services → Integrations → Solakon ONE → Configuration → Enable disabled entity
+            default: number.solakon_one_maximum_discharge_current
             selector:
               entity:
                 domain: number
@@ -190,7 +193,7 @@ blueprint:
           remote_timeout_set_number:
             name: ⏲️ Solakon ONE - Mode Reset Timer
             description: Used to set/reset the remote timeout (max. 3599 s).
-            default: number.solakon_one_fernsteuerung_zeituberschreitung
+            default: number.solakon_one_remote_control_timeout
             selector:
               entity:
                 domain: number
@@ -198,7 +201,7 @@ blueprint:
           mode_select:
             name: 🔄 Solakon ONE - Operating Mode Selection
             description: The entity for switching the operating mode (Remote Control Mode).
-            default: select.solakon_one_modus_fernsteuern
+            default: select.solakon_one_remote_control_mode
             selector:
               entity:
                 domain: select
@@ -215,8 +218,8 @@ blueprint:
             description: |
               ⚠️ IMPORTANT: Create a Toggle Helper (Input Boolean).
               Settings → Devices & Services → Helpers → Create Helper → Toggle
-              - Name: e.g. 'SOC Discharge Cycle Status'
-            default: input_boolean.soc_entladezyklus_status
+              - Name: e.g. 'Solakon SOC Discharge Cycle Status'
+            default: input_boolean.solakon_soc_discharge_cycle_status
             selector:
               entity:
                 domain: input_boolean
@@ -226,6 +229,7 @@ blueprint:
             description: |
               ⚠️ IMPORTANT: input_number Helper for the PI Controller.
               Min: -1000, Max: 1000, Step: 1, Initial: 0
+              - Name: e.g. 'Solakon Integral'
             default: input_number.solakon_integral
             selector:
               entity:
@@ -467,7 +471,8 @@ blueprint:
             description: |
               input_boolean helper for persistent tracking of the surplus state.
               ⚠️ Only required when Surplus Export is enabled.
-            default: input_boolean.solakon_surplus_aktiv
+              - Name: e.g. 'Solakon Surplus Active'
+            default: input_boolean.solakon_surplus_active
             selector:
               entity:
                 domain: input_boolean
@@ -555,7 +560,7 @@ blueprint:
               ⚠️ Only required when AC Charging is enabled.
               Settings → Create Helper → Toggle
               - Name: e.g. 'Solakon AC Charging Active'
-            default: input_boolean.solakon_ac_laden_aktiv
+            default: input_boolean.solakon_ac_charging_active
             selector:
               entity:
                 domain: input_boolean
