@@ -447,6 +447,21 @@ blueprint:
                 max: 1200
                 unit_of_measurement: W
 
+      max_power_entity:
+            name: 🔀 Max. Ausgangsleistung — Dynamisch (Multi-Instancing)
+            description: |
+              ⚠️ NUR für Multi-Instancing erforderlich — im Einzelbetrieb leer lassen.
+              Optionale input_number-Entität, die den statischen Hard-Limit-Wert überschreibt.
+              Eine übergeordnete Automatisierung schreibt die aufgeteilte Leistung hinein:
+              - Instanz 1: input_number.solakon_instanz1_limit → 500 W
+              - Instanz 2: input_number.solakon_instanz2_limit → 300 W
+              Summe aller Instanzen muss ≤ physisches Wechselrichter-Limit bleiben.
+              ⚠️ Wenn leer gelassen, gilt der statische Hard-Limit-Wert oben.
+            default: {}
+            selector:
+              entity:
+                domain: input_number
+
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # ☀️ ÜBERSCHUSS-EINSPEISUNG (Optional - Zone 0)
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -1726,6 +1741,14 @@ actions:
       wait_time_int: !input wait_time
       pi_script: !input PI_regler_script
       max_active_power_limit_int: !input max_active_power_limit
+      max_power_entity_id: !input max_power_entity
+      hard_limit_int: >
+        {% if max_power_entity_id is string and max_power_entity_id | length > 0
+             and states(max_power_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+          {{ states(max_power_entity_id) | int(max_active_power_limit_int) }}
+        {% else %}
+          {{ max_active_power_limit_int }}
+        {% endif %}
       regulator_factor_float: !input regulator_factor
       ki_factor_float: !input ki_factor
       ac_charge_p_factor_float: !input ac_charge_p_factor
@@ -1770,7 +1793,7 @@ actions:
         {% if states(solakon_mode) == '3' %}
           {{ ac_charge_power_limit_int }}
         {% elif is_state(cycle_active, 'on') %}
-          {{ max_active_power_limit_int }}
+          {{ hard_limit_int }}
         {% else %}
           {{ [0, solar_power_float - (pv_charge_reserve_int | float(0))] | max }}
         {% endif %}
@@ -1868,7 +1891,7 @@ actions:
                 target:
                   entity_id: !input active_power_number
                 data:
-                  value: "{{ max_active_power_limit_int }}"
+                  value: "{{ hard_limit_int }}"
               # Integral einfrieren (unverändert zurückschreiben)
               - action: input_number.set_value
                 target:
