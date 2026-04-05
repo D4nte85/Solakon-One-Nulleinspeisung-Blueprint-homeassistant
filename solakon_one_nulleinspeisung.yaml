@@ -181,7 +181,10 @@ blueprint:
 
           max_discharge_current_number:
             name: 🔋 Solakon ONE - Max. Entladestrom
-            description: Die Entität zur Steuerung des maximalen Entladestroms (A).
+            description: |
+              Die Entität zur Steuerung des maximalen Entladestroms (A).
+              ⚠️ WICHTIG: Standardmäßig deaktiviert.
+              Einstellungen → Geräte & Dienste → Integrationen → Solakon ONE → Konfiguration → Deaktivierte Entität aktivieren
             default: number.solakon_one_maximaler_entladestrom
             selector:
               entity:
@@ -215,8 +218,8 @@ blueprint:
             description: |
               ⚠️ WICHTIG: Erstellen Sie einen Schalter Helfer (Input Boolean).
               Einstellungen → Geräte & Dienste → Helfer → Helfer erstellen → Schalter
-              - Name: z.B. 'SOC Entladezyklus Status'
-            default: input_boolean.soc_entladezyklus_status
+              - Name: z.B. 'Solakon SOC Entladezyklus Status'
+            default: input_boolean.solakon_soc_entladezyklus_status
             selector:
               entity:
                 domain: input_boolean
@@ -226,6 +229,7 @@ blueprint:
             description: |
               ⚠️ WICHTIG: input_number Helper für den PI-Regler.
               Min: -1000, Max: 1000, Step: 1, Initial: 0
+              - Name: e.g. 'Solakon Integral'
             default: input_number.solakon_integral
             selector:
               entity:
