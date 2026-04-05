@@ -1449,9 +1449,12 @@ actions:
 
 
       # FALL H: AC LADEN BEENDEN
+      # Guard: ac_charge_mode_active (nicht nur enabled) UND kein Tarif-Laden aktiv
       - conditions:
           - condition: template
-            value_template: "{{ ac_charge_enabled_bool and states(solakon_mode) == '3' }}"
+            value_template: "{{ ac_charge_enabled_bool and (ac_charge_mode_active | bool(false)) and states(solakon_mode) == '3' }}"
+          - condition: template
+            value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
           - condition: template
             value_template: >
               {{ states(soc) | float(0) >= soc_ac_charge_limit_int or
