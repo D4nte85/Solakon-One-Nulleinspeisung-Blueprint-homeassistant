@@ -61,6 +61,18 @@ blueprint:
 
     **Timer-Toggle:** Statt eines festen Werts wird zwischen 3598 und 3599 gewechselt — erzeugt eine Zustandsänderung damit der Solakon den neuen Modus sicher übernimmt. Wird bei jedem Moduswechsel direkt vor dem Modus-Setzen durchgeführt.
 
+    **Priorität & Reihenfolge im choose-Block:**
+
+    | Priorität | Modul | Falls |
+    |:----------|:------|:------|
+    | 1 (höchste) | Zone 0 — Überschuss | 0A, 0B |
+    | 2 | Tarif-Laden | GT, HT, TM |
+    | 3 | AC-Laden | G, H |
+    | 4 | SOC-Zonen | A, B, C, D, E, F |
+    | — | Safety | I |
+
+    **Ausführungsreihenfolge:** A → B → C → D → GT → HT → TM → G → H → I → E → F
+
     </details>
 
     <details>
