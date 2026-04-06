@@ -114,22 +114,24 @@ blueprint:
 
     <details>
     <summary><b>💹 Tarif-Arbitrage (Optional)</b> 👈</summary>
+    
+    Lädt den Akku bei Niedrigpreis und sperrt die Entladung in neutralen Phasen.
 
-    Lädt die Batterie bei günstigem Strompreis und sperrt die Entladung im mittleren Preisbereich.
-    Sensor-Einheit und Schwellwerte müssen übereinstimmen — kein Blueprint-seitiges Umrechnen.
+    #### Preis-Steuerung (Statisch & Dynamisch)
+    Nutze feste Werte oder **dynamische Helfer** (`input_number`). Ein gesetzter Helfer überschreibt den statischen Wert automatisch.
 
-    | Preiszone | Verhalten |
-    |:----------|:----------|
-    | `Preis < Günstig-Schwelle` | Tarif-Laden aktiv (Fall GT) — direkte Leistungssetzung, kein PI |
-    | `Günstig ≤ Preis < Teuer-Schwelle` | Nur Entladesperre (Fall TM) — Zone 1 und Zone 2 werden gestoppt |
-    | `Preis ≥ Teuer-Schwelle` | Normale SOC-Zonen-Logik — kein Eingriff |
+    | Schwelle | Verhalten bei Preis-Unterschreitung | Override |
+    |:---------|:------------------------------------|:---------|
+    | **Günstig** | **Laden aktiv (Fall GT)** + Entladesperre | `input_number` |
+    | **Teuer** | **Entladesperre (Fall TM)** — Akku passiv | `input_number` |
 
-    - **Eintritt Tarif-Laden (Fall GT):** Preis < Günstig-Schwelle UND SOC < Ladeziel UND Modus ≠ `'3'` UND kein Überschuss aktiv
-    - **Abbruch (Fall HT):** Preis ≥ Günstig-Schwelle ODER SOC ≥ Ladeziel (Sensor-Ausfall stoppt NICHT — schützt aktive Ladesession)
-    - **Entladesperre (Fall TM):** Modus = `'1'` UND kein Laden aktiv UND Preis < Teuer-Schwelle → Entladung stoppen, Modus → `'0'`
-    - **Reaktivierung:** Falls A/E können nur starten wenn Preis ≥ Teuer-Schwelle
-    - **Sensor-Ausfall:** Weder Laden noch Sperre — System verhält sich wie ohne Tarif-Arbitrage
-    - **Priorität:** Tarif-Laden (GT) hat Vorrang vor AC-Laden (G). Zone 0 (Überschuss) blockiert Tarif-Laden.
+    #### Logik-Details
+    - **Fall GT (Preis < Günstig):** Lädt mit `tariff_charge_power` bis SOC-Ziel. Priorität vor AC-Laden. Rückkehr zu Zone 1 (Timer-Toggle) oder Zone 2 (0W).
+    - **Fall TM (Günstig ≤ Preis < Teuer):** Stoppt Zone 1 & 2 sofort (Modus `'0'`). Setzt Zyklus-Helper zurück. Schont Akku für teure Spitzen.
+    - **Normalbetrieb (Preis ≥ Teuer):** Entladesperre aufgehoben, Standard-Zonenregelung (Fall A/E) übernimmt wieder.
+
+    #### ⚠️ Sensor & Einheiten
+    Keine Umrechnung! Die Einheit des Preissensors **muss** mit den Schwellen (statisch/Helfer) übereinstimmen (z.B. alle in €). Bei `unknown` Sensorstatus wird die Tarif-Logik deaktiviert.
 
     </details>
 
@@ -218,7 +220,10 @@ blueprint:
 
           max_discharge_current_number:
             name: 🔋 Solakon ONE - Max. Entladestrom
-            description: Die Entität zur Steuerung des maximalen Entladestroms (A).
+            description: |
+              Die Entität zur Steuerung des maximalen Entladestroms (A).
+              ⚠️ WICHTIG: Standardmäßig deaktiviert.
+              Einstellungen → Geräte & Dienste → Integrationen → Solakon ONE → Konfiguration → Deaktivierte Entität aktivieren
             default: number.solakon_one_maximaler_entladestrom
             selector:
               entity:
@@ -263,6 +268,7 @@ blueprint:
             description: |
               ⚠️ WICHTIG: input_number Helper für den PI-Regler.
               Min: -1000, Max: 1000, Step: 1, Initial: 0
+              - Name: e.g. 'Solakon Integral'
             default: input_number.solakon_integral
             selector:
               entity:
@@ -672,10 +678,10 @@ blueprint:
                 domain: sensor
 
           cheap_threshold:
-            name: 💚 Günstig-Schwelle (Tarif-Laden)
+            name: 💚 Günstig-Schwelle Statisch (Fallback)
             description: |
               Unterhalb dieser Schwelle wird geladen (z.B. 0.20 EUR/kWh).
-              Tarif-Laden aktiv wenn: Preis < Günstig-Schwelle UND SOC < Ladeziel.
+              Wird genutzt, wenn kein dynamischer Override gesetzt oder dieser nicht verfügbar ist.
             default: 0.20
             selector:
               number:
@@ -683,18 +689,36 @@ blueprint:
                 max: 1
                 step: 0.01
 
+          cheap_threshold_entity:
+            name: 💚 Dynamische Günstig-Schwelle (Optionaler Override)
+            description: |
+              Optionale Entität (z. B. input_number). Wenn gesetzt, überschreibt ihr Wert die statische Schwelle.
+              Perfekt für dynamische Berechnungen basierend auf der täglichen EPEX-Varianz.
+            default: {}
+            selector:
+              entity:
+                domain: input_number
+
           expensive_threshold:
-            name: 🔴 Teuer-Schwelle (Entladesperre)
+            name: 🔴 Teuer-Schwelle Statisch (Fallback)
             description: |
               Unterhalb dieser Schwelle wird die Entladung gesperrt (z.B. 0.25 EUR/kWh).
-              Entladesperre aktiv wenn: Günstig-Schwelle ≤ Preis < Teuer-Schwelle.
-              ⚠️ Muss > Günstig-Schwelle sein.
+              Wird genutzt, wenn kein dynamischer Override gesetzt ist.
             default: 0.25
             selector:
               number:
                 min: 0
                 max: 1
                 step: 0.01
+
+          expensive_threshold_entity:
+            name: 🔴 Dynamische Teuer-Schwelle (Optionaler Override)
+            description: |
+              Optionale Entität (z. B. input_number). Wenn gesetzt, überschreibt ihr Wert die statische Schwelle.
+            default: {}
+            selector:
+              entity:
+                domain: input_number
 
           tariff_soc_charge_target:
             name: 🔋 Tarif-Laden SOC-Ziel (%)
@@ -833,8 +857,27 @@ variables:
   price_sensor_entity: !input price_sensor
   tariff_soc_charge_target_int: !input tariff_soc_charge_target
   tariff_charge_power_int: !input tariff_charge_power
-  cheap_threshold_float: !input cheap_threshold
-  expensive_threshold_float: !input expensive_threshold
+  
+  # === GÜNSTIG-SCHWELLE LOGIK ===
+  cheap_threshold_static: !input cheap_threshold
+  cheap_threshold_entity_id: !input cheap_threshold_entity
+  cheap_threshold_float: >
+    {% if cheap_threshold_entity_id is string and cheap_threshold_entity_id | length > 0 and states(cheap_threshold_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+      {{ states(cheap_threshold_entity_id) | float(cheap_threshold_static) }}
+    {% else %}
+      {{ cheap_threshold_static }}
+    {% endif %}
+
+  # === TEUER-SCHWELLE LOGIK ===
+  expensive_threshold_static: !input expensive_threshold
+  expensive_threshold_entity_id: !input expensive_threshold_entity
+  expensive_threshold_float: >
+    {% if expensive_threshold_entity_id is string and expensive_threshold_entity_id | length > 0 and states(expensive_threshold_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+      {{ states(expensive_threshold_entity_id) | float(expensive_threshold_static) }}
+    {% else %}
+      {{ expensive_threshold_static }}
+    {% endif %}
+
   tariff_charge_state_entity: !input tariff_charge_state_helper
   # Gültig wenn Tarif-Arbitrage aktiviert und Helper verfügbar
   tariff_charge_entity_valid: >
