@@ -218,8 +218,8 @@ blueprint:
             description: |
               ⚠️ WICHTIG: Erstellen Sie einen Schalter Helfer (Input Boolean).
               Einstellungen → Geräte & Dienste → Helfer → Helfer erstellen → Schalter
-              - Name: z.B. 'Solakon SOC Entladezyklus Status'
-            default: input_boolean.solakon_soc_entladezyklus_status
+              - Name: z.B. 'SOC Entladezyklus Status'
+            default: input_boolean.soc_entladezyklus_status
             selector:
               entity:
                 domain: input_boolean
