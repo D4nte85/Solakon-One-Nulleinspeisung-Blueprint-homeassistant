@@ -114,22 +114,24 @@ blueprint:
 
     <details>
     <summary><b>💹 Tarif-Arbitrage (Optional)</b> 👈</summary>
+    
+    Lädt den Akku bei Niedrigpreis und sperrt die Entladung in neutralen Phasen.
 
-    Lädt die Batterie bei günstigem Strompreis und sperrt die Entladung im mittleren Preisbereich.
-    Sensor-Einheit und Schwellwerte müssen übereinstimmen — kein Blueprint-seitiges Umrechnen.
+    #### Preis-Steuerung (Statisch & Dynamisch)
+    Nutze feste Werte oder **dynamische Helfer** (`input_number`). Ein gesetzter Helfer überschreibt den statischen Wert automatisch.
 
-    | Preiszone | Verhalten |
-    |:----------|:----------|
-    | `Preis < Günstig-Schwelle` | Tarif-Laden aktiv (Fall GT) — direkte Leistungssetzung, kein PI |
-    | `Günstig ≤ Preis < Teuer-Schwelle` | Nur Entladesperre (Fall TM) — Zone 1 und Zone 2 werden gestoppt |
-    | `Preis ≥ Teuer-Schwelle` | Normale SOC-Zonen-Logik — kein Eingriff |
+    | Schwelle | Verhalten bei Preis-Unterschreitung | Override |
+    |:---------|:------------------------------------|:---------|
+    | **Günstig** | **Laden aktiv (Fall GT)** + Entladesperre | `input_number` |
+    | **Teuer** | **Entladesperre (Fall TM)** — Akku passiv | `input_number` |
 
-    - **Eintritt Tarif-Laden (Fall GT):** Preis < Günstig-Schwelle UND SOC < Ladeziel UND Modus ≠ `'3'` UND kein Überschuss aktiv
-    - **Abbruch (Fall HT):** Preis ≥ Günstig-Schwelle ODER SOC ≥ Ladeziel (Sensor-Ausfall stoppt NICHT — schützt aktive Ladesession)
-    - **Entladesperre (Fall TM):** Modus = `'1'` UND kein Laden aktiv UND Preis < Teuer-Schwelle → Entladung stoppen, Modus → `'0'`
-    - **Reaktivierung:** Falls A/E können nur starten wenn Preis ≥ Teuer-Schwelle
-    - **Sensor-Ausfall:** Weder Laden noch Sperre — System verhält sich wie ohne Tarif-Arbitrage
-    - **Priorität:** Tarif-Laden (GT) hat Vorrang vor AC-Laden (G). Zone 0 (Überschuss) blockiert Tarif-Laden.
+    #### Logik-Details
+    - **Fall GT (Preis < Günstig):** Lädt mit `tariff_charge_power` bis SOC-Ziel. Priorität vor AC-Laden. Rückkehr zu Zone 1 (Timer-Toggle) oder Zone 2 (0W).
+    - **Fall TM (Günstig ≤ Preis < Teuer):** Stoppt Zone 1 & 2 sofort (Modus `'0'`). Setzt Zyklus-Helper zurück. Schont Akku für teure Spitzen.
+    - **Normalbetrieb (Preis ≥ Teuer):** Entladesperre aufgehoben, Standard-Zonenregelung (Fall A/E) übernimmt wieder.
+
+    #### ⚠️ Sensor & Einheiten
+    Keine Umrechnung! Die Einheit des Preissensors **muss** mit den Schwellen (statisch/Helfer) übereinstimmen (z.B. alle in €). Bei `unknown` Sensorstatus wird die Tarif-Logik deaktiviert.
 
     </details>
 
@@ -146,7 +148,7 @@ blueprint:
     </details>
 
   domain: automation
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/edit/experimental-AC-tarif//solakon_one_nulleinspeisung.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/experimental-AC-tarif/solakon_one_nulleinspeisung.yaml
   input:
 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
