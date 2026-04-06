@@ -196,35 +196,46 @@ Laden der Batterie wenn eine externe Einspeisung ins Netz erkannt wird. Eintritt
 
 ### 7. 💹 Tarif-Arbitrage (Optional)
 
-Lädt die Batterie bei günstigem Strompreis und sperrt die Entladung bei günstigem oder neutralem Tarif. Vollständig unabhängig von den AC-Laden-Parametern konfigurierbar.
+Optimiert die Speichernutzung basierend auf deinem dynamischen Stromtarif. Diese Logik lädt die Batterie bei extrem günstigen Preisen gezielt aus dem Netz und sperrt die Entladung in "neutralen" Preisphasen, um die Energie für teure Spitzenzeiten aufzusparen.
 
-#### Preiszonen
+#### Preis-Steuerung (Statisch & Dynamisch)
 
-| Preis | Verhalten |
-|:------|:----------|
-| `Preis < günstig_threshold` | Tarif-Laden aktiv (Fall GT) + Entladesperre (Zone 1 **und** Zone 2 blockiert) |
-| `günstig ≤ Preis < teuer_threshold` | Nur Entladesperre — Zone 1 **und** Zone 2 werden gestoppt (Fall TM), Akku passiv |
-| `Preis ≥ teuer_threshold` | Normale SOC-Zonen-Logik — kein Eingriff der Tarif-Logik |
+Du kannst für beide Schwellenwerte entweder feste Zahlenwerte nutzen oder **dynamische Helfer** (`input_number`) hinterlegen. Ein gesetzter Helfer überschreibt immer den statischen Wert.
+
+| Schwelle | Verhalten bei Preis-Unterschreitung | Override-Möglichkeit |
+|:---------|:------------------------------------|:---------------------|
+| **Günstig-Schwelle** | **Tarif-Laden aktiv** (GT) + Entladesperre | `input_number` (z.B. Tages-Min + 2ct) |
+| **Teuer-Schwelle** | **Entladesperre** — Zone 1 & 2 werden gestoppt (TM) | `input_number` (z.B. Tages-Schnitt) |
+
+#### Die Preiszonen im Detail
+
+| Aktueller Preis | Verhalten der Automatisierung |
+|:----------------|:------------------------------|
+| `Preis < Günstig-Schwelle` | **Fall GT (Tarif-Laden):** Akku lädt mit `tariff_charge_power`. Entladung blockiert. |
+| `Günstig ≤ Preis < Teuer` | **Fall TM (Entladesperre):** Akku passiv. Zone 1 & 2 werden gestoppt. |
+| `Preis ≥ Teuer-Schwelle` | **Normalbetrieb:** Die Standard-SOC-Zonen-Logik regelt die Einspeisung. |
 
 #### Tarif-Laden (Fall GT)
 
-* **Eintritts-Bedingung:** Tarif-Arbitrage aktiviert UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel UND Modus ≠ `'3'` UND **NICHT Surplus-Bool = `on`** (Zone 0 blockiert)
-* **Verhalten:** Direkt konfigurierte Ladeleistung setzen (`tariff_charge_power`) — kein PI-Regler, kein Toleranz-Check
-* **Abbruch (Fall HT):** Preis steigt über Günstig-Schwelle ODER SOC-Ladeziel erreicht
-* **Rückkehr:** Zone 1 → Timer-Toggle + Modus `'1'` / Zone 2 → Modus `'0'` + Output 0W
-* **Priorität:** Tarif-Laden (GT) liegt vor AC-Laden (G) im choose-Block
+* **Eintritts-Bedingung:** Tarif-Arbitrage aktiviert **UND** Preis < Günstig-Schwelle **UND** SOC < Ziel-SOC **UND** Modus ≠ `'3'` **UND** kein Überschuss-Laden aktiv.
+* **Verhalten:** Setzt die konfigurierte Ladeleistung (`tariff_charge_power`) — kein PI-Regler, kein Toleranz-Check.
+* **Abbruch:** Preis steigt über Günstig-Schwelle **ODER** SOC-Ladeziel erreicht.
+* **Rückkehr:** Zone 1 → Timer-Toggle + Modus `'1'` / Zone 2 → Modus `'0'` + Output 0W.
+* **Priorität:** Tarif-Laden (GT) liegt vor AC-Laden (G) im choose-Block.
 
 #### Entladesperre / Discharge-Lock (Fall TM)
 
-* **Bedingung:** Tarif aktiv UND günstig ≤ Preis < teuer UND kein AC/Tarif-Laden UND Modus = `'1'`
-* **Gilt für Zone 1 und Zone 2:** TM feuert unabhängig von `cycle_active` — sowohl eine laufende Zone-1-Entladung (Zyklus = `on`) als auch Zone 2 (Zyklus = `off`) werden gestoppt.
-* **Zone-1-Besonderheit:** Zyklus-Helper wird auf `off` zurückgesetzt und Surplus-Bool ggf. bereinigt. Modus → `'0'`, Output → 0W. Fall D kann den Modus dadurch nicht sofort wiederherstellen.
-* **Reaktivierung:** Wenn der Preis die Teuer-Schwelle überschreitet, können Falls A und E wieder feuern (Entladesperre aufgehoben). Voraussetzung für Fall A: SOC muss noch über Zone-1-Schwelle liegen — andernfalls greift Fall E oder das System bleibt in Zone 3 wenn SOC zu tief.
-* Guards in Falls A und E: `NOT (tariff_arbitrage_enabled AND Preis < expensive_threshold)`
+* **Bedingung:** Tarif aktiv **UND** Günstig ≤ Preis < Teuer **UND** kein AC/Tarif-Laden **UND** Modus = `'1'`.
+* **Wirkung:** Stoppt sofort jede Entladung in Zone 1 und Zone 2. Der Wechselrichter wird auf 0W (Modus `'0'`) gesetzt.
+* **Zone-1-Besonderheit:** Zyklus-Helper wird auf `off` zurückgesetzt und Surplus-Bool ggf. bereinigt. Fall D kann den Modus dadurch nicht sofort wiederherstellen.
+* **Reaktivierung:** Wenn der Preis die Teuer-Schwelle überschreitet, können Falls A und E wieder feuern (Entladesperre aufgehoben).
 
-#### Sensor-Flexibilität
+#### ⚠️ Wichtiger Hinweis zu Sensoren & Einheiten
 
-Generischer `sensor` — kein Blueprint-seitiges Umrechnen. Tibber, Awattar, eigene `input_number` möglich solange Sensor-Einheit und Schwellwerte übereinstimmen. Bei unavailable/unknown-Sensor: weder Laden noch Sperre.
+Der Blueprint ist **sensor-agnostisch**. Er führt keine automatische Skalierung durch (z. B. von Euro in Cent).
+* **Einheitlichkeit:** Die Einheit deines Preissensors (z. B. von Tibber oder Nordpool) **muss** mit der Einheit deiner Schwellenwerte und Helfer identisch sein.
+* **Beispiel:** Liefert dein Sensor `0.34` (€), nutze als Schwelle `0.20`. Liefert er `34.0` (ct), nutze `20.0`.
+* **Ausfallsicherheit:** Bei Status `unavailable` oder `unknown` des Preissensors wird die Tarif-Logik komplett ignoriert (Sicherheits-Fallback).
 
 ---
 
