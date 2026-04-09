@@ -333,7 +333,7 @@ Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
 | **AC Laden aktivieren** | false | — | — | Schalter für AC Laden. |
-| **SOC-Ladeziel** | 90 % | 10 % | 99 % | Laden stoppt bei diesem SOC. |
+| **SOC-Ladeziel** | 90 % | 10 % | 99 % | Laden stoppt bei diesem SOC. Empfohlen: > Zone-1-Schwelle, damit Zone 1 direkt nach dem Laden übernimmt. |
 | **Max. Ladeleistung** | 800 W | 50 | 1200 W | Obergrenze der AC-Ladeleistung. |
 | **Hysterese Ladeabbruch** | 50 W | 0 | 300 W | Totband für Ein- und Austritt. |
 | **AC Laden Offset (Statisch)** | -50 W | -100 | 100 W | Regelziel im AC-Lade-Modus. Negativ = Einspeisung angestrebt. |
@@ -351,7 +351,7 @@ Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 | **Strompreis-Sensor** | *(leer)* | — | — | Generischer Sensor. Einheit muss zu den Schwellwerten passen. |
 | **Günstig-Schwelle** | 10 | -100 | 100 | Unter diesem Wert: Laden + Entladesperre (Zone 1 und Zone 2). |
 | **Teuer-Schwelle** | 25 | -100 | 100 | Ab diesem Wert: Entladesperre aufgehoben, normale SOC-Logik. |
-| **SOC-Ladeziel Tarif-Laden** | 90 % | 10 % | 99 % | Tarif-Laden stoppt bei diesem SOC. Unabhängig vom AC-Laden-Ladeziel. |
+| **SOC-Ladeziel Tarif-Laden** | 90 % | 10 % | 99 % | Tarif-Laden stoppt bei diesem SOC. Empfohlen: > Zone-1-Schwelle. Unabhängig vom AC-Laden-Ladeziel. |
 | **Ladeleistung Tarif-Laden** | 800 W | 50 | 1200 W | Direkt gesetzter Wert — kein PI-Regler. |
 
 ---
