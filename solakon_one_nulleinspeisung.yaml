@@ -148,7 +148,7 @@ blueprint:
     </details>
 
   domain: automation
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/experimental-AC-tarif/solakon_one_nulleinspeisung.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/main/solakon_one_nulleinspeisung.yaml
   input:
 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
