@@ -7,7 +7,7 @@ flowchart TD
         VAL{{"🛡️ Validierung SOC-Limits & Entitäten"}}
         VAL -- Fehler --> STOP([🛑 Stop + Log-Eintrag])
     end
-    style SG_ENTRY fill:none,stroke:#aaaaaa,stroke-width:3,stroke-dasharray:6,color:#000
+    style SG_ENTRY fill:none,stroke:#aaaaaa,stroke-width:5,stroke-dasharray:6,color:#000
 
     VAL -- OK --> SURPLUS_UPDATE
 
@@ -17,7 +17,7 @@ flowchart TD
         S0A["☀️ Zone 0 aktivieren   Surplus-Bool → on"]
         S0B["☁️ Zone 0 deaktivieren   Surplus-Bool → off   Integral = 0"]
     end
-    style SG_ZONE0 fill:none,stroke:#f0ad4e,stroke-width:3,stroke-dasharray:6,color:#000
+    style SG_ZONE0 fill:none,stroke:#f0ad4e,stroke-width:5,stroke-dasharray:6,color:#000
 
     SURPLUS_UPDATE -- "FALL 0A   Surplus-Bool = off   UND SOC ≥ Export-Schwelle   UND (PV > Output + Grid + PV-Hysterese   ODER PV = 0)" --> S0A
     SURPLUS_UPDATE -- "FALL 0B   Surplus-Bool = on   UND (SOC < Export-Schwelle − SOC-Hysterese   ODER PV ≤ Output + Grid − PV-Hysterese)" --> S0B
@@ -49,7 +49,7 @@ flowchart TD
         NIGHT["🌙 Nachtabschaltung   Integral = 0   Modus → '0' (Disabled)   Output → 0 W"]
 
     end
-    style SG_SOC fill:none,stroke:#28a745,stroke-width:3,stroke-dasharray:6,color:#000
+    style SG_SOC fill:none,stroke:#28a745,stroke-width:5,stroke-dasharray:6,color:#000
 
     %% ══════════════════════════════════════════════════════════════════════
     subgraph SG_TARIFF ["💹 Tarif-Arbitrage   (Falls GT, HT, TM)"]
@@ -66,7 +66,7 @@ flowchart TD
         TARIFF_MID["🔒 Discharge-Lock   Integral = 0   Zyklus = off (nur wenn Zone 1)   Surplus-Bool → off (nur wenn aktiv)   Output → 0 W   Modus → '0' (Disabled)"]
 
     end
-    style SG_TARIFF fill:none,stroke:#1a7f1a,stroke-width:3,stroke-dasharray:6,color:#000
+    style SG_TARIFF fill:none,stroke:#1a7f1a,stroke-width:5,stroke-dasharray:6,color:#000
 
     %% ══════════════════════════════════════════════════════════════════════
     subgraph SG_AC ["⚡ AC-Laden & Safety   (Falls G, H, I)"]
@@ -85,7 +85,7 @@ flowchart TD
         SAFETY_I_Z2["⚠️ Safety (Zone 2)   Modus → '0' (Disabled)   Output → 0 W"]
 
     end
-    style SG_AC fill:none,stroke:#0066cc,stroke-width:3,stroke-dasharray:6,color:#000
+    style SG_AC fill:none,stroke:#0066cc,stroke-width:5,stroke-dasharray:6,color:#000
 
     %% ── ZONE_CHECK → Fall-Verzweigungen ──────────────────────────────────
     ZONE_CHECK -- "FALL A   NICHT AC-Lade-Bool = on   UND NICHT Entladesperre (Preis < teuer)   UND SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
@@ -184,7 +184,7 @@ flowchart TD
         INTEGRAL_DECAY --> END_OK
 
     end
-    style SG_PI fill:none,stroke:#004085,stroke-width:3,stroke-dasharray:6,color:#000
+    style SG_PI fill:none,stroke:#004085,stroke-width:5,stroke-dasharray:6,color:#000
 
     %% ── Styles ───────────────────────────────────────────────────────────
     classDef zone0 fill:#fff3cd,stroke:#f0ad4e,color:#000
