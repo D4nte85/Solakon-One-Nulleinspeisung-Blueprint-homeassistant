@@ -1,6 +1,6 @@
-# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V302
+# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V303
 
-Dieser Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung** für den Solakon ONE Wechselrichter, basierend auf einem **PI-Regler (Proportional-Integral-Regler)** und einer intelligenten **SOC-Zonen-Logik** mit optionaler **Überschuss-Einspeisung bei vollem Akku** sowie optionalem **AC Laden aus externer Einspeisung**.
+Dieser Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung** für den Solakon ONE Wechselrichter, basierend auf einem **PI-Regler (Proportional-Integral-Regler)** und einer intelligenten **SOC-Zonen-Logik** mit optionaler **Überschuss-Einspeisung bei vollem Akku**, optionalem **AC Laden aus externer Einspeisung** und optionaler **Tarif-Arbitrage** (günstig laden, Entladesperre bei niedrigem Tarif).
 
 Ziel dieses Blueprints ist es, PV-Energie direkt auszugeben ohne den Umweg über die Batterie.
 
@@ -15,17 +15,17 @@ Für eine wie im Folgenden gewollte Funktion sollte als Standard ein 0W für 24s
 
 Installieren Sie den Blueprint direkt über diesen Button in Ihrer Home Assistant Instanz:
 
-[![Open your Home Assistant instance and show the blueprint import dialog with a pre-filled URL.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2Fmain%2Fsolakon_one_nulleinspeisung.yaml)
+[![Open your Home Assistant instance and show the blueprint import dialog with a pre-filled URL.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fblob%2Fexperimental-AC-tarif%2Fsolakon_one_nulleinspeisung.yaml)
 
 Der zugehörige **PI-Regler Script-Blueprint** muss ebenfalls importiert werden:
 
-[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fmain%2FPI-Regler.yaml)
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fexperimental-AC-tarif%2FPI-Regler.yaml)
 
 ---
 
 ## 🛠️ Vorbereitung: Erstellung der erforderlichen Helper
 
-Der Blueprint benötigt **drei Pflicht-Helper** und ein **Script** sowie bis zu **zwei optionale Helper**, die Sie vor der Installation erstellen müssen.
+Der Blueprint benötigt **drei Pflicht-Helper** und ein **Script** sowie bis zu **drei optionale Helper**, die Sie vor der Installation erstellen müssen.
 
 ### 1. Input Boolean Helper (Entladezyklus-Speicher) — ERFORDERLICH
 
@@ -65,14 +65,23 @@ Persistenter Zustandsspeicher für die Überschuss-Einspeisung. Verhindert Flack
 
 ### 5. Input Boolean Helper (AC-Lade-Zustand) — NUR wenn AC Laden aktiv
 
-Persistenter Zustandsspeicher für das AC Laden. Signalisiert dem PI-Script die invertierte Fehlerberechnung (`ac_charge_mode=true`). Verhindert außerdem, dass die Guards (at_max/at_min) den PI fälschlich blockieren.
+Persistenter Zustandsspeicher für das AC Laden. Signalisiert dem PI-Script die invertierte Fehlerberechnung (`ac_charge_mode=true`). Verhindert außerdem, dass die Guards (at\_max/at\_min) den PI fälschlich blockieren.
 
 1. Gehen Sie zu **Einstellungen** → **Geräte & Dienste** → **Helfer**
 2. Klicken Sie auf **Helfer erstellen** → **Schalter** (Input Boolean)
 3. Name: z.B. `Solakon AC Laden Aktiv`
 4. Speichern (Entity ID: z.B. `input_boolean.solakon_ac_laden_aktiv`)
 
-### 6. Input Number Helper für Dynamischen Offset (Optional)
+### 6. Input Boolean Helper (Tarif-Lade-Zustand) — NUR wenn Tarif-Arbitrage aktiv
+
+Persistenter Zustandsspeicher für das Tarif-Laden. Steuert den direkten Leistungs-Setz-Zweig (BT) im PI-Gate und schützt Fall I vor fälschlicher Korrektur.
+
+1. Gehen Sie zu **Einstellungen** → **Geräte & Dienste** → **Helfer**
+2. Klicken Sie auf **Helfer erstellen** → **Schalter** (Input Boolean)
+3. Name: z.B. `Solakon Tarif Laden Aktiv`
+4. Speichern (Entity ID: z.B. `input_boolean.solakon_tarif_laden_aktiv`)
+
+### 7. Input Number Helper für Dynamischen Offset (Optional)
 
 Wenn Sie den Nullpunkt-Offset zur Laufzeit dynamisch anpassen möchten, empfehlen wir den **Solakon ONE — Dynamischer Offset Blueprint**. Dieser erstellt und befüllt die benötigten Helper automatisch.
 
@@ -92,32 +101,11 @@ Alternativ manuell:
 
 Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Rechenlogik ist in ein separates **Script-Blueprint** (`PI-Regler`) ausgelagert, das aus der Hauptautomatisierung heraus aufgerufen wird.
 
-* **P-Anteil (Proportional):**
-  - Reagiert sofort auf aktuelle Abweichungen
-  - Konfigurierbare Aggressivität über den **P-Faktor** (z.B. 1.5)
-
-* **I-Anteil (Integral):**
-  - Summiert Abweichungen über die Zeit auf, eliminiert bleibende Regelabweichungen
-  - **Anti-Windup:** Begrenzt auf ±1000 Punkte (im PI-Script)
-  - **Automatischer Reset:** Bei jedem Zonenwechsel auf 0 zurückgesetzt
-  - **Toleranz-Decay:** 5% Abbau pro Zyklus in der Hauptautomatisierung, solange Fehler ≤ Toleranz und `|Integral| > 10`
-  - **Zone-0-Einfrieren:** In Zone 0 (Überschuss) wird das Integral unverändert beibehalten
-
-* **Fehlerberechnung (modusabhängig, im PI-Script):**
-  - **Normal (`ac_charge_mode=false`):** `raw_error = grid − target_offset`
-  - **AC Laden (`ac_charge_mode=true`):** `raw_error = target_offset − grid` (invertiert)
-  - In beiden Fällen: Kapazitäts-Clamping auf tatsächlich verfügbare Kapazität
-
-* **Leistungsbegrenzung (zonenabhängig, `max_power` ans Script):**
-  - **Zone 0:** Hard Limit (PI nicht aufgerufen)
-  - **Zone 1:** Hard Limit (z.B. 800 W)
-  - **Zone 2:** `Max(0, PV − Reserve)`
-  - **AC Laden (Modus 3):** Konfigurierbares Lade-Limit
-
-* **PI-Aufruf-Guard (in Hauptautomatisierung):**
-  - Zone 0 aktiv → PI nicht aufgerufen, Integral eingefroren
-  - AC Laden aktiv → PI mit `ac_charge_mode=true`, `at_max/at_min`-Guards deaktiviert
-  - Normal → PI nur wenn `|Fehler| > Toleranz` UND kein At-Limit
+* **P-Anteil:** Reagiert sofort auf aktuelle Abweichungen. Konfigurierbare Aggressivität über den P-Faktor.
+* **I-Anteil:** Summiert Abweichungen über die Zeit auf, eliminiert bleibende Regelabweichungen. Anti-Windup auf ±1000. Automatischer Reset bei Zonenwechsel. Toleranz-Decay 5%/Zyklus wenn Fehler ≤ Toleranz und |Integral| > 10. Zone-0-Einfrieren bei aktivem Überschuss.
+* **Fehlerberechnung:** Normal (`ac_charge_mode=false`): `raw_error = grid − target_offset`. AC Laden (`ac_charge_mode=true`): `raw_error = target_offset − grid` (invertiert).
+* **Dynamisches Power-Limit:** Zone 1 → Hard Limit. Zone 2 → `Max(0, PV − Reserve)`. AC Laden → konfigurierbares Lade-Limit. Tarif-Laden → kein PI (direkter Wert).
+* **PI-Aufruf-Guard:** Zone 0 aktiv → PI nicht aufgerufen, Integral eingefroren. Tarif-Laden aktiv → direkt setzen. AC Laden aktiv → PI mit `ac_charge_mode=true`. Normal → PI nur wenn `|Fehler| > Toleranz` UND kein At-Limit.
 
 ---
 
@@ -125,102 +113,147 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
 
 | Zone | SOC-Bereich / Bedingung | Modus | Max. Entladestrom | Regelziel | Besonderheiten |
 |:-----|:------------------------|:------|:-----------------|:---------|:--------------|
-| **0. Überschuss-Einspeisung** | SOC ≥ Export-Schwelle UND PV > Output + Grid + PV-Hysterese | `'1'` | 2 A (Stabilitätspuffer) | Hard Limit (max. W) | **Optional.** Integral eingefroren. Persistenter `input_boolean`. Austritt mit SOC-Hysterese + PV-Hysterese. |
-| **1. Aggressive Entladung** | SOC > Zone-1-Schwelle | `'1'` | Konfigurierter Max-Wert (Standard: 40 A) | 0W + Offset 1 | Läuft **bis SOC ≤ Zone-3-Schwelle** (kein Yo-Yo-Effekt). Auch nachts aktiv. |
-| **2. Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `'1'` | **0 A** | 0W + Offset 2 | Dynamisches Limit: `Max(0, PV − Reserve)`. Optional: Nachtabschaltung. |
-| **3. Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` (Disabled) | 0 A | — | Output = 0 W. Vollständiger Batterieschutz. |
+| **0 — Überschuss-Einspeisung** | SOC ≥ Export-Schwelle UND PV > Output + Grid + PV-Hysterese | `'1'` | 2 A | Hard Limit | **Optional.** Integral eingefroren. Blockiert GT und G. |
+| **1 — Aggressive Entladung** | SOC > Zone-1-Schwelle | `'1'` | Konfigurierter Max-Wert | 0W + Offset 1 | Läuft **bis SOC ≤ Zone-3-Schwelle**. Auch nachts aktiv. |
+| **2 — Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `'1'` | **0 A** | 0W + Offset 2 | Dynamisches Limit: `Max(0, PV − Reserve)`. Optional: Nachtabschaltung. |
+| **3 — Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` | 0 A | — | Output = 0 W. Vollständiger Batterieschutz. Absoluter Vorrang. |
 
-#### Übersicht der Steuer-Falls (choose-Block)
+---
+
+### 3. ⚡ Priorität der optionalen Module
+
+Die optionalen Module überschreiben die SOC-Zonen-Logik in folgender Reihenfolge:
+
+```
+Zone 3 (Sicherheit, absolut) > Zone 0 (Überschuss) > Tarif-Laden > AC-Laden > SOC-Zonen
+```
+
+**Zone 3** hat absoluten Vorrang — greift unabhängig von allen anderen Modi.
+
+**Zone 0 (Überschuss)** blockiert den Eintritt in Tarif-Laden (Fall GT) und AC-Laden (Fall G) solange aktiv. Zone 0 kann nur starten wenn kein Ladevorgang aktiv ist.
+
+**Tarif-Laden (Fall GT)** startet nur wenn Zone 0 NICHT aktiv ist. Sperrt Zone 1 **und** Zone 2: Für die mittlere Preiszone (günstig ≤ Preis < teuer) wird laufende Entladung sowohl aus Zone 1 als auch Zone 2 gestoppt (Fall TM). Der Zyklus-Helper wird dabei zurückgesetzt; beim nächsten teuren Tarif starten Falls A/E neu. Für günstige Preise gilt zusätzlich aktives Laden (Fall GT).
+
+**AC-Laden (Fall G)** startet nur wenn weder Zone 0 noch Tarif-Laden aktiv ist.
+
+**SOC-Zonen (Falls A/E)** starten nur wenn keine der obigen Prioritäten greift und die Entladesperre (Preis < teuer) nicht aktiv ist.
+
+---
+
+### 4. Übersicht der Steuer-Falls (choose-Block)
+
+Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt.
 
 | Fall | Bedingung | Aktion |
 |:-----|:----------|:-------|
 | **0A** | Surplus-Bool = `off` UND SOC ≥ Export-Schwelle UND (PV > Output + Grid + PV-Hysterese ODER PV = 0) | Zone 0 Start: Surplus-Bool → `on` |
 | **0B** | Surplus-Bool = `on` UND (SOC < Export-Schwelle − SOC-Hysterese ODER PV ≤ Output + Grid − PV-Hysterese) | Zone 0 Ende: Surplus-Bool → `off`, Integral = 0 |
-| **A** | NICHT AC-Lade-Bool = `on` UND SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'` |
+| **A** | NICHT AC-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'` |
 | **B** | NICHT AC-Lade-Bool = `on` UND SOC < Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
 | **C** | NICHT AC-Lade-Bool = `on` UND SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
-| **D** | Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle | Recovery: Timer-Toggle, Modus → `'3'` wenn AC-Lade-Bool = `on`, sonst `'1'` (kein Integral-Reset, kein Zonenwechsel) |
-| **G** | AC aktiv UND SOC < Ladeziel **UND Modus ≠ `'3'`** UND (Grid + Output) < −Hysterese | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
+| **D** | Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle | Recovery: Timer-Toggle, Modus → `'3'` wenn AC-Lade-Bool **oder** Tarif-Lade-Bool = `on`, sonst `'1'` |
+| **GT** | Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel UND **Modus ≠ `'3'`** UND **NICHT Surplus-Bool = `on`** | Tarif-Laden Start: Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'` |
+| **HT** | Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Tarif-Ladeziel) | Tarif-Laden Ende: Tarif-Bool = `off`, Integral = 0, Zone 1 → `'1'` / Zone 2 → `'0'` |
+| **TM** | Tarif aktiv UND Günstig ≤ Preis < Teuer-Schwelle UND kein AC/Tarif-Laden UND **Modus = `'1'`** | Discharge-Lock: Integral = 0, Zyklus = `off` (wenn aktiv) + Surplus-Bool zurücksetzen, Output → 0W, Modus → `'0'` |
+| **G** | AC aktiv UND SOC < Ladeziel UND **Modus ≠ `'3'`** UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + Output) < −Hysterese | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
 | **H** | Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ `ac_charge_offset + Hysterese` UND Output = 0 W)) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` / Zone 2 → `'0'` |
-| **I** | Modus = `'3'` UND (AC Laden deaktiviert ODER AC-Lade-Bool ≠ `on`) | Safety-Korrektur: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
-| **E** | NICHT AC-Lade-Bool = `on` UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Timer-Toggle, Modus → `'1'` |
+| **I** | Modus = `'3'` UND NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` | Safety-Korrektur: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
+| **E** | NICHT AC-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Timer-Toggle, Modus → `'1'` |
 | **F** | NICHT AC-Lade-Bool = `on` UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Modus → `'0'`, Output → 0W |
 
-> **Reihenfolge ist entscheidend:** Fall D liegt vor Fall G. Dadurch prüft Recovery nur Modus ∉ `{'1','3'}` — AC-Laden-Modus `'3'` wird **nicht** durch Recovery überschrieben. Fall I liegt nach H und fängt jeden Modus-`'3'`-Zustand ab, der nicht durch eine aktive AC-Lade-Session legitimiert ist.
-
-#### 🔄 Recovery-Mechanismus (Fall D)
-
-Falls der Modus des Wechselrichters extern zurückgesetzt wird (z.B. durch einen Neustart der Integration), während der Entladezyklus noch aktiv ist (Zyklus = `on`), erkennt der Blueprint diesen Zustand automatisch und reaktiviert den Modus über den Timer-Toggle — ohne Zonenwechsel oder Integral-Reset. Voraussetzung: SOC > Zone-3-Schwelle UND Modus ≠ `'1'` UND Modus ≠ `'3'`.
-
-Der wiederhergestellte Modus richtet sich nach dem AC-Lade-Zustand: Wenn der AC-Lade-Bool `on` ist, wird Modus `'3'` gesetzt; andernfalls Modus `'1'`.
-
-#### ⚠️ Safety-Mechanismus (Fall I)
-
-Fängt den Zustand ab, in dem der Wechselrichter Modus `'3'` hat, aber keine aktive AC-Lade-Session vorliegt (AC Laden deaktiviert, Helper `off` oder nicht verfügbar). Dies kann durch externe Modussetzung entstehen. Aktion: Integral zurücksetzen, Zone 1 → Modus `'1'` (Timer-Toggle), Zone 2 → Modus `'0'` + Output 0W.
+> **Reihenfolge-Begründungen:**
+> - Fall D liegt vor GT/G, damit Recovery nur Modus ∉ `{'1','3'}` prüft — der Lade-Modus `'3'` wird durch Recovery nie überschrieben.
+> - Fall GT liegt vor G: Tarif-Laden hat Vorrang vor AC-Laden.
+> - Fall TM greift für Modus = `'1'` unabhängig von `cycle_active`: sowohl laufende Zone 1 als auch Zone 2 werden gestoppt. Der Zyklus-Reset in TM verhindert, dass Fall D den Modus sofort wiederherstellt.
+> - Falls GT und G enthalten beide einen `NICHT Surplus-Bool = on`-Guard: Zone 0 blockiert den Eintritt in alle Lademodi.
+> - Fall I fängt jeden `'3'`-Zustand ohne legitime Lade-Session auf.
 
 ---
 
-### 3. ☀️ Überschuss-Einspeisung (Zone 0, Optional)
+### 5. ☀️ Überschuss-Einspeisung (Zone 0, Optional)
 
 Ermöglicht aktives Einspeisen von PV-Überschuss wenn der Akku voll ist. SOC- und PV-Hysterese verhindern instabiles Hin- und Herschalten.
 
 * **Aktivierung:** Über den Parameter "Überschuss-Einspeisung aktivieren"
 * **Eintritts-Bedingung:** SOC ≥ Export-Schwelle UND (PV > (Output + Grid + PV-Hysterese) ODER PV = 0)
 * **Austritts-Bedingung:** SOC < (Export-Schwelle − SOC-Hysterese) ODER PV ≤ (Output + Grid − PV-Hysterese)
-* **Persistenz:** Zustand wird in `input_boolean` gespeichert — überlebt mehrere Automation-Läufe
-* **Verhalten:** Output auf Hard Limit, Entladestrom 2 A (Stabilitätspuffer), Integral eingefroren (kein Decay, kein PI-Aufruf)
-* **Deaktiviert:** Klassische Nulleinspeisung — kein aktives Einspeisen
+* **Blockiert:** Tarif-Laden (Fall GT) und AC-Laden (Fall G) können nicht starten solange Zone 0 aktiv ist.
+* **Verhalten:** Output auf Hard Limit, Entladestrom 2 A (Stabilitätspuffer), Integral eingefroren.
+* **Deaktiviert:** Klassische Nulleinspeisung — kein aktives Einspeisen.
 
 ---
 
-### 4. ⚡ AC Laden (Optional)
+### 6. ⚡ AC Laden (Optional)
 
-Laden der Batterie wenn eine externe Einspeisung ins Netz erkannt wird. Die Erkennung basiert auf `(Grid + Ausgangsleistung) < −Hysterese` — d.h. nach Abzug des Solakon-Beitrags liegt noch Überschuss an. Typischer Anwendungsfall: externe PV-Anlage speist Überschuss ins Netz.
+Laden der Batterie wenn eine externe Einspeisung ins Netz erkannt wird. Eintritts-Erkennung: `(Grid + Ausgangsleistung) < −Hysterese`.
 
-* **Aktivierung:** Über den Parameter "AC Laden aktivieren"
-* **Eintritts-Bedingung (Fall G):**
-  - AC Laden aktiviert UND SOC < Ladeziel
-  - **Modus darf nicht `'3'` sein** (Guard verhindert Re-Eintritt wenn AC Laden bereits aktiv)
-  - (Grid + Ausgangsleistung) < −Hysterese
-* **Verbleib-Bedingung:**
-  - Modus bleibt `'3'` solange SOC < Ladeziel UND Grid < (ac_charge_offset + Hysterese)
-* **Abbruch-Bedingung (Fall H):**
-  - SOC ≥ Ladeziel ODER (Grid ≥ ac_charge_offset + Hysterese UND Output = 0 W)
-  - `Output = 0 W`-Guard verhindert Fehlauslösung während PI noch regelt
-* **PI-Regelung:**
-  - Script wird mit `ac_charge_mode=true` aufgerufen → invertierte Fehlerberechnung: `target_offset − grid`
-  - Positiver Fehler → Ladeleistung erhöhen (Grid zu negativ → mehr laden)
-  - `max_power` = konfiguriertes Lade-Limit
-  - `at_max/at_min`-Guards werden nicht angewendet (Richtung invertiert)
-  - **Separate P/I-Faktoren:** P klein (~0.3–0.5) wegen langer Hardware-Flanke (~25 s); I-Anteil macht die eigentliche Regelarbeit
-* **Zustandsspeicher:** `input_boolean` (`ac_charge_state_helper`) persistent — signalisiert PI-Script-Aufrufzweig
-* **Rückkehr:**
-  - Zone 1 → Modus `'1'` (Timer-Toggle) + Integral Reset
-  - Zone 2 → Modus `'0'` + Output 0W + Integral Reset
-* **Priorität:** Zone 3 (SOC-Schutz) hat immer Vorrang
+* **Blockiert durch:** Zone 0 (Überschuss-Bool = `on`) und Tarif-Laden (Tarif-Bool = `on`).
+* **Eintritts-Bedingung (Fall G):** AC Laden aktiviert UND SOC < Ladeziel UND Modus ≠ `'3'` UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + Output) < −Hysterese.
+* **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`. Separate P/I-Faktoren.
+* **Rückkehr:** Zone 1 → Modus `'1'` (Timer-Toggle) + Integral Reset. Zone 2 → Modus `'0'` + Output 0W + Integral Reset.
 
 ---
 
-### 5. ⏱️ Timer-Toggle und Moduswechsel-Sequenz
+### 7. 💹 Tarif-Arbitrage (Optional)
 
-Um die stabile Übernahme von Moduswechseln durch den Solakon ONE zu gewährleisten, wird statt eines festen Werts ein **Toggle zwischen 3598 und 3599** gesendet:
+Optimiert die Speichernutzung basierend auf deinem dynamischen Stromtarif. Diese Logik lädt die Batterie bei extrem günstigen Preisen gezielt aus dem Netz und sperrt die Entladung in "neutralen" Preisphasen, um die Energie für teure Spitzenzeiten aufzusparen.
 
-- Wenn aktueller Timer-Wert = 3599 → schreibe 3598
-- Sonst → schreibe 3599
+#### Preis-Steuerung (Statisch & Dynamisch)
 
-Dies erzeugt eine Zustandsänderung, die den Wechselrichter zur sicheren Übernahme des neuen Modus veranlasst. Kein Delay erforderlich. Der Toggle wird bei jedem Moduswechsel (Falls A, D, E, G, H-Zone1, I-Zone1) direkt vor dem Setzen des Modus durchgeführt.
+Du kannst für beide Schwellenwerte entweder feste Zahlenwerte nutzen oder **dynamische Helfer** (`input_number`) hinterlegen. Ein gesetzter Helfer überschreibt immer den statischen Wert.
+
+| Schwelle | Verhalten bei Preis-Unterschreitung | Override-Möglichkeit |
+|:---------|:------------------------------------|:---------------------|
+| **Günstig-Schwelle** | **Tarif-Laden aktiv** (GT) + Entladesperre | `input_number` (z.B. Tages-Min + 2ct) |
+| **Teuer-Schwelle** | **Entladesperre** — Zone 1 & 2 werden gestoppt (TM) | `input_number` (z.B. Tages-Schnitt) |
+
+#### Die Preiszonen im Detail
+
+| Aktueller Preis | Verhalten der Automatisierung |
+|:----------------|:------------------------------|
+| `Preis < Günstig-Schwelle` | **Fall GT (Tarif-Laden):** Akku lädt mit `tariff_charge_power`. Entladung blockiert. |
+| `Günstig ≤ Preis < Teuer` | **Fall TM (Entladesperre):** Akku passiv. Zone 1 & 2 werden gestoppt. |
+| `Preis ≥ Teuer-Schwelle` | **Normalbetrieb:** Die Standard-SOC-Zonen-Logik regelt die Einspeisung. |
+
+#### Tarif-Laden (Fall GT)
+
+* **Eintritts-Bedingung:** Tarif-Arbitrage aktiviert **UND** Preis < Günstig-Schwelle **UND** SOC < Ziel-SOC **UND** Modus ≠ `'3'` **UND** kein Überschuss-Laden aktiv.
+* **Verhalten:** Setzt die konfigurierte Ladeleistung (`tariff_charge_power`) — kein PI-Regler, kein Toleranz-Check.
+* **Abbruch:** Preis steigt über Günstig-Schwelle **ODER** SOC-Ladeziel erreicht.
+* **Rückkehr:** Zone 1 → Timer-Toggle + Modus `'1'` / Zone 2 → Modus `'0'` + Output 0W.
+* **Priorität:** Tarif-Laden (GT) liegt vor AC-Laden (G) im choose-Block.
+
+#### Entladesperre / Discharge-Lock (Fall TM)
+
+* **Bedingung:** Tarif aktiv **UND** Günstig ≤ Preis < Teuer **UND** kein AC/Tarif-Laden **UND** Modus = `'1'`.
+* **Wirkung:** Stoppt sofort jede Entladung in Zone 1 und Zone 2. Der Wechselrichter wird auf 0W (Modus `'0'`) gesetzt.
+* **Zone-1-Besonderheit:** Zyklus-Helper wird auf `off` zurückgesetzt und Surplus-Bool ggf. bereinigt. Fall D kann den Modus dadurch nicht sofort wiederherstellen.
+* **Reaktivierung:** Wenn der Preis die Teuer-Schwelle überschreitet, können Falls A und E wieder feuern (Entladesperre aufgehoben).
+
+#### ⚠️ Wichtiger Hinweis zu Sensoren & Einheiten
+
+Der Blueprint ist **sensor-agnostisch**. Er führt keine automatische Skalierung durch (z. B. von Euro in Cent).
+* **Einheitlichkeit:** Die Einheit deines Preissensors (z. B. von Tibber oder Nordpool) **muss** mit der Einheit deiner Schwellenwerte und Helfer identisch sein.
+* **Beispiel:** Liefert dein Sensor `0.34` (€), nutze als Schwelle `0.20`. Liefert er `34.0` (ct), nutze `20.0`.
+* **Ausfallsicherheit:** Bei Status `unavailable` oder `unknown` des Preissensors wird die Tarif-Logik komplett ignoriert (Sicherheits-Fallback).
+
+---
+
+### 8. ⏱️ Timer-Toggle und Moduswechsel-Sequenz
+
+Statt eines festen Werts wird ein **Toggle zwischen 3598 und 3599** gesendet. Dies erzeugt eine Zustandsänderung, die den Wechselrichter zur sicheren Übernahme des neuen Modus veranlasst. Der Toggle wird bei jedem Moduswechsel (Falls A, D, E, GT, G, HT-Zone1, H-Zone1, I-Zone1) direkt vor dem Setzen des Modus durchgeführt.
 
 **Kontinuierlicher Timeout-Reset (Schritt 2):** Countdown < 120s → Timer-Toggle.
 
 ---
 
-### 6. 🌙 Nachtabschaltung (Optional)
+### 9. 🌙 Nachtabschaltung (Optional)
 
 Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 
 * **Schwelle:** PV-Leistung unter dem Wert der **PV-Ladereserve** (kein separater Parameter)
-* **Verhalten bei Nacht:** Modus → `'0'`, Integral reset, Output 0W
-* **Zone 1:** Läuft durch (hoher SOC → aggressive Entladung weiterhin gewünscht)
+* **Verhalten:** Modus → `'0'`, Integral reset, Output 0 W
+* **Zone 2 Reaktivierung:** Sobald PV wieder über die PV-Ladereserve steigt, greift Fall E
 
 ---
 
@@ -244,6 +277,7 @@ Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 | **Script** | PI-Regler Script | `script.pi_regler` | Aus dem PI-Regler Blueprint erstelltes Script |
 | **Helper** | Surplus-Zustand-Speicher | `input_boolean.solakon_surplus_aktiv` | Nur wenn Zone 0 aktiv. |
 | **Helper** | AC-Lade-Zustand-Speicher | `input_boolean.solakon_ac_laden_aktiv` | Nur wenn AC Laden aktiv. |
+| **Helper** | Tarif-Lade-Zustand-Speicher | `input_boolean.solakon_tarif_laden_aktiv` | Nur wenn Tarif-Arbitrage aktiv. |
 
 ---
 
@@ -254,9 +288,9 @@ Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 | **P-Faktor** | 1.3 | 0.1 | 5.0 | Proportional-Verstärkung. Höher = aggressiver. |
 | **I-Faktor** | 0.05 | 0.01 | 0.2 | Integral-Verstärkung. Höher = schnellere Fehlerkorrektur, aber instabiler. |
 | **Toleranzbereich** | 25 W | 0 | 200 W | Totband um Regelziel. Keine PI-Korrektur innerhalb (stattdessen Integral-Decay). |
-| **Wartezeit** | 3 s | 0 | 30 s | Verzögerung nach Leistungsänderung in allen Modi (Zone 1, Zone 2, AC Laden). Kompensiert die Reaktionszeit des Wechselrichters. |
+| **Wartezeit** | 3 s | 0 | 30 s | Verzögerung nach Leistungsänderung. Kompensiert die Reaktionszeit des Wechselrichters. |
 
-> **Hinweis:** P- und I-Faktor gelten für Zone 1 und Zone 2. Für den AC-Lade-Modus (Modus `'3'`) werden separate Faktoren verwendet — siehe [AC Laden Parameter](#-ac-laden-optional).
+> **Hinweis:** P- und I-Faktor gelten für Zone 1 und Zone 2. Für den AC-Lade-Modus werden separate Faktoren verwendet.
 
 ---
 
@@ -266,21 +300,12 @@ Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 |:----------|:---------|:----|:----|:-------------|
 | **Zone 1 Start** | 50 % | 1 % | 99 % | Überschreiten aktiviert Zone 1. |
 | **Zone 3 Stopp** | 20 % | 1 % | 49 % | Unterschreiten stoppt Entladung komplett. |
-| **Max. Entladestrom Zone 1** | 40 A | 0 A | 40 A | Zone 2 und AC Laden nutzen automatisch 0 A. |
-
-**Wichtig:** Zone-1-Schwelle muss **größer** als Zone-3-Schwelle sein! Blueprint validiert dies beim Start.
-
----
-
-### ⚙️ Zone 1/2 - Parameter
-
-| Parameter | Standard | Min | Max | Beschreibung |
-|:----------|:---------|:----|:----|:-------------|
-| **Nullpunkt-Offset-1 (Statisch)** | 30 W | -100 | 100 W | Statischer Fallback für Zone 1. |
-| **Nullpunkt-Offset-1 (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
-| **Nullpunkt-Offset-2 (Statisch)** | 30 W | -100 | 100 W | Statischer Fallback für Zone 2. |
-| **Nullpunkt-Offset-2 (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
-| **PV-Ladereserve** | 50 W | 0 | 1000 W | Zone-2-Limit: `Max(0, PV − Reserve)`. Dient auch als PV-Schwelle für Nachtabschaltung. |
+| **Max. Entladestrom Zone 1** | 40 A | 0 A | 40 A | Zone 2 und AC/Tarif-Laden nutzen automatisch 0 A. |
+| **Nullpunkt-Offset 1 (Statisch)** | 30 W | -100 | 100 W | Statischer Fallback für Zone 1. |
+| **Nullpunkt-Offset 1 (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
+| **Nullpunkt-Offset 2 (Statisch)** | 30 W | -100 | 100 W | Statischer Fallback für Zone 2. |
+| **Nullpunkt-Offset 2 (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
+| **PV-Ladereserve** | 50 W | 0 | 1000 W | Zone-2-Limit: `Max(0, PV − Reserve)`. Auch PV-Schwelle für Nachtabschaltung. |
 
 ---
 
@@ -308,13 +333,26 @@ Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
 | **AC Laden aktivieren** | false | — | — | Schalter für AC Laden. |
-| **SOC-Ladeziel** | 90 % | 10 % | 99 % | Laden stoppt bei diesem SOC. |
-| **Max. Ladeleistung** | 800 W | 50 | 1200 W | Obergrenze der AC-Ladeleistung (`max_power` ans Script). |
-| **Hysterese Ladeabbruch** | 50 W | 0 | 300 W | Totband für Ein- und Austritt. Eintritt: (Grid + Output) < −Hysterese. Austritt: Grid ≥ (Offset + Hysterese) UND Output = 0 W. |
-| **AC Laden Offset (Statisch)** | -50 W | -100 | 100 W | Regelziel im AC-Lade-Modus. Negativ = Einspeisung angestrebt → höhere Ladeleistung. |
+| **SOC-Ladeziel** | 90 % | 10 % | 99 % | Laden stoppt bei diesem SOC. Empfohlen: > Zone-1-Schwelle, damit Zone 1 direkt nach dem Laden übernimmt. |
+| **Max. Ladeleistung** | 800 W | 50 | 1200 W | Obergrenze der AC-Ladeleistung. |
+| **Hysterese Ladeabbruch** | 50 W | 0 | 300 W | Totband für Ein- und Austritt. |
+| **AC Laden Offset (Statisch)** | -50 W | -100 | 100 W | Regelziel im AC-Lade-Modus. Negativ = Einspeisung angestrebt. |
 | **AC Laden Offset (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
-| **AC Laden P-Faktor** | 0.5 | 0.1 | 5.0 | Proportional-Verstärkung im AC-Lade-Modus. Klein halten wegen langer Hardware-Flanke (~25 s). |
-| **AC Laden I-Faktor** | 0.07 | 0.01 | 0.2 | Integral-Verstärkung im AC-Lade-Modus. Macht bei langen Wartezeiten die eigentliche Regelarbeit. |
+| **AC Laden P-Faktor** | 0.5 | 0.1 | 5.0 | Klein halten wegen langer Hardware-Flanke (~25 s). |
+| **AC Laden I-Faktor** | 0.07 | 0.01 | 0.2 | Macht bei langen Wartezeiten die eigentliche Regelarbeit. |
+
+---
+
+### 💹 Tarif-Arbitrage (Optional)
+
+| Parameter | Standard | Min | Max | Beschreibung |
+|:----------|:---------|:----|:----|:-------------|
+| **Tarif-Arbitrage aktivieren** | false | — | — | Schalter für die gesamte Tarif-Logik. |
+| **Strompreis-Sensor** | *(leer)* | — | — | Generischer Sensor. Einheit muss zu den Schwellwerten passen. |
+| **Günstig-Schwelle** | 10 | -100 | 100 | Unter diesem Wert: Laden + Entladesperre (Zone 1 und Zone 2). |
+| **Teuer-Schwelle** | 25 | -100 | 100 | Ab diesem Wert: Entladesperre aufgehoben, normale SOC-Logik. |
+| **SOC-Ladeziel Tarif-Laden** | 90 % | 10 % | 99 % | Tarif-Laden stoppt bei diesem SOC. Empfohlen: > Zone-1-Schwelle. Unabhängig vom AC-Laden-Ladeziel. |
+| **Ladeleistung Tarif-Laden** | 800 W | 50 | 1200 W | Direkt gesetzter Wert — kein PI-Regler. |
 
 ---
 
@@ -347,71 +385,26 @@ Passt den Nullpunkt-Offset vollautomatisch an die aktuelle Netz-Volatilität an 
 
 ## 🔧 PI-Regler Einstellung
 
-Der Regler wird in drei Schritten eingestellt. Ziel ist ein System, das schnell und präzise auf Änderungen reagiert, aber nicht dauerhaft hin- und herschwingt. Die Grundidee: **klein anfangen, langsam steigern, beim ersten Zittern stoppen und einen kleinen Schritt zurückgehen**.
-
 ### Schritt 1: Wartezeit finden (P = 1, I = 0)
-```yaml
-P-Faktor: 1.0
-I-Faktor: 0.0
-```
 
-P=1 erzeugt einen gut sichtbaren Sprung in der Ausgangsleistung — damit lässt sich die Systemantwort klar ablesen.
-
-Die Gesamtverzögerung setzt sich aus mehreren Teilen zusammen:
-
-1. **Modbus-Schreiben** — HA wartet automatisch auf die Bestätigung dass der Sollwert erfolgreich geschrieben wurde, bevor die Automation weiterläuft (typisch 0.5–2 s je nach Bus-Last). Das zählt **nicht** zur Wartezeit — die Wartezeit beginnt erst danach.
-2. **Wechselrichter-Reaktion** — der Solakon ONE braucht nach dem erfolgreichen Schreiben eine gewisse Zeit um die Ausgangsleistung tatsächlich anzupassen (Hardware-Flanke). Das ist der Hauptanteil der Wartezeit.
-3. **Messlatenz** — Shelly und Solakon-Integration lesen die neuen Werte über eigenes Modbus-Polling aus; auch dieser Zeitversatz gehört zur Wartezeit.
-
-Die **Wartezeit** deckt Punkte 2 und 3 ab. Beispiel für die Gesamtstrecke vom Schreibbefehl bis zum stabilen Messwert:
-```
-number.set_value abgesendet
-  + 0.5–2.0 s   Modbus-Schreiben + Write-Bestätigung   → Wartezeit beginnt hier
-  + 0.5–1.5 s   Wechselrichter passt Ausgangsleistung an (Hardware-Flanke)
-  + 0.5–1.5 s   Shelly + Solakon-Integration lesen neue Werte per Polling
-─────────────────────────────────────────────────────
-  = 1.5–5.0 s   Gesamtverzögerung
-  → sinnvolle Wartezeit: 1–3 s
-```
-
-Die eigenen Zeitstempel lassen sich am einfachsten in den **Aktivitätslogs** von Home Assistant ablesen (Einstellungen → System → Protokolle → Aktivitätslog), wo jeder Service-Call mit Zeitstempel erscheint. Zu kurz → Regler liest veraltete Messwerte und schwingt. Zu lang → träge Regelung.
+Die **Wartezeit** deckt Wechselrichter-Reaktion und Messlatenz ab. Sinnvolle Wartezeit: 1–3 s.
 
 ### Schritt 2: P-Faktor finden (I = 0)
-```yaml
+
+```
 P-Faktor: 0.3   # Startpunkt
 I-Faktor: 0.0
 ```
 
-**Vorgehen:** P klein anfangen und schrittweise erhöhen. Nach jeder Änderung das System einige Minuten beobachten — am besten wenn gerade ein wechselnder Verbraucher läuft (Waschmaschine, Herd o.ä.).
-
-| Was ist zu sehen? | Bedeutung | Aktion |
-|:------------------|:----------|:-------|
-| Output reagiert kaum, Netz bleibt weit vom Ziel | P zu klein | P erhöhen (+0.2 pro Schritt) |
-| Output schwingt leicht um den Zielwert, beruhigt sich aber | Guter Bereich | Hier bleiben oder noch minimal erhöhen |
-| Output und Netzleistung pendeln dauerhaft hin und her ohne sich zu beruhigen | P zu groß, System schwingt | **Letzten Schritt zurück!** |
-
-**Ziel:** Den Punkt finden wo es gerade eben anfängt leicht zu zittern — dann P um **einen Schritt zurücknehmen** (z.B. von 1.4 auf 1.2). Das ist der optimale Arbeitsbereich.
-
-Typischer Arbeitsbereich nach diesem Verfahren: **0.8–1.5**.
-
-> **Tipp:** Das Schwingen sieht man am besten in einem Verlaufsgraph der Netzleistung (z.B. in Energie → Netz, oder einem HA-Verlaufsgraph für den Shelly-Sensor). Stabiles Pendeln mit kleiner Amplitude ist normal — erst wenn der Output dauerhaft auf und ab fährt ohne Tendenz zum Einpendeln ist es zu viel.
+Schrittweise erhöhen bis System leicht anfängt zu zittern — dann einen Schritt zurück. Typischer Arbeitsbereich: **0.8–1.5**.
 
 ### Schritt 3: I-Faktor hinzufügen
-```yaml
+
+```
 I-Faktor: 0.02   # Startpunkt
 ```
 
-Mit P allein verbleibt eine bleibende Regelabweichung wenn sich der Hausverbrauch ändert. Der I-Anteil korrigiert das langsam aber sicher. **Dasselbe Vorgehen wie bei P:** klein anfangen und beobachten.
-
-| Was ist zu sehen? | Bedeutung | Aktion |
-|:------------------|:----------|:-------|
-| Regler trifft Zielwert nicht dauerhaft, braucht sehr lange | I zu klein | I erhöhen (+0.01 pro Schritt) |
-| Regler trifft Zielwert zuverlässig, System bleibt stabil | Gut | Fertig |
-| Langsames, lang-periodisches Schwingen (mehrere Minuten) | I zu groß | I leicht reduzieren |
-
-Typischer Arbeitsbereich: **0.03–0.08**. Für AC Laden separat tunen — dort wegen der langen Hardware-Flanke (~25 s) P besonders klein halten (~0.3–0.5) und I die eigentliche Arbeit machen lassen.
-
-Zeichen für zu hohes I: System schwingt langsam mit langer Periode. Der **Anti-Windup** begrenzt das Integral auf ±1000, der **Toleranz-Decay** (5%/Zyklus bei Fehler ≤ Toleranz) baut es bei Ruhe automatisch ab.
+Typischer Arbeitsbereich: **0.03–0.08**. Für AC Laden separat tunen — P besonders klein halten (~0.3–0.5). Tarif-Laden verwendet keinen PI-Regler.
 
 ---
 
@@ -429,129 +422,67 @@ Zeichen für zu hohes I: System schwingt langsam mit langer Periode. Der **Anti-
 
 ### Architektur
 
-1. **Hauptautomatisierung** (`solakon_one_nulleinspeisung.yaml`): Zonen-Steuerung, SOC-Logik, Surplus-Zustand, AC-Lade-Zustand, Entladestrom-Verwaltung, Timeout-Reset, PI-Aufruf-Guard, Integral-Decay/-Einfrieren
-2. **PI-Regler Script** (`PI-Regler.yaml`): Reine Berechnungslogik mit modusabhängiger Fehlerberechnung via `ac_charge_mode`-Feld
+1. **Hauptautomatisierung** (`solakon_one_nulleinspeisung.yaml`): Zonen-Steuerung, SOC-Logik, Surplus/AC/Tarif-Lade-Zustand, Entladestrom-Verwaltung, Timeout-Reset, PI-Aufruf-Guard, Integral-Decay/-Einfrieren
+2. **PI-Regler Script** (`PI-Regler.yaml`): Reine Berechnungslogik — wird für AC-Laden genutzt, nicht für Tarif-Laden
 
-### PI-Regler Implementierung (im Script)
+### Tarif-Arbitrage State-Machine
 
-**Fehlerberechnung (modusabhängig):**
 ```
-ac_charge_mode = false (Normal):
-  raw_error = grid_power - target_offset
+Eintritts-Bedingung (Fall GT):
+  tariff_arbitrage_enabled UND Preis < cheap_threshold
+  UND soc < tariff_soc_charge_target
+  UND Modus ≠ '3' ← Guard: verhindert Re-Eintritt
+  UND NICHT surplus_active ← Guard: Zone 0 hat Vorrang
+  → tariff_charge_state_helper = on
+  → Output = tariff_charge_power (direkt, kein PI)
+  → Modus = '3', Timer-Toggle
 
-ac_charge_mode = true (AC Laden):
-  raw_error = target_offset - grid_power   ← invertiert
+Direktes Setzen (Zweig BT, jeder Trigger):
+  tariff_charge_mode_active = true
+  → number.set_value → tariff_charge_power
+  → delay wait_time
 
-In beiden Fällen — Kapazitäts-Clamping:
-  raw_error > 0: error = Min(raw_error, max_power - current_power)
-  raw_error < 0: error = Max(raw_error, 0 - current_power)
-```
-
-**Integral und Korrektur:**
-```
-integral_new = Clamp(integral_old + error, -1000, 1000)
-correction   = error * P_Factor + integral_new * I_Factor
-new_power    = current_power + correction
-final_power  = Clamp(new_power, 0, max_power)
-```
-
-### Integral-Management (in Hauptautomatisierung)
-```
-Zone 0 aktiv:              integral = integral_old (eingefroren)
-AC Laden aktiv (Zweig B):  → PI-Script aufgerufen (ac_charge_mode=true)
-                              at_max/at_min Guards NICHT angewendet
-Normal (Zweig C):          → PI-Script aufgerufen (ac_charge_mode=false)
-                              at_max/at_min Guards angewendet
-Sonst (Decay):
-  |Integral| > 10 → integral * 0.95
-  sonst           → keine Änderung
-```
-
-### Dynamisches Power-Limit
-```
-Modus '3' (AC Laden): max_power = ac_charge_power_limit
-Zone 1 (cycle = on):  max_power = hard_limit
-Zone 2 (cycle = off): max_power = Max(0, PV - pv_charge_reserve)
-```
-
-### Timer-Toggle Mechanismus
-```
-Wenn timer_value == 3599 → schreibe 3598
-Sonst                    → schreibe 3599
-→ Anschließend: Modus setzen
-```
-
-### Fall D / Recovery — Modus-Ausschluss und Dual-Restore
-```
-Bedingung: Zyklus = on
-       UND Modus ∉ {'1', '3'}   ← '3' (AC Laden) explizit ausgeschlossen
-       UND SOC > Zone-3-Schwelle
-
-Aktion: Timer-Toggle
-        → AC-Lade-Bool = on: Modus '3'
-        → sonst:              Modus '1'
-        (kein Integral-Reset, kein Zonenwechsel)
-```
-
-### Fall G — Eintritts-Guard
-```
-Bedingung: ac_charge_enabled
-       UND SOC < soc_ac_charge_limit
-       UND Modus ≠ '3' ← Guard: verhindert Re-Eintritt wenn AC Laden bereits aktiv (Modus = '3')
-       UND (grid + actual_power) < -ac_charge_hysteresis
-```
-Der Modus-Guard verhindert Fehlauslösung wenn `actual_power = 0` (Wechselrichter nicht im geregelten Betrieb).
-
-### Fall H — Abbruch-Bedingung
-```
-Bedingung: Modus = '3'
-       UND (soc >= soc_ac_charge_limit
-            ODER (grid >= ac_charge_offset + hysteresis UND actual_power == 0))
-
-  → ac_charge_state_helper = off, integral = 0
+Abbruch-Bedingung (Fall HT):
+  Modus = '3' UND tariff_charge_bool = on
+  UND (soc >= tariff_soc_charge_target ODER Preis >= cheap_threshold)
+  → tariff_charge_state_helper = off, integral = 0
   → Zone 1: Timer-Toggle + Modus '1'
   → Zone 2: Modus '0' + Output 0W
-```
-`actual_power == 0`-Guard verhindert Fehlauslösung während der PI noch aktiv regelt.
 
-### Fall I — Safety-Guard für Modus '3'
-```
-Bedingung: Modus = '3'
-       UND (ac_charge_enabled = false
-            ODER ac_charge_entity_valid = false
-            ODER ac_charge_state_helper ≠ 'on')
+Discharge-Lock (Fall TM):
+  price_discharge_locked = tariff_arbitrage_enabled
+                           UND price_sensor_valid
+                           UND Preis < expensive_threshold
+  Modus = '1' (Entladung läuft, egal ob Zone 1 oder Zone 2)
+  → Integral = 0
+  → Zone 1: cycle_active → off, Surplus-Bool → off
+  → Output = 0W, Modus = '0'
+  (Reaktivierung über Fall A/E wenn Preis ≥ expensive_threshold)
 
-Aktion: Integral = 0
-        → Zyklus = on (Zone 1): Timer-Toggle + Modus '1'
-        → Zyklus = off (Zone 2): Output 0W + Modus '0'
+Entladesperre-Guards (Falls A/E):
+  → Fall A blockiert (Zone 1 kann nicht starten)
+  → Fall E blockiert (Zone 2 kann nicht starten)
 ```
-Fängt externe Modussetzung auf `'3'` ab wenn AC Laden nicht aktiv ist.
 
 ### AC-Lade-Zustand State-Machine
+
 ```
 Eintritts-Bedingung (Fall G):
   ac_charge_enabled UND soc < soc_ac_charge_limit
-  UND Modus ≠ '3' ← Guard: verhindert Re-Eintritt wenn AC Laden bereits aktiv
+  UND Modus ≠ '3' ← Guard: verhindert Re-Eintritt
+  UND NICHT tariff_charge_active ← Guard: Tarif-Laden hat Vorrang
+  UND NICHT surplus_active ← Guard: Zone 0 hat Vorrang
   → ac_charge_state_helper = on
   → Modus = '3', Output = 0W, Timer-Toggle
+```
 
-PI-Aufruf (Zweig B, jeder Trigger):
-  ac_charge_mode_active = true UND |grid_error_abs| > tolerance
-  → PI-Script mit ac_charge_mode=true, max_power=ac_charge_power_limit
-  → separate P/I-Faktoren (ac_charge_p_factor, ac_charge_i_factor)
+### Dynamisches Power-Limit
 
-Abbruch-Bedingung (Fall H):
-  mode = '3' UND (soc >= soc_ac_charge_limit
-                  ODER (grid >= ac_charge_offset + hysteresis UND actual_power == 0))
-  → ac_charge_state_helper = off, integral = 0
-  → Zone 1: Timer-Toggle + Modus '1'
-  → Zone 2: Modus '0' + Output 0W
-
-Safety-Korrektur (Fall I):
-  mode = '3' UND ac_charge nicht aktiv/legitimiert
-  → integral = 0
-  → Zone 1: Timer-Toggle + Modus '1'
-  → Zone 2: Modus '0' + Output 0W
+```
+Modus '3' + tariff_charge_mode_active:  tariff_charge_power (Zweig BT, kein PI)
+Modus '3' + ac_charge_mode_active:      ac_charge_power_limit (PI mit ac_charge_mode=true)
+Zone 1 (cycle = on):                    hard_limit
+Zone 2 (cycle = off):                   Max(0, PV - pv_charge_reserve)
 ```
 
 ### Automatische Entladestrom-Steuerung
@@ -559,25 +490,25 @@ Safety-Korrektur (Fall I):
 | Zone | Entladestrom | Bedingung |
 |:-----|:------------|:----------|
 | Zone 0 (Überschuss) | 2 A | Nur wenn abweichend |
-| Zone 1 (Aggressiv) | Konfigurierter Maximalwert | Nur wenn abweichend und kein Surplus, kein AC Laden |
-| Zone 2 / AC Laden (Modus 3) | 0 A | Nur wenn abweichend |
+| Zone 1 (Aggressiv) | Konfigurierter Maximalwert | Nur wenn abweichend und kein Surplus, kein AC/Tarif-Laden |
+| Zone 2 / AC/Tarif-Laden (Modus 3) | 0 A | Nur wenn abweichend |
 
 ---
 
 ## ⚠️ Wichtige Hinweise
 
 1. **Helper und Script vor Installation erstellen:** input_boolean (Zyklus), input_number (Integral), PI-Regler Script müssen existieren
-2. **Optionale Helper erstellen wenn Funktion aktiviert:** Surplus-Boolean für Zone 0; AC-Lade-Boolean für AC Laden
+2. **Optionale Helper erstellen wenn Funktion aktiviert:** Surplus-Boolean für Zone 0; AC-Lade-Boolean für AC Laden; Tarif-Lade-Boolean für Tarif-Arbitrage
 3. **Netzleistungssensor:** Korrekte Polarität (positiv = Bezug, negativ = Einspeisung)
-4. **AC Laden Regelziel:** Eigener konfigurierbarer Offset (`ac_charge_offset`), unabhängig von Zone 1/2. Negativer Wert = Einspeisung angestrebt → PI erhöht Ladeleistung.
-5. **AC Laden P/I-Tuning:** Separate P/I-Faktoren (`ac_charge_p_factor`, `ac_charge_i_factor`). P-Faktor klein halten (~0.3–0.5) wegen langer Hardware-Flanke (~25 s) — der I-Anteil macht die eigentliche Regelarbeit.
-6. **Integral-Helper:** Wird automatisch verwaltet — nicht manuell ändern
-7. **Toleranz-Decay:** Verhindert Integral-Windup — 5% Abbau wenn `|Integral| > 10` und Fehler ≤ Toleranz
-8. **Zone-0-Integral-Einfrieren:** In der Überschuss-Phase kein Decay, kein PI-Aufruf
-9. **Recovery:** Modus-Verlust bei aktivem Zyklus wird automatisch erkannt (Fall D) — AC-Laden-Modus `'3'` wird dabei nicht überschrieben; bei aktivem AC-Lade-Bool wird `'3'` wiederhergestellt
-10. **Fall G Guard:** Eintritt in AC Laden nur wenn Modus ≠ `'3'` — verhindert Re-Eintritt bei bereits aktivem AC Laden
-11. **Modus-Werte:** `'0'` = Disabled, `'1'` = INV Discharge PV Priority, `'3'` = INV Charge PV Priority
-12. **Fall I Safety:** Externer Modus-`'3'`-Zustand ohne aktive AC-Lade-Session wird automatisch korrigiert
+4. **Tarif-Sensor Einheit:** Sensor-Wert und Schwellwerte müssen dieselbe Einheit verwenden — kein Blueprint-seitiges Umrechnen
+5. **Tarif-Laden kein PI:** Direkt gesetzter Wert — kein Toleranz-Check, kein Integral-Einfluss
+6. **Entladesperre Schwelle:** `expensive_threshold` steuert die Sperre (unterhalb = gesperrt). TM greift für **Zone 1 und Zone 2** — `cycle_active` spielt keine Rolle mehr.
+7. **Fallback bei Sensor-Ausfall:** Weder Laden noch Sperre — System verhält sich wie ohne Tarif-Arbitrage
+8. **AC Laden vs. Tarif-Laden:** Beide vollständig unabhängig konfigurierbar. Tarif-Laden hat Vorrang wenn beide gleichzeitig zutreffen würden.
+9. **Überschuss blockiert Lademodi:** Zone 0 aktiv → weder Tarif-Laden (GT) noch AC-Laden (G) können starten.
+10. **Integral-Helper:** Wird automatisch verwaltet — nicht manuell ändern
+11. **Recovery:** Modus-Verlust bei aktivem Zyklus wird automatisch erkannt (Fall D) — sowohl AC- als auch Tarif-Lade-Modus `'3'` wird korrekt wiederhergestellt
+12. **Fall I Safety:** Greift nur wenn weder AC-Laden noch Tarif-Laden aktiv ist
 
 ---
 
@@ -585,8 +516,10 @@ Safety-Korrektur (Fall I):
 
 | Trigger | ID | Beschreibung |
 |:--------|:---|:------------|
-| Grid Power Change | `grid_power_change` | Sofortige PI-Regelung bei Netzleistungsänderung |
-| Solar Power Change | `solar_power_change` | Sofortige PI-Regelung bei PV-Leistungsänderung |
+| Grid Power Change | `grid_power_change` | Sofortige Regelung bei Netzleistungsänderung |
+| Solar Power Change | `solar_power_change` | Sofortige Regelung bei PV-Leistungsänderung |
 | SOC High | `soc_high` | Zone 1 Start (SOC > Zone-1-Schwelle) |
 | SOC Low | `soc_low` | Zone 3 Start (SOC < Zone-3-Schwelle) |
 | Mode Change | `mode_change` | Reagiert auf externe Modusänderungen, löst ggf. Recovery (Fall D) oder Safety-Korrektur (Fall I) aus |
+
+> **Hinweis Tarif-Trigger:** Ein separater Preis-Trigger ist in Blueprint-Automationen mit optionalen Entitäten nicht sauber realisierbar. Die Tarif-Logik greift beim nächsten regulären Grid/PV-Trigger. Da diese bei aktiver PV sehr häufig feuern, ist die Reaktionsverzögerung bei Preisübergängen vernachlässigbar.

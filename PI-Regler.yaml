@@ -6,7 +6,7 @@ blueprint:
     ac_charge_mode = true: invertierte Fehlerberechnung für AC-Laden (Ziel = target_offset - grid).
     ac_charge_mode = false (Standard): normale Fehlerberechnung (Ziel = grid - target_offset).
   domain: script
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/main/PI-Regler.yaml
+  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/experimental_multi_instancing/PI-Regler.yaml
 
 mode: single
 
