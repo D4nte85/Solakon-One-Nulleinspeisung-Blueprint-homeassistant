@@ -3,8 +3,9 @@ blueprint:
   description: >
     Ein reines Rechen-Script. Erwartet alle Entitäten und Werte als Variablen
     beim Aufruf aus einer Automatisierung.
-    ac_charge_mode = true: invertierte Fehlerberechnung für AC-Laden (Ziel = target_offset - grid).
-    ac_charge_mode = false (Standard): normale Fehlerberechnung (Ziel = grid - target_offset).
+    ac_charge_mode = true: invertierte Fehlerberechnung für AC-Laden (raw_error = target_offset - grid).
+    ac_charge_mode = false (Standard): normale Fehlerberechnung (raw_error = grid - target_offset).
+    error_share (0.0-1.0): skaliert raw_error auf den Anteil dieser Instanz. Standard = 1.0.
   domain: script
   source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/experimental_multi_instancing/PI-Regler.yaml
 
@@ -39,11 +40,19 @@ fields:
   ac_charge_mode:
     name: AC Laden aktiv (Bool)
     description: >
-      true  = AC Laden: raw_error = target_offset − grid (Vorzeichen invertiert).
-              Positiver Fehler → Ladeleistung erhöhen.
-      false = Normal:   raw_error = grid − target_offset (Standard-Nulleinspeisung).
+      Bestimmt die Vorzeichen-Richtung des Basisfehlers (vor error_share-Skalierung).
+      true  = AC Laden: Basis = target_offset − grid (Positiver Fehler → Ladeleistung erhöhen).
+      false = Normal:   Basis = grid − target_offset (Positiver Fehler → Output erhöhen).
     required: false
     default: false
+
+  error_share:
+    name: Fehler-Anteil (0.0–1.0)
+    description: >
+      Anteil des Netzfehlers, den diese Instanz übernimmt (Multi-Instanz-Betrieb).
+      Im Einzelbetrieb nicht setzen — Standard = 1.0 (voller Fehler).
+    required: false
+    default: 1.0
 
 variables:
   grid_float: "{{ states(grid_power) | float(0) }}"
@@ -57,12 +66,10 @@ variables:
   # Fehlerrichtung je nach Modus:
   #   Normal:    grid - target  → positiv bei Netzbezug (Output erhöhen)
   #   AC Laden:  target - grid  → positiv wenn Grid < Sollwert (Ladeleistung erhöhen)
+  # error_share skaliert den Fehler auf den Anteil dieser Instanz (Multi-Instanz).
   raw_error: >
-    {% if ac_charge_mode | bool(false) %}
-      {{ target_float - grid_float }}
-    {% else %}
-      {{ grid_float - target_float }}
-    {% endif %}
+    {% set base = (target_float - grid_float) if ac_charge_mode | bool(false) else (grid_float - target_float) %}
+    {{ base * (error_share | float(1.0)) }}
   grid_error_abs: "{{ raw_error | abs }}"
 
   # Kapazitäts-Clamping: begrenzt Fehler auf tatsächlich nutzbare Kapazität

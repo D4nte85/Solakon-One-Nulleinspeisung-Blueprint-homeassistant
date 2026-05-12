@@ -19,8 +19,11 @@ blueprint:
     - **Integral-Decay:** 5 % Abbau pro Zyklus solange Fehler ≤ Toleranz und |Integral| > 10 (in Hauptautomatisierung).
     - **Integral-Einfrieren:** In Zone 0 (Überschuss) kein Decay, kein PI-Aufruf.
     - **Fehlerberechnung (modusabhängig, im Script):**
-      - Normal (`ac_charge_mode=false`): `raw_error = grid − target_offset`
-      - AC Laden (`ac_charge_mode=true`): `raw_error = target_offset − grid` (invertiert)
+      - Normal (`ac_charge_mode=false`): `raw_error = (grid − target_offset) × error_share`
+      - AC Laden (`ac_charge_mode=true`): `raw_error = (target_offset − grid) × error_share` (invertiert)
+      - `error_share` = Anteil des Netzfehlers, den diese Instanz übernimmt (0–1, Standard 1.0).
+        Im Einzelbetrieb immer 1.0. Im Multi-Instanz-Betrieb von der Leistungsverteilungs-Automation
+        gesetzt: `(SOC − Min-SOC) / Σ(SOC_i − Min-SOC_i)` — proportional zur nutzbaren Kapazität.
     - **Kapazitäts-Clamping:** Fehler wird auf tatsächlich verfügbare Kapazität begrenzt.
     - **Dynamisches Power-Limit (`max_power` ans Script):**
       - Zone 1: Hard Limit
@@ -468,6 +471,20 @@ blueprint:
               entity:
                 domain: input_number
 
+      error_share_entity:
+            name: ⚖️ Fehler-Anteil Helfer (input_number, Optional — Multi-Instancing)
+            description: |
+              ⚠️ NUR für Multi-Instancing erforderlich — im Einzelbetrieb leer lassen.
+              input_number-Entität (0.0–1.0), die den Anteil des Netzfehlers enthält,
+              den diese Instanz regeln soll.
+              Die Leistungsverteilungs-Automation berechnet den Anteil proportional zur
+              nutzbaren Kapazität (SOC − Min-SOC) und schreibt ihn in diesen Helfer.
+              ⚠️ Wenn leer gelassen, übernimmt die Instanz den vollen Netzfehler (= 1.0).
+            default: {}
+            selector:
+              entity:
+                domain: input_number
+
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # ☀️ ÜBERSCHUSS-EINSPEISUNG (Optional - Zone 0)
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -850,6 +867,16 @@ variables:
       {{ states(ac_charge_offset_entity_id) | float(ac_charge_offset_static) }}
     {% else %}
       {{ ac_charge_offset_static }}
+    {% endif %}
+
+  # Fehler-Anteil (Multi-Instancing)
+  error_share_entity_id: !input error_share_entity
+  error_share_value: >
+    {% if error_share_entity_id is string and error_share_entity_id | length > 0
+       and states(error_share_entity_id) not in ['unknown', 'unavailable'] %}
+      {{ states(error_share_entity_id) | float(1.0) }}
+    {% else %}
+      1.0
     {% endif %}
 
   # Tarif-Arbitrage
@@ -1980,6 +2007,7 @@ actions:
               integral_entity: !input integral_helper
               output_entity: !input active_power_number
               ac_charge_mode: true
+              error_share: "{{ error_share_value }}"
           # Wartezeit
           - delay:
               seconds: "{{ wait_time_int }}"
@@ -2006,6 +2034,7 @@ actions:
               integral_entity: !input integral_helper
               output_entity: !input active_power_number
               ac_charge_mode: false
+              error_share: "{{ error_share_value }}"
           # Wartezeit
           - delay:
               seconds: "{{ wait_time_int }}"

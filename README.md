@@ -34,7 +34,8 @@ Für das Multi instancing:
 | `input_boolean` AC Laden | `...ac_laden_aktiv_i1` | `...ac_laden_aktiv_i2` |
 | `input_boolean` Tarif Laden | `...tarif_laden_aktiv_i1` | `...tarif_laden_aktiv_i2` |
 | PI-Regler Script | `script.pi_regler_i1` | `script.pi_regler_i2` |
-| **NEU** `input_number` Hard Limit | `...instanz1_limit` | `...instanz2_limit` |
+| `input_number` Hard Limit | `...instanz1_limit` | `...instanz2_limit` |
+| **NEU** `input_number` Fehler-Anteil | `...instanz1_share` | `...instanz2_share` |
 
 > **Hinweis:** Der Netz-Sensor (Shelly) wird von beiden Instanzen gleichzeitig gelesen — kein Problem, da nur lesend.
 ...
@@ -97,7 +98,28 @@ Persistenter Zustandsspeicher für das Tarif-Laden. Steuert den direkten Leistun
 3. Name: z.B. `Solakon Tarif Laden Aktiv`
 4. Speichern (Entity ID: z.B. `input_boolean.solakon_tarif_laden_aktiv`)
 
-### 7. Input Number Helper für Dynamischen Offset (Optional)
+### 7. Input Number Helper (Leistungslimit Dynamisch) — NUR für Multi-Instancing
+
+Wird von der Leistungsverteilungs-Automation beschrieben und begrenzt den Ausgangsleistungs-Hardlimit der Instanz dynamisch.
+
+1. **Einstellungen:** Min: `0`, Max: `≥ Global-Max`, Step: `1`, Initialwert: `800`
+2. In der Leistungsverteilung als „Max. Leistung (input_number)" eintragen
+3. In der Instanz-Automation als „Max. Ausgangsleistung — Dynamisch" eintragen
+
+### 8. Input Number Helper (Fehler-Anteil) — NUR für Multi-Instancing
+
+Enthält den Anteil des Netzfehlers (0.0–1.0), den diese Instanz über ihren PI-Regler übernimmt.
+Wird von der Leistungsverteilungs-Automation berechnet: `(SOC_i − Min-SOC_i) / Σ(SOC_j − Min-SOC_j)`.
+
+1. Gehen Sie zu **Einstellungen** → **Geräte & Dienste** → **Helfer** → **Number**
+2. Name: z.B. `Solakon Instanz 1 Share`
+3. **Einstellungen:** Min: `0`, Max: `1`, Step: `0.001`, Initialwert: `1`
+4. Speichern (Entity ID: z.B. `input_number.solakon_instanz1_share`)
+5. Wiederholen für jede weitere Instanz
+6. In der Leistungsverteilung als „Fehler-Anteil Helfer" eintragen
+7. In der Instanz-Automation als „Fehler-Anteil Helfer" eintragen
+
+### 9. Input Number Helper für Dynamischen Offset (Optional)
 
 Wenn Sie den Nullpunkt-Offset zur Laufzeit dynamisch anpassen möchten, empfehlen wir den **Solakon ONE — Dynamischer Offset Blueprint**. Dieser erstellt und befüllt die benötigten Helper automatisch.
 
@@ -119,7 +141,7 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
 
 * **P-Anteil:** Reagiert sofort auf aktuelle Abweichungen. Konfigurierbare Aggressivität über den P-Faktor.
 * **I-Anteil:** Summiert Abweichungen über die Zeit auf, eliminiert bleibende Regelabweichungen. Anti-Windup auf ±1000. Automatischer Reset bei Zonenwechsel. Toleranz-Decay 5%/Zyklus wenn Fehler ≤ Toleranz und |Integral| > 10. Zone-0-Einfrieren bei aktivem Überschuss.
-* **Fehlerberechnung:** Normal (`ac_charge_mode=false`): `raw_error = grid − target_offset`. AC Laden (`ac_charge_mode=true`): `raw_error = target_offset − grid` (invertiert).
+* **Fehlerberechnung:** Normal (`ac_charge_mode=false`): `raw_error = (grid − target_offset) × error_share`. AC Laden (`ac_charge_mode=true`): `raw_error = (target_offset − grid) × error_share` (invertiert). `error_share` skaliert den Fehler auf den Anteil dieser Instanz (Standard 1.0 = voller Fehler).
 * **Dynamisches Power-Limit:** Zone 1 → Hard Limit. Zone 2 → `Max(0, PV − Reserve)`. AC Laden → konfigurierbares Lade-Limit. Tarif-Laden → kein PI (direkter Wert).
 * **PI-Aufruf-Guard:** Zone 0 aktiv → PI nicht aufgerufen, Integral eingefroren. Tarif-Laden aktiv → direkt setzen. AC Laden aktiv → PI mit `ac_charge_mode=true`. Normal → PI nur wenn `|Fehler| > Toleranz` UND kein At-Limit.
 
@@ -439,7 +461,8 @@ Typischer Arbeitsbereich: **0.03–0.08**. Für AC Laden separat tunen — P bes
 ### Architektur
 
 1. **Hauptautomatisierung** (`solakon_one_nulleinspeisung.yaml`): Zonen-Steuerung, SOC-Logik, Surplus/AC/Tarif-Lade-Zustand, Entladestrom-Verwaltung, Timeout-Reset, PI-Aufruf-Guard, Integral-Decay/-Einfrieren
-2. **PI-Regler Script** (`PI-Regler.yaml`): Reine Berechnungslogik — wird für AC-Laden genutzt, nicht für Tarif-Laden
+2. **PI-Regler Script** (`PI-Regler.yaml`): Reine Berechnungslogik — skaliert `raw_error` mit `error_share` vor der PI-Berechnung
+3. **Leistungsverteilung** (`solakon_leistungsverteilung.yml`): Multi-Instanz-Koordination — berechnet Leistungslimits und Fehler-Anteile; nur für Multi-Instancing erforderlich
 
 ### Tarif-Arbitrage State-Machine
 
@@ -508,6 +531,52 @@ Zone 2 (cycle = off):                   Max(0, PV - pv_charge_reserve)
 | Zone 0 (Überschuss) | 2 A | Nur wenn abweichend |
 | Zone 1 (Aggressiv) | Konfigurierter Maximalwert | Nur wenn abweichend und kein Surplus, kein AC/Tarif-Laden |
 | Zone 2 / AC/Tarif-Laden (Modus 3) | 0 A | Nur wenn abweichend |
+
+---
+
+## 🔀 Multi-Instancing (Mehrere Batterien)
+
+### Funktionsweise
+
+Jede Instanz übernimmt nur ihren proportionalen Anteil des Netzfehlers (`error_share`).
+Die Leistungsverteilungs-Automation berechnet diesen Anteil pro Instanz aus der nutzbaren
+Kapazität — also dem SOC-Bereich über dem konfigurierten Min-SOC (Zone 3 Stopp):
+
+```
+error_share_i = (SOC_i − Min-SOC_i) / Σ(SOC_j − Min-SOC_j)
+```
+
+Beispiel mit zwei Instanzen (Min-SOC jeweils 20 %):
+
+```
+Instanz 1: SOC=60% → nutzbar 40%
+Instanz 2: SOC=40% → nutzbar 20%
+→ share1 = 40/60 ≈ 0.67, share2 = 20/60 ≈ 0.33
+```
+
+Der berechnete Anteil wird von der Leistungsverteilung in einen `input_number`-Helfer
+geschrieben, den der PI-Regler jeder Instanz als `error_share` liest und auf `raw_error`
+anwendet. Im Einzelbetrieb (kein Helfer konfiguriert) gilt `error_share = 1.0`.
+
+Da die Gewichtung auf der nutzbaren Kapazität basiert, gleichen sich die Ladezustände
+mehrerer Batterien automatisch an: eine Instanz mit mehr nutzbarer Kapazität übernimmt
+mehr Last und entlädt sich entsprechend stärker, bis beide wieder auf gleichem Stand sind.
+
+### Erforderliche Helper pro Instanz (zusätzlich zu Einzelinstanz)
+
+| Helper | Typ | Einstellungen | Verwendung |
+|:-------|:----|:--------------|:-----------|
+| `...instanz_N_limit` | `input_number` | min:0, max:≥Global-Max, step:1 | Leistungslimit von Leistungsverteilung → Instanz |
+| `...instanz_N_share` | `input_number` | min:0, max:1, step:0.001 | Fehler-Anteil von Leistungsverteilung → PI-Regler |
+
+### Konfigurationsschritte
+
+1. Alle Instanz-Blueprints wie gewohnt einrichten
+2. Pro Instanz die zwei neuen Helper (`limit`, `share`) erstellen
+3. In jeder Instanz-Automation eintragen: „Max. Ausgangsleistung — Dynamisch" und „Fehler-Anteil Helfer"
+4. Leistungsverteilungs-Blueprint (`solakon_leistungsverteilung.yaml`) als Automation anlegen:
+   - Min-SOC pro Instanz eintragen — identisch mit dem Wert „Zone 3 Stopp" der jeweiligen Instanz
+   - `limit`- und `share`-Helper pro Instanz zuordnen
 
 ---
 

@@ -1,12 +1,15 @@
 blueprint:
   name: "Solakon Leistungsverteilung (Multi-Instancing)"
   description: >-
-    Verteilt Ausgangsleistung adaptiv auf 2-4 Solakon-Nulleinspeisung-Instanzen.
+    Verteilt Ausgangsleistung und Netzfehler-Anteil adaptiv auf 2-4 Solakon-Nulleinspeisung-Instanzen.
     Erkennung aktiver Instanzen via Modus '1' (INV Discharge PV Priority).
     Gesamtleistung per PV-Einfluss-Parameter steuerbar (0=Global-Max, 1=PV-Cap).
     Verteilung per Umschalter Gleichverteilung oder SOC/PV-Schieberegler gewichtet.
-    Voraussetzung: input_number-Entitaet pro Instanz als "Max. Ausgangsleistung Dynamisch"
-    in der jeweiligen Nulleinspeisung-Automation eintragen.
+    SOC-Gewichtung basiert auf nutzbarer Kapazitaet (SOC - Min-SOC) pro Instanz:
+    Jede Instanz erhaelt einen Anteil proportional zu ihrer verfuegbaren Kapazitaet ueber
+    dem Min-SOC — sowohl fuer das Leistungslimit als auch fuer den Netzfehler-Anteil (error_share).
+    Voraussetzung pro Instanz: je eine input_number fuer Max. Ausgangsleistung und Fehler-Anteil
+    (0.0-1.0) sowie der konfigurierte Min-SOC (Zone 3 Stopp) der jeweiligen Instanz.
   domain: automation
   source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/experimental_multi_instancing/solakon_leistungsverteilung.yaml
   input:
@@ -155,12 +158,35 @@ blueprint:
               domain: sensor
               device_class: power
 
+        inst1_min_soc:
+          name: 🔋 Instanz 1 — Min-SOC (Zone 3 Stopp)
+          description: |
+            Untere SOC-Schwelle aus den Blueprint-Einstellungen der Instanz 1.
+            Wird zur Berechnung der nutzbaren Kapazität verwendet:
+            nutzbar = SOC − Min-SOC (nur der Bereich über dem Minimum zählt).
+          default: 20
+          selector:
+            number:
+              min: 0
+              max: 49
+              unit_of_measurement: "%"
+
         inst1_limit_number:
           name: ⚙️ Instanz 1 — Max. Leistung (input_number)
           description: |
             Die input_number-Entität in die die zugeteilte Leistung geschrieben wird.
             ⚠️ Muss in der Instanz-Automation als "Max. Ausgangsleistung — Dynamisch"
             eingetragen sein. Einstellungen: min: 0, max: ≥ Global-Max, step: 1.
+          selector:
+            entity:
+              domain: input_number
+
+        inst1_share_number:
+          name: ⚖️ Instanz 1 — Fehler-Anteil Helfer (input_number)
+          description: |
+            input_number-Entität in die der berechnete Fehler-Anteil (0.0–1.0) geschrieben wird.
+            ⚠️ Muss in der Instanz-Automation als "Fehler-Anteil Helfer" eingetragen sein.
+            Einstellungen: min: 0, max: 1, step: 0.01.
           selector:
             entity:
               domain: input_number
@@ -195,8 +221,23 @@ blueprint:
               domain: sensor
               device_class: power
 
+        inst2_min_soc:
+          name: 🔋 Instanz 2 — Min-SOC (Zone 3 Stopp)
+          default: 20
+          selector:
+            number:
+              min: 0
+              max: 49
+              unit_of_measurement: "%"
+
         inst2_limit_number:
           name: ⚙️ Instanz 2 — Max. Leistung (input_number)
+          selector:
+            entity:
+              domain: input_number
+
+        inst2_share_number:
+          name: ⚖️ Instanz 2 — Fehler-Anteil Helfer (input_number)
           selector:
             entity:
               domain: input_number
@@ -232,8 +273,24 @@ blueprint:
               domain: sensor
               device_class: power
 
+        inst3_min_soc:
+          name: 🔋 Instanz 3 — Min-SOC (Zone 3 Stopp)
+          default: 20
+          selector:
+            number:
+              min: 0
+              max: 49
+              unit_of_measurement: "%"
+
         inst3_limit_number:
           name: ⚙️ Instanz 3 — Max. Leistung (input_number)
+          default: {}
+          selector:
+            entity:
+              domain: input_number
+
+        inst3_share_number:
+          name: ⚖️ Instanz 3 — Fehler-Anteil Helfer (input_number)
           default: {}
           selector:
             entity:
@@ -270,8 +327,24 @@ blueprint:
               domain: sensor
               device_class: power
 
+        inst4_min_soc:
+          name: 🔋 Instanz 4 — Min-SOC (Zone 3 Stopp)
+          default: 20
+          selector:
+            number:
+              min: 0
+              max: 49
+              unit_of_measurement: "%"
+
         inst4_limit_number:
           name: ⚙️ Instanz 4 — Max. Leistung (input_number)
+          default: {}
+          selector:
+            entity:
+              domain: input_number
+
+        inst4_share_number:
+          name: ⚖️ Instanz 4 — Fehler-Anteil Helfer (input_number)
           default: {}
           selector:
             entity:
@@ -286,28 +359,36 @@ mode: single
 max_exceeded: silent
 
 variables:
-  global_max:   !input global_max_power
-  interval_s:   !input interval_seconds
-  pv_infl:      !input pv_influence
-  pv_entity:    !input pv_sensor
-  equal_dist:   !input equal_distribution
-  balance:      !input soc_pv_balance
-  i1_mode:      !input inst1_mode_select
-  i1_soc:       !input inst1_soc_sensor
-  i1_pv:        !input inst1_pv_sensor
-  i1_limit:     !input inst1_limit_number
-  i2_mode:      !input inst2_mode_select
-  i2_soc:       !input inst2_soc_sensor
-  i2_pv:        !input inst2_pv_sensor
-  i2_limit:     !input inst2_limit_number
-  i3_mode:      !input inst3_mode_select
-  i3_soc:       !input inst3_soc_sensor
-  i3_pv:        !input inst3_pv_sensor
-  i3_limit:     !input inst3_limit_number
-  i4_mode:      !input inst4_mode_select
-  i4_soc:       !input inst4_soc_sensor
-  i4_pv:        !input inst4_pv_sensor
-  i4_limit:     !input inst4_limit_number
+  global_max:    !input global_max_power
+  interval_s:    !input interval_seconds
+  pv_infl:       !input pv_influence
+  pv_entity:     !input pv_sensor
+  equal_dist:    !input equal_distribution
+  balance:       !input soc_pv_balance
+  i1_mode:       !input inst1_mode_select
+  i1_soc:        !input inst1_soc_sensor
+  i1_pv:         !input inst1_pv_sensor
+  i1_limit:      !input inst1_limit_number
+  i1_share:      !input inst1_share_number
+  i1_min_soc:    !input inst1_min_soc
+  i2_mode:       !input inst2_mode_select
+  i2_soc:        !input inst2_soc_sensor
+  i2_pv:         !input inst2_pv_sensor
+  i2_limit:      !input inst2_limit_number
+  i2_share:      !input inst2_share_number
+  i2_min_soc:    !input inst2_min_soc
+  i3_mode:       !input inst3_mode_select
+  i3_soc:        !input inst3_soc_sensor
+  i3_pv:         !input inst3_pv_sensor
+  i3_limit:      !input inst3_limit_number
+  i3_share:      !input inst3_share_number
+  i3_min_soc:    !input inst3_min_soc
+  i4_mode:       !input inst4_mode_select
+  i4_soc:        !input inst4_soc_sensor
+  i4_pv:         !input inst4_pv_sensor
+  i4_limit:      !input inst4_limit_number
+  i4_share:      !input inst4_share_number
+  i4_min_soc:    !input inst4_min_soc
 
 triggers:
   # Alle 10 Sekunden triggern — Modulo-Check in der ersten Condition
@@ -327,13 +408,15 @@ actions:
   - variables:
       pv_power: "{{ states(pv_entity) | float(0) }}"
 
-      # Optional-Instanzen: konfiguriert wenn mode und limit gesetzt sind
+      # Optional-Instanzen: konfiguriert wenn mode, limit und share gesetzt sind
       i3_configured: >
         {{ i3_mode is string and i3_mode | length > 0
-           and i3_limit is string and i3_limit | length > 0 }}
+           and i3_limit is string and i3_limit | length > 0
+           and i3_share is string and i3_share | length > 0 }}
       i4_configured: >
         {{ i4_mode is string and i4_mode | length > 0
-           and i4_limit is string and i4_limit | length > 0 }}
+           and i4_limit is string and i4_limit | length > 0
+           and i4_share is string and i4_share | length > 0 }}
 
       # Aktiv-Status: Modus '1' = INV Discharge PV Priority = Nulleinspeisung läuft
       i1_active: "{{ states(i1_mode) == '1' }}"
@@ -341,11 +424,12 @@ actions:
       i3_active: "{{ i3_configured and states(i3_mode) == '1' }}"
       i4_active: "{{ i4_configured and states(i4_mode) == '1' }}"
 
-      # SOC der aktiven Instanzen (inaktive = 0 → kein Gewicht)
-      soc1: "{{ states(i1_soc) | float(0) if i1_active else 0 }}"
-      soc2: "{{ states(i2_soc) | float(0) if i2_active else 0 }}"
-      soc3: "{{ states(i3_soc) | float(0) if i3_active else 0 }}"
-      soc4: "{{ states(i4_soc) | float(0) if i4_active else 0 }}"
+      # Nutzbare Kapazität = SOC − Min-SOC (nur der Bereich über dem Minimum zählt).
+      # Inaktive Instanzen erhalten 0 → kein Gewicht.
+      soc1: "{{ ([states(i1_soc) | float(0) - i1_min_soc | float(0), 0] | max) if i1_active else 0 }}"
+      soc2: "{{ ([states(i2_soc) | float(0) - i2_min_soc | float(0), 0] | max) if i2_active else 0 }}"
+      soc3: "{{ ([states(i3_soc) | float(0) - i3_min_soc | float(0), 0] | max) if i3_active else 0 }}"
+      soc4: "{{ ([states(i4_soc) | float(0) - i4_min_soc | float(0), 0] | max) if i4_active else 0 }}"
 
       # Anzahl aktiver Instanzen
       active_count: >
@@ -364,6 +448,8 @@ actions:
       pv3: "{{ states(i3_pv) | float(0) if i3_active and i3_pv_valid else 0 }}"
       pv4: "{{ states(i4_pv) | float(0) if i4_active and i4_pv_valid else 0 }}"
 
+      # total_soc = Summe der nutzbaren Kapazitäten (SOC − Min-SOC, inaktive = 0).
+      # Wird als Nenner für die Gewichtsberechnung genutzt (proportionaler Anteil).
       total_soc:     "{{ soc1 + soc2 + soc3 + soc4 }}"
       total_pv_dist: "{{ pv1 + pv2 + pv3 + pv4 }}"
 
@@ -380,9 +466,14 @@ actions:
       _pv_share:  "{{ balance | float(0.5) }}"
       _soc_share: "{{ 1.0 - _pv_share }}"
 
-      # Gewichte pro Instanz
+      # Gewichte (w1–w4) bestimmen gleichzeitig:
+      #   a) Leistungsverteilung: power_i = total_power × w_i
+      #   b) Fehler-Anteil:       error_share_i = w_i → direkt in Instanz-PI-Regler
       # Gleichverteilung:  1/n für alle aktiven
-      # Gewichtet:         SOC-Anteil × (SOC_i/ΣSOC) + PV-Anteil × (PV_i/ΣPV)
+      # Gewichtet (SOC):   nutzbare Kapazität (SOC − Min-SOC) / Σ nutzbare Kapazität
+      #                    → Instanz mit mehr nutzbarer Kapazität übernimmt mehr Last
+      #                    → SOC-Werte gleichen sich automatisch an
+      # Gewichtet (PV):    PV_i / ΣPV (nur wenn individuelle PV-Sensoren konfiguriert)
       #   → fehlt ΣPV:     PV-Anteil fließt in SOC-Anteil (total_pv_dist = 0 Guard)
       w1: >
         {% if not i1_active or active_count | int(0) == 0 %}{{ 0.0 }}
@@ -453,21 +544,31 @@ actions:
 
   # ── Schreiben ─────────────────────────────────────────────────────────────
 
-  # Instanz 1 (immer vorhanden)
+  # Instanz 1 (immer vorhanden) — Leistungslimit und Fehler-Anteil
   - action: input_number.set_value
     target:
       entity_id: !input inst1_limit_number
     data:
       value: "{{ limit1 }}"
+  - action: input_number.set_value
+    target:
+      entity_id: !input inst1_share_number
+    data:
+      value: "{{ w1 | round(3) }}"
 
-  # Instanz 2 (immer vorhanden)
+  # Instanz 2 (immer vorhanden) — Leistungslimit und Fehler-Anteil
   - action: input_number.set_value
     target:
       entity_id: !input inst2_limit_number
     data:
       value: "{{ limit2 }}"
+  - action: input_number.set_value
+    target:
+      entity_id: !input inst2_share_number
+    data:
+      value: "{{ w2 | round(3) }}"
 
-  # Instanz 3 (nur wenn konfiguriert)
+  # Instanz 3 (nur wenn konfiguriert) — Leistungslimit und Fehler-Anteil
   - if:
       - condition: template
         value_template: "{{ i3_configured }}"
@@ -477,8 +578,13 @@ actions:
           entity_id: "{{ i3_limit }}"
         data:
           value: "{{ limit3 }}"
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ i3_share }}"
+        data:
+          value: "{{ w3 | round(3) }}"
 
-  # Instanz 4 (nur wenn konfiguriert)
+  # Instanz 4 (nur wenn konfiguriert) — Leistungslimit und Fehler-Anteil
   - if:
       - condition: template
         value_template: "{{ i4_configured }}"
@@ -488,3 +594,8 @@ actions:
           entity_id: "{{ i4_limit }}"
         data:
           value: "{{ limit4 }}"
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ i4_share }}"
+        data:
+          value: "{{ w4 | round(3) }}"
