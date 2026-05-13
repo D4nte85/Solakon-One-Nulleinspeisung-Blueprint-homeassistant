@@ -1,4 +1,4 @@
-# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V304
+# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V305
 
 Dieser Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung** für den Solakon ONE Wechselrichter, basierend auf einem **PI-Regler (Proportional-Integral-Regler)** und einer intelligenten **SOC-Zonen-Logik** mit optionaler **Überschuss-Einspeisung bei vollem Akku**, optionalem **AC Laden aus externer Einspeisung** und optionaler **Tarif-Arbitrage** (günstig laden, Entladesperre bei niedrigem Tarif).
 
@@ -109,7 +109,7 @@ Wird von der Leistungsverteilungs-Automation beschrieben und begrenzt den Ausgan
 ### 8. Input Number Helper (Fehler-Anteil) — NUR für Multi-Instancing
 
 Enthält den Anteil des Netzfehlers (0.0–1.0), den diese Instanz über ihren PI-Regler übernimmt.
-Wird von der Leistungsverteilungs-Automation berechnet: `(SOC_i − Min-SOC_i) / Σ(SOC_j − Min-SOC_j)`.
+Wird von der Leistungsverteilungs-Automation berechnet: `usable_i / Σ usable_j` mit `usable_i = (SOC_i − Min-SOC_i) / 100 × Kap_i`. Ohne Kapazitätssensor gilt `Kap_i = 100` — reine SOC-%-Gewichtung.
 
 1. Gehen Sie zu **Einstellungen** → **Geräte & Dienste** → **Helfer** → **Number**
 2. Name: z.B. `Solakon Instanz 1 Share`
@@ -543,15 +543,18 @@ Die Leistungsverteilungs-Automation berechnet diesen Anteil pro Instanz aus der 
 Kapazität — also dem SOC-Bereich über dem konfigurierten Min-SOC (Zone 3 Stopp):
 
 ```
-error_share_i = (SOC_i − Min-SOC_i) / Σ(SOC_j − Min-SOC_j)
+usable_i    = (SOC_i − Min-SOC_i) / 100 × Kap_i
+error_share_i = usable_i / Σ usable_j
 ```
 
-Beispiel mit zwei Instanzen (Min-SOC jeweils 20 %):
+Ohne Kapazitätssensor gilt `Kap_i = 100` — Gewichtung nach SOC-Prozentpunkten (identisch zum Vorgänger).
+
+Beispiel mit zwei Instanzen (Min-SOC jeweils 20 %, Kapazitäten 10 kWh / 5 kWh):
 
 ```
-Instanz 1: SOC=60% → nutzbar 40%
-Instanz 2: SOC=40% → nutzbar 20%
-→ share1 = 40/60 ≈ 0.67, share2 = 20/60 ≈ 0.33
+Instanz 1: SOC=60% → (40/100) × 10 = 4,0 kWh nutzbar
+Instanz 2: SOC=40% → (20/100) ×  5 = 1,0 kWh nutzbar
+→ share1 = 4.0/5.0 = 0.80, share2 = 1.0/5.0 = 0.20
 ```
 
 Der berechnete Anteil wird von der Leistungsverteilung in einen `input_number`-Helfer
@@ -564,10 +567,11 @@ mehr Last und entlädt sich entsprechend stärker, bis beide wieder auf gleichem
 
 ### Erforderliche Helper pro Instanz (zusätzlich zu Einzelinstanz)
 
-| Helper | Typ | Einstellungen | Verwendung |
-|:-------|:----|:--------------|:-----------|
+| Helper / Sensor | Typ | Einstellungen | Verwendung |
+|:----------------|:----|:--------------|:-----------|
 | `...instanz_N_limit` | `input_number` | min:0, max:≥Global-Max, step:1 | Leistungslimit von Leistungsverteilung → Instanz |
 | `...instanz_N_share` | `input_number` | min:0, max:1, step:0.001 | Fehler-Anteil von Leistungsverteilung → PI-Regler |
+| Kapazitätssensor (optional) | `sensor` | kWh — von Solakon-Integration bereitgestellt | kWh-genaue Gewichtung bei unterschiedlichen Batteriekapazitäten |
 
 ### Konfigurationsschritte
 
@@ -577,6 +581,7 @@ mehr Last und entlädt sich entsprechend stärker, bis beide wieder auf gleichem
 4. Leistungsverteilungs-Blueprint (`solakon_leistungsverteilung.yaml`) als Automation anlegen:
    - Min-SOC pro Instanz eintragen — identisch mit dem Wert „Zone 3 Stopp" der jeweiligen Instanz
    - `limit`- und `share`-Helper pro Instanz zuordnen
+   - Optional: Kapazitätssensor der Solakon-ONE-Integration pro Instanz eintragen — empfohlen bei unterschiedlichen Batteriekapazitäten
 
 ---
 
