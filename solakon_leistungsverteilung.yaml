@@ -40,7 +40,7 @@ blueprint:
           name: ⏱️ Aktualisierungsintervall
           description: |
             Wie oft Leistungsverteilung berechnet und geschrieben wird.
-            Intern: Trigger alle 10 s, Ausführung per Modulo-Check — kein Helper nötig.
+            Intern: Trigger alle 10 s, Ausführung per Zeitabstand-Prüfung — kein Helper nötig.
           default: "30"
           selector:
             select:
@@ -398,11 +398,13 @@ triggers:
 
 actions:
   # ── Intervall-Check ───────────────────────────────────────────────────────
-  # Ausführung nur wenn aktueller Unix-Timestamp % Intervall < 10.
-  # Beispiel: Intervall 30 s → Ausführung in den Sekunden 0–9, 30–39, 60–69, …
+  # Ausführung nur wenn seit letztem erfolgreichen Durchlauf mindestens
+  # 'interval_s' Sekunden vergangen sind. last_updated der Instanz-1-Limit-Entity
+  # dient als impliziter Zeitstempel — kein extra Helper nötig.
   - condition: template
     value_template: >
-      {{ (as_timestamp(now()) | int) % (interval_s | int(30)) < 10 }}
+      {% set last_ts = states[i1_limit].last_updated | as_timestamp(0) %}
+      {{ (as_timestamp(now()) - last_ts) >= (interval_s | int(30)) }}
 
   # ── Werte berechnen ───────────────────────────────────────────────────────
   - variables:
