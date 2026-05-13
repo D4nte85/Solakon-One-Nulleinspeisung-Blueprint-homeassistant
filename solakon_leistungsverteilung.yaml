@@ -5,9 +5,11 @@ blueprint:
     Erkennung aktiver Instanzen via Modus '1' (INV Discharge PV Priority).
     Gesamtleistung per PV-Einfluss-Parameter steuerbar (0=Global-Max, 1=PV-Cap).
     Verteilung per Umschalter Gleichverteilung oder SOC/PV-Schieberegler gewichtet.
-    SOC-Gewichtung basiert auf nutzbarer Kapazitaet (SOC - Min-SOC) pro Instanz:
-    Jede Instanz erhaelt einen Anteil proportional zu ihrer verfuegbaren Kapazitaet ueber
-    dem Min-SOC — sowohl fuer das Leistungslimit als auch fuer den Netzfehler-Anteil (error_share).
+    Gewichtung basiert auf nutzbarer Energie: (SOC - Min-SOC) / 100 x Kapazitaet_kWh pro Instanz.
+    Ohne Kapazitaetssensor: Kapazitaet = 100 — Gewichtung nach SOC-Prozentpunkten.
+    Jede Instanz erhaelt einen Anteil proportional zu ihrer nutzbaren Energie —
+    sowohl fuer das Leistungslimit als auch fuer den Netzfehler-Anteil (error_share).
+    Ausfuehrungsintervall: Trigger alle 10 s, Intervallkontrolle per last_updated der Limit-Entity.
     Voraussetzung pro Instanz: je eine input_number fuer Max. Ausgangsleistung und Fehler-Anteil
     (0.0-1.0) sowie der konfigurierte Min-SOC (Zone 3 Stopp) der jeweiligen Instanz.
   domain: automation
@@ -431,7 +433,7 @@ variables:
   i4_cap:        !input inst4_capacity_sensor
 
 triggers:
-  # Alle 10 Sekunden triggern — Modulo-Check in der ersten Condition
+  # Alle 10 Sekunden triggern — last_updated-Vergleich in der ersten Condition
   # steuert das konfigurierbare effektive Intervall ohne Extra-Helper.
   - trigger: time_pattern
     seconds: "/10"
