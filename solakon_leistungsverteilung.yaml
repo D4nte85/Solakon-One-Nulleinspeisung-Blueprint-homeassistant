@@ -171,6 +171,18 @@ blueprint:
               max: 49
               unit_of_measurement: "%"
 
+        inst1_capacity_sensor:
+          name: 🔋 Instanz 1 — Batteriekapazität in kWh (Optional)
+          description: |
+            Kapazitätssensor der Solakon-ONE-Integration.
+            Optional: verbessert die Gewichtung bei Batterien unterschiedlicher Kapazität.
+            Ohne Angabe: Gewichtung rein nach SOC-Prozentpunkten (gleichwertige Kapazität angenommen).
+            ⚠️ Entweder für alle Instanzen setzen oder für keine.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+
         inst1_limit_number:
           name: ⚙️ Instanz 1 — Max. Leistung (input_number)
           description: |
@@ -230,6 +242,14 @@ blueprint:
               max: 49
               unit_of_measurement: "%"
 
+        inst2_capacity_sensor:
+          name: 🔋 Instanz 2 — Batteriekapazität in kWh (Optional)
+          description: Siehe Instanz 1 — Kapazitätssensor der Solakon-ONE-Integration.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+
         inst2_limit_number:
           name: ⚙️ Instanz 2 — Max. Leistung (input_number)
           selector:
@@ -281,6 +301,14 @@ blueprint:
               min: 0
               max: 49
               unit_of_measurement: "%"
+
+        inst3_capacity_sensor:
+          name: 🔋 Instanz 3 — Batteriekapazität in kWh (Optional)
+          description: Siehe Instanz 1 — Kapazitätssensor der Solakon-ONE-Integration.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
 
         inst3_limit_number:
           name: ⚙️ Instanz 3 — Max. Leistung (input_number)
@@ -336,6 +364,14 @@ blueprint:
               max: 49
               unit_of_measurement: "%"
 
+        inst4_capacity_sensor:
+          name: 🔋 Instanz 4 — Batteriekapazität in kWh (Optional)
+          description: Siehe Instanz 1 — Kapazitätssensor der Solakon-ONE-Integration.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+
         inst4_limit_number:
           name: ⚙️ Instanz 4 — Max. Leistung (input_number)
           default: {}
@@ -371,24 +407,28 @@ variables:
   i1_limit:      !input inst1_limit_number
   i1_share:      !input inst1_share_number
   i1_min_soc:    !input inst1_min_soc
+  i1_cap:        !input inst1_capacity_sensor
   i2_mode:       !input inst2_mode_select
   i2_soc:        !input inst2_soc_sensor
   i2_pv:         !input inst2_pv_sensor
   i2_limit:      !input inst2_limit_number
   i2_share:      !input inst2_share_number
   i2_min_soc:    !input inst2_min_soc
+  i2_cap:        !input inst2_capacity_sensor
   i3_mode:       !input inst3_mode_select
   i3_soc:        !input inst3_soc_sensor
   i3_pv:         !input inst3_pv_sensor
   i3_limit:      !input inst3_limit_number
   i3_share:      !input inst3_share_number
   i3_min_soc:    !input inst3_min_soc
+  i3_cap:        !input inst3_capacity_sensor
   i4_mode:       !input inst4_mode_select
   i4_soc:        !input inst4_soc_sensor
   i4_pv:         !input inst4_pv_sensor
   i4_limit:      !input inst4_limit_number
   i4_share:      !input inst4_share_number
   i4_min_soc:    !input inst4_min_soc
+  i4_cap:        !input inst4_capacity_sensor
 
 triggers:
   # Alle 10 Sekunden triggern — Modulo-Check in der ersten Condition
@@ -426,12 +466,32 @@ actions:
       i3_active: "{{ i3_configured and states(i3_mode) == '1' }}"
       i4_active: "{{ i4_configured and states(i4_mode) == '1' }}"
 
-      # Nutzbare Kapazität = SOC − Min-SOC (nur der Bereich über dem Minimum zählt).
+      # Kapazitätssensoren (Standard 100.0 → Gewichtung nach SOC-Prozentpunkten wenn nicht gesetzt,
+      # da sich der /100-Faktor im Verhältnis herauskürzt).
+      i1_cap_valid: "{{ i1_cap is string and i1_cap | length > 0 }}"
+      i2_cap_valid: "{{ i2_cap is string and i2_cap | length > 0 }}"
+      i3_cap_valid: "{{ i3_cap is string and i3_cap | length > 0 }}"
+      i4_cap_valid: "{{ i4_cap is string and i4_cap | length > 0 }}"
+      cap1: "{{ states(i1_cap) | float(100.0) if i1_cap_valid else 100.0 }}"
+      cap2: "{{ states(i2_cap) | float(100.0) if i2_cap_valid else 100.0 }}"
+      cap3: "{{ states(i3_cap) | float(100.0) if i3_cap_valid else 100.0 }}"
+      cap4: "{{ states(i4_cap) | float(100.0) if i4_cap_valid else 100.0 }}"
+
+      # Nutzbare Energie pro Instanz = (SOC − Min-SOC) / 100 × Kapazität_kWh
+      # Kein Sensor → cap = 100.0 → (SOC − Min-SOC) / 100 × 100 = SOC − Min-SOC (identisch zu vorher)
       # Inaktive Instanzen erhalten 0 → kein Gewicht.
-      soc1: "{{ ([states(i1_soc) | float(0) - i1_min_soc | float(0), 0] | max) if i1_active else 0 }}"
-      soc2: "{{ ([states(i2_soc) | float(0) - i2_min_soc | float(0), 0] | max) if i2_active else 0 }}"
-      soc3: "{{ ([states(i3_soc) | float(0) - i3_min_soc | float(0), 0] | max) if i3_active else 0 }}"
-      soc4: "{{ ([states(i4_soc) | float(0) - i4_min_soc | float(0), 0] | max) if i4_active else 0 }}"
+      soc1: >
+        {% set usable = [states(i1_soc) | float(0) - i1_min_soc | float(0), 0] | max %}
+        {{ (usable / 100 * cap1) if i1_active else 0 }}
+      soc2: >
+        {% set usable = [states(i2_soc) | float(0) - i2_min_soc | float(0), 0] | max %}
+        {{ (usable / 100 * cap2) if i2_active else 0 }}
+      soc3: >
+        {% set usable = [states(i3_soc) | float(0) - i3_min_soc | float(0), 0] | max %}
+        {{ (usable / 100 * cap3) if i3_active else 0 }}
+      soc4: >
+        {% set usable = [states(i4_soc) | float(0) - i4_min_soc | float(0), 0] | max %}
+        {{ (usable / 100 * cap4) if i4_active else 0 }}
 
       # Anzahl aktiver Instanzen
       active_count: >
