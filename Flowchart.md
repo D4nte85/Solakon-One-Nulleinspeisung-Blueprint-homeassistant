@@ -9,10 +9,10 @@ flowchart TD
     %% ── Zone 0: Status-Update (vor Haupt-Logik) ─────────────────────────
     SURPLUS_UPDATE{{"☀️ Zone 0 Status-Update   (Falls 0A / 0B)"}}
 
-    SURPLUS_UPDATE -- "FALL 0A   Surplus-Bool = off   UND SOC ≥ Export-Schwelle   UND (PV > Output + Grid + PV-Hysterese   ODER PV = 0)" --> S0A
+    SURPLUS_UPDATE -- "FALL 0A   Surplus-Bool = off   UND (SOC ≥ Export-Schwelle UND (PV > Output+Grid+PV-Hysterese ODER PV=0)   ODER Surplus-Forecast-Forced UND PV > Hard Limit)" --> S0A
     S0A["☀️ Zone 0 aktivieren   Surplus-Bool → on"]
 
-    SURPLUS_UPDATE -- "FALL 0B   Surplus-Bool = on   UND (SOC < Export-Schwelle − SOC-Hysterese   ODER PV ≤ Output + Grid − PV-Hysterese)" --> S0B
+    SURPLUS_UPDATE -- "FALL 0B   Surplus-Bool = on   UND NICHT Surplus-Forecast-Forced   UND (SOC < Export-Schwelle − SOC-Hysterese   ODER PV ≤ Output + Grid − PV-Hysterese)" --> S0B
     S0B["☁️ Zone 0 deaktivieren   Surplus-Bool → off   Integral = 0"]
 
     SURPLUS_UPDATE -- "Kein Surplus-Update" --> ZONE_CHECK
@@ -39,7 +39,7 @@ flowchart TD
     RECOVERY["🔄 Recovery — Modus-Reaktivierung   Timer-Toggle (3598↔3599)   AC-Lade-Bool = on ODER Tarif-Lade-Bool = on → Modus '3'   sonst → Modus '1'   (kein Integral-Reset, kein Zonenwechsel)"]
 
     %% ── Fall GT: Tarif-Laden Eintritt ────────────────────────────────────
-    ZONE_CHECK -- "FALL GT   Tarif-Arbitrage aktiviert   UND Preis < Günstig-Schwelle   UND SOC < Tarif-Ladeziel   UND Modus ≠ '3' ← Guard!" --> TARIFF_START
+    ZONE_CHECK -- "FALL GT   Tarif-Arbitrage aktiviert   UND Preis < Günstig-Schwelle   UND SOC < Tarif-Ladeziel   UND Modus ≠ '3' ← Guard!   UND NICHT PV-Forecast-Suppressed" --> TARIFF_START
     TARIFF_START["💹 Tarif-Laden aktivieren   Tarif-Lade-Bool → on   Timer-Toggle (3598↔3599)   Output → Ladeleistung (direkt, kein PI)   Modus → '3' (INV Charge PV Priority)"]
 
     %% ── Fall G: AC Laden Eintritt ────────────────────────────────────────
