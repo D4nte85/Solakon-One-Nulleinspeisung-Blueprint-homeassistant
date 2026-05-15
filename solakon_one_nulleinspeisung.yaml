@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V303)
+  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V304)
   description: |
     Dynamische Nulleinspeisung für den Solakon ONE Wechselrichter mit PI-Regler, SOC-Zonenlogik,
     optionaler Überschuss-Einspeisung, optionalem AC Laden und optionaler Tarif-Arbitrage.
@@ -515,6 +515,38 @@ blueprint:
               entity:
                 domain: input_boolean
 
+          surplus_forecast_enabled:
+            name: 🌤️ Surplus-Forecast Eintritt aktivieren (Optional)
+            description: |
+              Erzwingt Zone-0-Eintritt wenn PV-Forecast ≥ Schwelle UND Solar > Hard Limit.
+              Kein SOC-Gate beim Eintritt. Exit bleibt gesperrt solange Forecast aktiv.
+              ⚠️ Nur wirksam wenn Überschuss-Einspeisung aktiviert ist.
+            default: false
+            selector:
+              boolean:
+
+          surplus_forecast_sensor:
+            name: 🌤️ Surplus-Forecast Sensor (Optional)
+            description: |
+              PV-Überschuss-Prognose in W (z.B. Solcast-Sensor).
+              ⚠️ Leer lassen wenn Surplus-Forecast nicht genutzt wird.
+            default: {}
+            selector:
+              entity:
+                domain: sensor
+
+          surplus_forecast_threshold:
+            name: 🌤️ Surplus-Forecast Schwelle (W)
+            description: |
+              Mindest-Vorhersagewert für erzwungenen Zone-0-Eintritt.
+            default: 5000
+            selector:
+              number:
+                min: 0
+                max: 20000
+                step: 100
+                unit_of_measurement: W
+
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # ⚡ AC LADEN (Optional)
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -758,6 +790,45 @@ blueprint:
             selector:
               boolean:
 
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 🌤️ PV-FORECAST TARIF-UNTERDRÜCKUNG (Optional)
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      pv_forecast_parameter:
+        name: "🌤️ PV-FORECAST TARIF-UNTERDRÜCKUNG (Optional):"
+        collapsed: true
+        input:
+          pv_forecast_enabled:
+            name: 🌤️ PV-Forecast Tarif-Unterdrückung aktivieren
+            description: |
+              Wenn aktiviert und PV-Forecast ≥ Schwelle: GT- und TM-Blöcke werden übersprungen.
+              Verhindert Tarif-Laden an sonnigen Tagen.
+              ⚠️ Nur wirksam wenn Tarif-Arbitrage aktiviert ist.
+            default: false
+            selector:
+              boolean:
+
+          pv_forecast_sensor:
+            name: 🌤️ PV-Forecast Sensor (Optional)
+            description: |
+              PV-Ertragsprognose in W (z.B. Solcast-Sensor).
+              ⚠️ Leer lassen wenn PV-Forecast nicht genutzt wird.
+            default: {}
+            selector:
+              entity:
+                domain: sensor
+
+          pv_forecast_threshold:
+            name: 🌤️ PV-Forecast Schwelle (W)
+            description: |
+              Ab diesem Vorhersagewert werden GT und TM übersprungen.
+            default: 5000
+            selector:
+              number:
+                min: 0
+                max: 20000
+                step: 100
+                unit_of_measurement: W
+
 
 mode: single
 max_exceeded: silent
@@ -768,13 +839,19 @@ variables:
   # (Werden IMMER benötigt)
   # ===========================================
 
-  # Grid / Solar / Actual Power
+  # Grid / Solar / Actual Power (kW→W normalisiert)
   grid_power: !input grid_power_sensor
-  grid_power_float: "{{ states(grid_power) | float(0) }}"
+  grid_power_float: >
+    {% set v = states(grid_power) | float(0) %}
+    {{ v * 1000 if state_attr(grid_power, 'unit_of_measurement') == 'kW' else v }}
   solar_power: !input solar_power_sensor
-  solar_power_float: "{{ states(solar_power) | float(0) }}"
+  solar_power_float: >
+    {% set v = states(solar_power) | float(0) %}
+    {{ v * 1000 if state_attr(solar_power, 'unit_of_measurement') == 'kW' else v }}
   actual_power_sensor: !input actual_power_sensor
-  actual_power_float: "{{ states(actual_power_sensor) | float(0) }}"
+  actual_power_float: >
+    {% set v = states(actual_power_sensor) | float(0) %}
+    {{ v * 1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else v }}
 
   # Zonen-Schwellwerte
   soc_fast_limit_int: !input soc_fast_limit
@@ -889,6 +966,29 @@ variables:
        price_sensor_valid | bool(false) and
        states(price_sensor_entity) | float(999) < expensive_threshold_float | float(0) }}
 
+  # Hard Limit (auch in BLOCK 1 für Surplus-Forecast-Eintritt)
+  max_active_power_limit_int: !input max_active_power_limit
+
+  # Surplus-Forecast erzwungener Eintritt
+  surplus_forecast_enabled_bool: !input surplus_forecast_enabled
+  surplus_forecast_sensor_id: !input surplus_forecast_sensor
+  surplus_forecast_threshold_float: !input surplus_forecast_threshold
+  surplus_forecast_forced: >
+    {{ surplus_forecast_enabled_bool | bool(false) and
+       surplus_forecast_sensor_id is string and surplus_forecast_sensor_id | length > 0 and
+       states(surplus_forecast_sensor_id) not in ['unknown', 'unavailable'] and
+       states(surplus_forecast_sensor_id) | float(0) >= surplus_forecast_threshold_float | float(0) }}
+
+  # PV-Forecast Tarif-Unterdrückung
+  pv_forecast_enabled_bool: !input pv_forecast_enabled
+  pv_forecast_sensor_id: !input pv_forecast_sensor
+  pv_forecast_threshold_float: !input pv_forecast_threshold
+  pv_forecast_suppressed: >
+    {{ pv_forecast_enabled_bool | bool(false) and
+       pv_forecast_sensor_id is string and pv_forecast_sensor_id | length > 0 and
+       states(pv_forecast_sensor_id) not in ['unknown', 'unavailable'] and
+       states(pv_forecast_sensor_id) | float(0) >= pv_forecast_threshold_float | float(0) }}
+
 triggers:
   # Grid-Leistungsänderung
   - trigger: state
@@ -953,8 +1053,10 @@ actions:
             state: 'off'
           - condition: template
             value_template: >
-              {{ (states(soc) | float(0) >= soc_export_limit_int) and
-                 (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int) or solar_power_float == 0) }}
+              {{ ((states(soc) | float(0) >= soc_export_limit_int) and
+                  (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int) or solar_power_float == 0))
+                 or
+                 (surplus_forecast_forced | bool(false) and solar_power_float > max_active_power_limit_int) }}
         sequence:
           # 1. Logbuch-Eintrag
           - action: logbook.log
@@ -976,8 +1078,9 @@ actions:
             state: 'on'
           - condition: template
             value_template: >
-              {{ (states(soc) | float(0) < (soc_export_limit_int - surplus_exit_hysteresis_int)) or
-                 (solar_power_float <= (actual_power_float + grid_power_float - surplus_pv_hysteresis_int)) }}
+              {{ not (surplus_forecast_forced | bool(false)) and
+                 ((states(soc) | float(0) < (soc_export_limit_int - surplus_exit_hysteresis_int)) or
+                  (solar_power_float <= (actual_power_float + grid_power_float - surplus_pv_hysteresis_int))) }}
         sequence:
           # 1. Logbuch-Eintrag
           - action: logbook.log
@@ -1229,6 +1332,7 @@ actions:
       # FALL GT: TARIF-LADEN — Eintritt
       # Guard: Modus ≠ '3' — verhindert Re-Eintritt wenn Tarif-Laden bereits aktiv
       # Guard: NICHT Surplus-Bool = on — Zone 0 blockiert Laden
+      # Guard: pv_forecast_suppressed — sonnige Tage überspringen Laden
       - conditions:
           - condition: template
             value_template: "{{ tariff_arbitrage_enabled_bool }}"
@@ -1236,6 +1340,8 @@ actions:
             value_template: "{{ tariff_charge_entity_valid | bool(false) }}"
           - condition: template
             value_template: "{{ price_is_cheap | bool(false) }}"
+          - condition: template
+            value_template: "{{ not (pv_forecast_suppressed | bool(false)) }}"
           - condition: template
             value_template: "{{ states(soc) | float(0) < tariff_soc_charge_target_int }}"
           - condition: template
@@ -1371,6 +1477,7 @@ actions:
       # FALL TM: TARIF DISCHARGE-LOCK — Mittlere Preiszone (günstig ≤ Preis < teuer)
       # Stoppt laufende Entladung (Zone 1 UND Zone 2) wenn Preis zwischen günstig und teuer liegt.
       # Guard: kein AC/Tarif-Laden aktiv, Modus = '1' (Entladung läuft)
+      # Guard: pv_forecast_suppressed — sonnige Tage überspringen Discharge-Lock
       - conditions:
           - condition: template
             value_template: "{{ tariff_arbitrage_enabled_bool }}"
@@ -1378,6 +1485,8 @@ actions:
             value_template: "{{ price_sensor_valid | bool(false) }}"
           - condition: template
             value_template: "{{ price_discharge_locked | bool(false) }}"
+          - condition: template
+            value_template: "{{ not (pv_forecast_suppressed | bool(false)) }}"
           - condition: template
             value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
           - condition: template
@@ -1665,7 +1774,7 @@ actions:
           - condition: template
             value_template: >
               {{ not night_shutdown_enabled_bool or
-                 (states(solar_power) | float(0)) >= pv_charge_reserve_int | float(0) }}
+                 solar_power_float | float(0) >= pv_charge_reserve_int | float(0) }}
         sequence:
           # 1. Logbuch-Eintrag
           - action: logbook.log
@@ -1715,7 +1824,7 @@ actions:
           - condition: template
             value_template: "{{ night_shutdown_enabled_bool }}"
           - condition: template
-            value_template: "{{ (states(solar_power) | float(0)) < pv_charge_reserve_int | float(0) }}"
+            value_template: "{{ solar_power_float | float(0) < pv_charge_reserve_int | float(0) }}"
           - condition: state
             entity_id: !input cycle_active_boolean_helper
             state: 'off'
@@ -1755,15 +1864,19 @@ actions:
       {{ states(solakon_mode) in ['1', '3'] and
          (is_state(cycle_active, 'on') or
           not night_shutdown_enabled_bool or
-          (states(solar_power) | float(0)) >= pv_charge_reserve_int | float(0)) }}
+          solar_power_float | float(0) >= pv_charge_reserve_int | float(0)) }}
 
   # ===========================================
   # BLOCK 2: Variablen NUR für PI-Regler
   # ===========================================
   - variables:
-      # Frische Sensorwerte zum Zeitpunkt der PI-Berechnung
-      grid_power_float: "{{ states(grid_power) | float(0) }}"
-      solar_power_float: "{{ states(solar_power) | float(0) }}"
+      # Frische Sensorwerte zum Zeitpunkt der PI-Berechnung (kW→W normalisiert)
+      grid_power_float: >
+        {% set v = states(grid_power) | float(0) %}
+        {{ v * 1000 if state_attr(grid_power, 'unit_of_measurement') == 'kW' else v }}
+      solar_power_float: >
+        {% set v = states(solar_power) | float(0) %}
+        {{ v * 1000 if state_attr(solar_power, 'unit_of_measurement') == 'kW' else v }}
 
       # Konfiguration
       wait_time_int: !input wait_time
@@ -1919,9 +2032,12 @@ actions:
                   entity_id: !input integral_helper
                 data:
                   value: "{{ integral_old }}"
-          # Wartezeit
-          - delay:
+          # Wartezeit — adaptiv bis Ist-Leistung ≈ Sollwert oder Timeout
+          - wait_template: >
+              {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+            timeout:
               seconds: "{{ wait_time_int }}"
+            continue_on_timeout: true
 
       # ZWEIG BT: Tarif-Laden — Direkt setzen (kein PI)
       # Output → tariff_charge_power (konstant, unabhängig vom Grid)
@@ -1935,9 +2051,12 @@ actions:
               entity_id: !input active_power_number
             data:
               value: "{{ tariff_charge_power_int }}"
-          # Wartezeit
-          - delay:
+          # Wartezeit — adaptiv bis Ist-Leistung ≈ Sollwert oder Timeout
+          - wait_template: >
+              {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+            timeout:
               seconds: "{{ wait_time_int }}"
+            continue_on_timeout: true
 
       # ZWEIG B: AC Laden — PI-Script mit ac_charge_mode=true (invertierte Fehlerberechnung)
       # at_max/at_min Guards entfallen: Fehlerrichtung ist im Script invertiert
@@ -1958,9 +2077,12 @@ actions:
               integral_entity: !input integral_helper
               output_entity: !input active_power_number
               ac_charge_mode: true
-          # Wartezeit
-          - delay:
+          # Wartezeit — adaptiv bis Ist-Leistung ≈ Sollwert oder Timeout
+          - wait_template: >
+              {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+            timeout:
               seconds: "{{ wait_time_int }}"
+            continue_on_timeout: true
 
       # ZWEIG C: Normaler PI-Regler (Zone 1 / Zone 2)
       - conditions:
@@ -1984,9 +2106,12 @@ actions:
               integral_entity: !input integral_helper
               output_entity: !input active_power_number
               ac_charge_mode: false
-          # Wartezeit
-          - delay:
+          # Wartezeit — adaptiv bis Ist-Leistung ≈ Sollwert oder Timeout
+          - wait_template: >
+              {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+            timeout:
               seconds: "{{ wait_time_int }}"
+            continue_on_timeout: true
 
     # STANDARD: Integral-Decay (Fehler innerhalb Toleranz oder At-Limit)
     default:
