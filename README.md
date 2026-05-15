@@ -1,4 +1,4 @@
-# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V303
+# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V304
 
 Dieser Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung** für den Solakon ONE Wechselrichter, basierend auf einem **PI-Regler (Proportional-Integral-Regler)** und einer intelligenten **SOC-Zonen-Logik** mit optionaler **Überschuss-Einspeisung bei vollem Akku**, optionalem **AC Laden aus externer Einspeisung** und optionaler **Tarif-Arbitrage** (günstig laden, Entladesperre bei niedrigem Tarif).
 
@@ -146,15 +146,15 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 
 | Fall | Bedingung | Aktion |
 |:-----|:----------|:-------|
-| **0A** | Surplus-Bool = `off` UND SOC ≥ Export-Schwelle UND (PV > Output + Grid + PV-Hysterese ODER PV = 0) | Zone 0 Start: Surplus-Bool → `on` |
-| **0B** | Surplus-Bool = `on` UND (SOC < Export-Schwelle − SOC-Hysterese ODER PV ≤ Output + Grid − PV-Hysterese) | Zone 0 Ende: Surplus-Bool → `off`, Integral = 0 |
+| **0A** | Surplus-Bool = `off` UND (SOC ≥ Export-Schwelle UND (PV > Output + Grid + PV-Hysterese ODER PV = 0) **ODER** Surplus-Forecast-Forced UND PV > Hard Limit) | Zone 0 Start: Surplus-Bool → `on` |
+| **0B** | Surplus-Bool = `on` UND **NICHT Surplus-Forecast-Forced** UND (SOC < Export-Schwelle − SOC-Hysterese ODER PV ≤ Output + Grid − PV-Hysterese) | Zone 0 Ende: Surplus-Bool → `off`, Integral = 0 |
 | **A** | NICHT AC-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'` |
 | **B** | NICHT AC-Lade-Bool = `on` UND SOC < Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
 | **C** | NICHT AC-Lade-Bool = `on` UND SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
 | **D** | Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle | Recovery: Timer-Toggle, Modus → `'3'` wenn AC-Lade-Bool **oder** Tarif-Lade-Bool = `on`, sonst `'1'` |
-| **GT** | Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel UND **Modus ≠ `'3'`** UND **NICHT Surplus-Bool = `on`** | Tarif-Laden Start: Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'` |
+| **GT** | Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel UND **Modus ≠ `'3'`** UND **NICHT Surplus-Bool = `on`** UND **NICHT PV-Forecast-Suppressed** | Tarif-Laden Start: Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'` |
 | **HT** | Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Tarif-Ladeziel) | Tarif-Laden Ende: Tarif-Bool = `off`, Integral = 0, Zone 1 → `'1'` / Zone 2 → `'0'` |
-| **TM** | Tarif aktiv UND Günstig ≤ Preis < Teuer-Schwelle UND kein AC/Tarif-Laden UND **Modus = `'1'`** | Discharge-Lock: Integral = 0, Zyklus = `off` (wenn aktiv) + Surplus-Bool zurücksetzen, Output → 0W, Modus → `'0'` |
+| **TM** | Tarif aktiv UND Günstig ≤ Preis < Teuer-Schwelle UND kein AC/Tarif-Laden UND **Modus = `'1'`** UND **NICHT PV-Forecast-Suppressed** | Discharge-Lock: Integral = 0, Zyklus = `off` (wenn aktiv) + Surplus-Bool zurücksetzen, Output → 0W, Modus → `'0'` |
 | **G** | AC aktiv UND SOC < Ladeziel UND **Modus ≠ `'3'`** UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + Output) < −Hysterese | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
 | **H** | Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ `ac_charge_offset + Hysterese` UND Output = 0 W)) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` / Zone 2 → `'0'` |
 | **I** | Modus = `'3'` UND NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` | Safety-Korrektur: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
@@ -257,6 +257,27 @@ Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 
 ---
 
+### 10. 🌤️ PV-Forecast Tarif-Unterdrückung (Optional)
+
+Verhindert Tarif-Laden und Discharge-Lock an Tagen, an denen die PV-Prognose ausreichend ist.
+
+* **Voraussetzung:** Tarif-Arbitrage muss ebenfalls aktiviert sein.
+* **Funktion:** Wenn der konfigurierte PV-Forecast-Sensor ≥ Schwelle → Fall GT und Fall TM werden übersprungen. Der Akku kann an sonnigen Tagen normal entladen und muss nicht durch Tarifsignale blockiert werden.
+* **Sensor:** Z.B. Solcast `energy_production_today` oder ähnlicher Tages-/Stunden-Forecast in W.
+* **Fallback:** Sensor unavailable/unknown → Unterdrückung inaktiv (Sicherheits-Fallback: Tarif-Logik greift normal).
+
+### 11. 🌤️ Surplus-Forecast erzwungener Eintritt (Optional)
+
+Erzwingt frühzeitigen Zone-0-Eintritt auf Basis einer PV-Überschuss-Prognose.
+
+* **Voraussetzung:** Überschuss-Einspeisung muss ebenfalls aktiviert sein.
+* **Eintritt (Fall 0A, OR-Branch):** Wenn Forecast ≥ Schwelle UND Solar > Hard Limit → Zone-0-Eintritt **ohne SOC-Gate** (SOC-Schwelle wird ignoriert).
+* **Exit-Sperre (Fall 0B):** Solange `surplus_forecast_forced = true` wird Fall 0B **blockiert** — Zone 0 bleibt aktiv auch wenn SOC oder PV sonst den Austritt auslösen würden.
+* **Sensor:** Z.B. Solcast `power_now_1h` oder stündlicher Überschuss-Forecast in W.
+* **Fallback:** Sensor unavailable/unknown → Forecast inaktiv, normales SOC-Gate gilt.
+
+---
+
 ## 📊 Input-Variablen und Konfiguration
 
 ### 🔌 Erforderliche Entitäten
@@ -288,7 +309,7 @@ Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 | **P-Faktor** | 1.3 | 0.1 | 5.0 | Proportional-Verstärkung. Höher = aggressiver. |
 | **I-Faktor** | 0.05 | 0.01 | 0.2 | Integral-Verstärkung. Höher = schnellere Fehlerkorrektur, aber instabiler. |
 | **Toleranzbereich** | 25 W | 0 | 200 W | Totband um Regelziel. Keine PI-Korrektur innerhalb (stattdessen Integral-Decay). |
-| **Wartezeit** | 3 s | 0 | 30 s | Verzögerung nach Leistungsänderung. Kompensiert die Reaktionszeit des Wechselrichters. |
+| **Wartezeit** | 3 s | 0 | 30 s | Maximale Wartezeit nach Leistungsänderung. Adaptiv: bricht früh ab wenn Ist-Leistung ≈ Sollwert ± Toleranz. |
 
 > **Hinweis:** P- und I-Faktor gelten für Zone 1 und Zone 2. Für den AC-Lade-Modus werden separate Faktoren verwendet.
 
@@ -362,6 +383,26 @@ Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 |:----------|:---------|:-------------|
 | **Nachtabschaltung aktivieren** | false | Ein/Aus-Schalter für die Funktion |
 | **PV-Schwelle für "Nacht"** | — | Verwendet den Wert der **PV-Ladereserve** als Schwelle |
+
+---
+
+### 🌤️ PV-Forecast Tarif-Unterdrückung (Optional)
+
+| Parameter | Standard | Min | Max | Beschreibung |
+|:----------|:---------|:----|:----|:-------------|
+| **PV-Forecast Unterdrückung aktivieren** | false | — | — | Schalter für die Funktion. Nur wirksam wenn Tarif-Arbitrage aktiv. |
+| **PV-Forecast Sensor** | *(leer)* | — | — | PV-Ertragsprognose in W (z.B. Solcast). Leer lassen wenn nicht genutzt. |
+| **PV-Forecast Schwelle** | 5000 W | 0 | 20000 W | Forecast muss diesen Wert erreichen um GT/TM zu unterdrücken. |
+
+---
+
+### 🌤️ Surplus-Forecast Eintritt (Optional)
+
+| Parameter | Standard | Min | Max | Beschreibung |
+|:----------|:---------|:----|:----|:-------------|
+| **Surplus-Forecast aktivieren** | false | — | — | Schalter für die Funktion. Nur wirksam wenn Überschuss-Einspeisung aktiv. |
+| **Surplus-Forecast Sensor** | *(leer)* | — | — | PV-Überschuss-Prognose in W (z.B. Solcast). Leer lassen wenn nicht genutzt. |
+| **Surplus-Forecast Schwelle** | 5000 W | 0 | 20000 W | Forecast muss diesen Wert erreichen um erzwungenen Zone-0-Eintritt auszulösen. |
 
 ---
 
@@ -509,6 +550,8 @@ Zone 2 (cycle = off):                   Max(0, PV - pv_charge_reserve)
 10. **Integral-Helper:** Wird automatisch verwaltet — nicht manuell ändern
 11. **Recovery:** Modus-Verlust bei aktivem Zyklus wird automatisch erkannt (Fall D) — sowohl AC- als auch Tarif-Lade-Modus `'3'` wird korrekt wiederhergestellt
 12. **Fall I Safety:** Greift nur wenn weder AC-Laden noch Tarif-Laden aktiv ist
+13. **Sensor-Einheit kW:** Grid-, Solar- und Ist-Leistungssensoren dürfen W **oder** kW liefern — der Blueprint normalisiert automatisch auf W. Tarif- und Preis-Sensoren werden nicht automatisch umgerechnet (siehe Hinweis 4).
+14. **PV-Forecast Fallback:** Sensor unavailable → Unterdrückung inaktiv; Surplus-Forecast unavailable → erzwungener Eintritt inaktiv. Normalbetrieb bleibt erhalten.
 
 ---
 
