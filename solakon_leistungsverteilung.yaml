@@ -484,7 +484,6 @@ actions:
       # Nutzbare Energie pro Instanz = (SOC − Min-SOC) / 100 × Kapazität_kWh
       # Kein Sensor → cap = 100.0 → (SOC − Min-SOC) / 100 × 100 = SOC − Min-SOC (identisch zu vorher)
       # Inaktive Instanzen erhalten 0 → kein Gewicht.
-      # HA liefert {} statt "" wenn optionale Blueprint-Entität leer bleibt — states({}) wäre unhashable.
       soc1: >
         {% set usable = [states(i1_soc) | float(0) - i1_min_soc | float(0), 0] | max %}
         {{ (usable / 100 * cap1) if i1_active else 0 }}
