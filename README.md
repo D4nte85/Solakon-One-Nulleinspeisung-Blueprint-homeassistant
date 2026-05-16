@@ -625,17 +625,9 @@ mehr Last und entlädt sich entsprechend stärker, bis beide wieder auf gleichem
 2. **Optionale Helper erstellen wenn Funktion aktiviert:** Surplus-Boolean für Zone 0; AC-Lade-Boolean für AC Laden; Tarif-Lade-Boolean für Tarif-Arbitrage
 3. **Netzleistungssensor:** Korrekte Polarität (positiv = Bezug, negativ = Einspeisung)
 4. **Tarif-Sensor Einheit:** Sensor-Wert und Schwellwerte müssen dieselbe Einheit verwenden — kein Blueprint-seitiges Umrechnen
-5. **Tarif-Laden kein PI:** Direkt gesetzter Wert — kein Toleranz-Check, kein Integral-Einfluss
-6. **Entladesperre Schwelle:** `expensive_threshold` steuert die Sperre (unterhalb = gesperrt). TM greift für **Zone 1 und Zone 2** — `cycle_active` spielt keine Rolle mehr.
-7. **Fallback bei Sensor-Ausfall:** Weder Laden noch Sperre — System verhält sich wie ohne Tarif-Arbitrage
-8. **AC Laden vs. Tarif-Laden:** Beide vollständig unabhängig konfigurierbar. Tarif-Laden hat Vorrang wenn beide gleichzeitig zutreffen würden.
-9. **Überschuss blockiert Lademodi:** Zone 0 aktiv → weder Tarif-Laden (GT) noch AC-Laden (G) können starten.
-10. **Integral-Helper:** Wird automatisch verwaltet — nicht manuell ändern
-11. **Recovery:** Modus-Verlust bei aktivem Zyklus wird automatisch erkannt (Fall D) — sowohl AC- als auch Tarif-Lade-Modus `'3'` wird korrekt wiederhergestellt
-12. **Fall I Safety:** Greift nur wenn weder AC-Laden noch Tarif-Laden aktiv ist
-13. **Sensor-Einheit kW:** Grid-, Solar- und Ist-Leistungssensoren dürfen W **oder** kW liefern — der Blueprint normalisiert automatisch auf W. Tarif- und Preis-Sensoren werden nicht automatisch umgerechnet (siehe Hinweis 4).
-14. **PV-Forecast Fallback:** Sensor unavailable → Unterdrückung inaktiv; Surplus-Forecast unavailable → erzwungener Eintritt inaktiv. Normalbetrieb bleibt erhalten.
-15. **Leistungsverteilung — optionale Instanzen:** Instanz 3 und 4 werden nur ausgewertet wenn Modus, Limit-Helper und Share-Helper konfiguriert sind. Nicht konfigurierte optionale SOC-Sensoren werden sicher übersprungen (kein `states()`-Aufruf auf leerem Feld).
+5. **Entladesperre Schwelle:** `expensive_threshold` steuert die Sperre (unterhalb = gesperrt). TM greift für **Zone 1 und Zone 2** — `cycle_active` spielt keine Rolle mehr.
+6. **Integral-Helper:** Wird automatisch verwaltet — nicht manuell ändern
+7. **Sensor-Einheit kW:** Grid-, Solar- und Ist-Leistungssensoren dürfen W **oder** kW liefern — der Blueprint normalisiert automatisch auf W. Tarif- und Preis-Sensoren werden nicht automatisch umgerechnet (siehe Hinweis 4).
 
 ---
 
