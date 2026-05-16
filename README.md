@@ -199,13 +199,6 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 | **E** | NICHT AC-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Timer-Toggle, Modus → `'1'` |
 | **F** | NICHT AC-Lade-Bool = `on` UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Modus → `'0'`, Output → 0W |
 
-> **Reihenfolge-Begründungen:**
-> - Fall D liegt vor GT/G, damit Recovery nur Modus ∉ `{'1','3'}` prüft — der Lade-Modus `'3'` wird durch Recovery nie überschrieben.
-> - Fall GT liegt vor G: Tarif-Laden hat Vorrang vor AC-Laden.
-> - Fall TM greift für Modus = `'1'` unabhängig von `cycle_active`: sowohl laufende Zone 1 als auch Zone 2 werden gestoppt. Der Zyklus-Reset in TM verhindert, dass Fall D den Modus sofort wiederherstellt.
-> - Falls GT und G enthalten beide einen `NICHT Surplus-Bool = on`-Guard: Zone 0 blockiert den Eintritt in alle Lademodi.
-> - Fall I fängt jeden `'3'`-Zustand ohne legitime Lade-Session auf.
-
 ---
 
 ### 5. ☀️ Überschuss-Einspeisung (Zone 0, Optional)
