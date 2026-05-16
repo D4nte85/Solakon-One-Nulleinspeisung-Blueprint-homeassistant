@@ -489,11 +489,19 @@ actions:
         {% set usable = [states(i2_soc) | float(0) - i2_min_soc | float(0), 0] | max %}
         {{ (usable / 100 * cap2) if i2_active else 0 }}
       soc3: >
-        {% set usable = [states(i3_soc) | float(0) - i3_min_soc | float(0), 0] | max %}
-        {{ (usable / 100 * cap3) if i3_active else 0 }}
+        {% if i3_active and i3_soc is string and i3_soc | length > 0 %}
+          {% set usable = [states(i3_soc) | float(0) - i3_min_soc | float(0), 0] | max %}
+          {{ usable / 100 * cap3 }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
       soc4: >
-        {% set usable = [states(i4_soc) | float(0) - i4_min_soc | float(0), 0] | max %}
-        {{ (usable / 100 * cap4) if i4_active else 0 }}
+        {% if i4_active and i4_soc is string and i4_soc | length > 0 %}
+          {% set usable = [states(i4_soc) | float(0) - i4_min_soc | float(0), 0] | max %}
+          {{ usable / 100 * cap4 }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
 
       # Anzahl aktiver Instanzen
       active_count: >
