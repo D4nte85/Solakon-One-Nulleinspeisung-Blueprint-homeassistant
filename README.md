@@ -642,6 +642,7 @@ mehr Last und entlädt sich entsprechend stärker, bis beide wieder auf gleichem
 12. **Fall I Safety:** Greift nur wenn weder AC-Laden noch Tarif-Laden aktiv ist
 13. **Sensor-Einheit kW:** Grid-, Solar- und Ist-Leistungssensoren dürfen W **oder** kW liefern — der Blueprint normalisiert automatisch auf W. Tarif- und Preis-Sensoren werden nicht automatisch umgerechnet (siehe Hinweis 4).
 14. **PV-Forecast Fallback:** Sensor unavailable → Unterdrückung inaktiv; Surplus-Forecast unavailable → erzwungener Eintritt inaktiv. Normalbetrieb bleibt erhalten.
+15. **Leistungsverteilung — optionale Instanzen:** Instanz 3 und 4 werden nur ausgewertet wenn Modus, Limit-Helper und Share-Helper konfiguriert sind. Nicht konfigurierte optionale SOC-Sensoren werden sicher übersprungen (kein `states()`-Aufruf auf leerem Feld).
 
 ---
 

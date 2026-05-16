@@ -12,6 +12,8 @@ blueprint:
     Ausfuehrungsintervall: Trigger alle 10 s, Intervallkontrolle per last_updated der Limit-Entity.
     Voraussetzung pro Instanz: je eine input_number fuer Max. Ausgangsleistung und Fehler-Anteil
     (0.0-1.0) sowie der konfigurierte Min-SOC (Zone 3 Stopp) der jeweiligen Instanz.
+    Nicht konfigurierte optionale Instanzen (3/4) werden sicher uebersprungen —
+    states()-Aufruf nur bei aktiver Instanz mit gueltigem Sensor-String.
   domain: automation
   source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/experimental_multi_instancing/solakon_leistungsverteilung.yaml
   input:
@@ -482,6 +484,8 @@ actions:
       # Nutzbare Energie pro Instanz = (SOC − Min-SOC) / 100 × Kapazität_kWh
       # Kein Sensor → cap = 100.0 → (SOC − Min-SOC) / 100 × 100 = SOC − Min-SOC (identisch zu vorher)
       # Inaktive Instanzen erhalten 0 → kein Gewicht.
+      # Instanz 3/4: states() nur aufrufen wenn aktiv UND Sensor-ID gültiger String —
+      # default: {} für optionale Entitäten würde sonst TypeError (unhashable dict) auslösen.
       soc1: >
         {% set usable = [states(i1_soc) | float(0) - i1_min_soc | float(0), 0] | max %}
         {{ (usable / 100 * cap1) if i1_active else 0 }}
