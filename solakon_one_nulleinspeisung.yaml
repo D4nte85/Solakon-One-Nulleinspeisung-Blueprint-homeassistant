@@ -1423,7 +1423,6 @@ actions:
 
       # FALL HT: TARIF-LADEN BEENDEN
       # Stoppbedingung Preis: NUR wenn Sensor valide — Sensor-Ausfall stoppt NICHT
-      # (verhindert Oszillation bei unavailable Preis-Sensor)
       - conditions:
           - condition: template
             value_template: >
@@ -1536,7 +1535,7 @@ actions:
               entity_id: !input integral_helper
             data:
               value: 0
-          # 3. Zyklus deaktivieren wenn Zone 1 aktiv war (verhindert sofortige Recovery durch Fall D)
+          # 3. Zyklus deaktivieren wenn Zone 1 aktiv war
           - choose:
               - conditions: "{{ is_state(cycle_active, 'on') }}"
                 sequence:
