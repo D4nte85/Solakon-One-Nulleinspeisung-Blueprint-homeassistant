@@ -15,7 +15,7 @@ blueprint:
     Nicht konfigurierte optionale Instanzen (3/4) werden sicher uebersprungen —
     states()-Aufruf nur bei aktiver Instanz mit gueltigem Sensor-String.
   domain: automation
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/experimental_multi_instancing/solakon_leistungsverteilung.yaml
+  source_url: https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/experimental_multi_instancing/solakon_leistungsverteilung.yaml
   input:
 
     # ═══════════════════════════════════════════════════════════════════════
