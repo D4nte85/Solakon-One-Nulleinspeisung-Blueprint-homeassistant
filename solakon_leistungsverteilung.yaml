@@ -470,8 +470,7 @@ actions:
       i3_active: "{{ i3_configured and states(i3_mode) == '1' }}"
       i4_active: "{{ i4_configured and states(i4_mode) == '1' }}"
 
-      # Kapazitätssensoren (Standard 100.0 → Gewichtung nach SOC-Prozentpunkten wenn nicht gesetzt,
-      # da sich der /100-Faktor im Verhältnis herauskürzt).
+      # Kapazitätssensoren (Standard 100.0 → Gewichtung nach SOC-Prozentpunkten wenn nicht gesetzt).
       i1_cap_valid: "{{ i1_cap is string and i1_cap | length > 0 }}"
       i2_cap_valid: "{{ i2_cap is string and i2_cap | length > 0 }}"
       i3_cap_valid: "{{ i3_cap is string and i3_cap | length > 0 }}"
@@ -482,7 +481,6 @@ actions:
       cap4: "{{ states(i4_cap) | float(100.0) if i4_cap_valid else 100.0 }}"
 
       # Nutzbare Energie pro Instanz = (SOC − Min-SOC) / 100 × Kapazität_kWh
-      # Kein Sensor → cap = 100.0 → (SOC − Min-SOC) / 100 × 100 = SOC − Min-SOC (identisch zu vorher)
       # Inaktive Instanzen erhalten 0 → kein Gewicht.
       soc1: >
         {% set usable = [states(i1_soc) | float(0) - i1_min_soc | float(0), 0] | max %}
