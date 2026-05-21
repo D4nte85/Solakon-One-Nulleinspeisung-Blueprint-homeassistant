@@ -35,7 +35,7 @@ blueprint:
       - Tarif-Laden aktiv → direkte Leistungssetzung, kein PI
       - AC Laden aktiv → PI mit `ac_charge_mode=true`, `at_max/at_min`-Guards deaktiviert
       - Normal → PI nur wenn `|Fehler| > Toleranz` UND kein At-Limit
-    - **Separate P/I-Faktoren für AC Laden:** Wegen langer Hardware-Flanke (~25 s) empfiehlt sich ein kleiner P-Faktor (~0.3–0.5); der I-Anteil macht die eigentliche Regelarbeit.
+    - **Separate P/I-Faktoren für AC Laden:** Wegen langer Hardware-Flanke (~25 s) empfiehlt sich ein kleiner P-Faktor (~0.3–0.5). Der I-Anteil ist wegen der trägen Hardware kaum wirksam — Standardwert 0 belassen.
 
     </details>
 
@@ -109,7 +109,7 @@ blueprint:
     - **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`
       - Positiver Fehler (Grid zu negativ) → Ladeleistung erhöhen
       - `at_max/at_min`-Guards deaktiviert (Richtung invertiert)
-    - **Separate P/I-Faktoren:** P klein (~0.3–0.5), I macht die eigentliche Regelarbeit
+    - **Separate P/I-Faktoren:** P klein (~0.3–0.5), I auf 0 belassen (Hardware zu träge)
     - **Rückkehr:**
       - Zone 1 → Integral = 0, AC-Bool = `off`, Output → 0 W, Timer-Toggle, Modus → `'1'`
       - Zone 2 → Integral = 0, AC-Bool = `off`, Output → 0 W, Modus → `'0'`
@@ -713,9 +713,8 @@ blueprint:
             name: 🎛️ I-Faktor AC Laden
             description: |
               Integral-Verstärkung für den AC-Lade-Modus.
-              Der P-Anteil dämpft bereits — ein zu früh eingesetzter I-Faktor
-              führt zu Überschwingen. Startwert: 0 (sicher). Nur erhöhen
-              wenn P allein eine bleibende Regelabweichung hinterlässt.
+              Wegen der trägen Hardware (~25 s Flanke) ist der I-Anteil
+              kaum wirksam — Standardwert 0 belassen.
             default: 0
             selector:
               number:
@@ -1036,8 +1035,16 @@ variables:
        price_sensor_valid | bool(false) and
        states(price_sensor_entity) | float(999) < expensive_threshold_float | float(0) }}
 
-  # Hard Limit (auch in BLOCK 1 für Surplus-Forecast-Eintritt)
+  # Hard Limit (auch in BLOCK 1 für Surplus-Forecast-Eintritt und Zone-0-Pfad)
   max_active_power_limit_int: !input max_active_power_limit
+  max_power_entity_id: !input max_power_entity
+  hard_limit_int: >
+    {% if max_power_entity_id is string and max_power_entity_id | length > 0
+         and states(max_power_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+      {{ states(max_power_entity_id) | int(max_active_power_limit_int) }}
+    {% else %}
+      {{ max_active_power_limit_int }}
+    {% endif %}
 
   # Surplus-Forecast erzwungener Eintritt
   surplus_forecast_enabled_bool: !input surplus_forecast_enabled
@@ -1125,7 +1132,7 @@ actions:
             value_template: >
               {{ ((states(soc) | float(0) >= soc_export_limit_int) and
                   (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int) or solar_power_float == 0)) or
-                 (surplus_forecast_forced | bool(false) and solar_power_float > max_active_power_limit_int) }}
+                 (surplus_forecast_forced | bool(false) and solar_power_float > hard_limit_int) }}
         sequence:
           # 1. Logbuch-Eintrag
           - action: logbook.log
@@ -1546,6 +1553,7 @@ actions:
       # Stoppt laufende Entladung (Zone 1 UND Zone 2) wenn Preis zwischen günstig und teuer liegt.
       # Guard: kein AC/Tarif-Laden aktiv, Modus = '1' (Entladung läuft)
       # Guard: pv_forecast_suppressed — sonnige Tage überspringen Discharge-Lock
+      # Guard: not price_is_cheap — explizit nur mittlere Zone (günstig ≤ Preis < teuer)
       - conditions:
           - condition: template
             value_template: "{{ tariff_arbitrage_enabled_bool }}"
@@ -1553,6 +1561,8 @@ actions:
             value_template: "{{ price_sensor_valid | bool(false) }}"
           - condition: template
             value_template: "{{ price_discharge_locked | bool(false) }}"
+          - condition: template
+            value_template: "{{ not (price_is_cheap | bool(false)) }}"
           - condition: template
             value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
           - condition: template
