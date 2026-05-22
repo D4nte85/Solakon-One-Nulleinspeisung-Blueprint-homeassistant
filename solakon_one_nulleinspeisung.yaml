@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V304)
+  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V306)
   description: |
     Dynamische Nulleinspeisung für den Solakon ONE Wechselrichter mit PI-Regler, SOC-Zonenlogik,
     optionaler Überschuss-Einspeisung (inkl. Surplus-Forecast-Eintritt), optionalem AC Laden,
@@ -20,8 +20,11 @@ blueprint:
     - **Integral-Decay:** 5 % Abbau pro Zyklus solange Fehler ≤ Toleranz und |Integral| > 10 (in Hauptautomatisierung).
     - **Integral-Einfrieren:** In Zone 0 (Überschuss) kein Decay, kein PI-Aufruf.
     - **Fehlerberechnung (modusabhängig, im Script):**
-      - Normal (`ac_charge_mode=false`): `raw_error = grid − target_offset`
-      - AC Laden (`ac_charge_mode=true`): `raw_error = target_offset − grid` (invertiert)
+      - Normal (`ac_charge_mode=false`): `raw_error = (grid − target_offset) × error_share`
+      - AC Laden (`ac_charge_mode=true`): `raw_error = (target_offset − grid) × error_share` (invertiert)
+      - `error_share` = Anteil des Netzfehlers, den diese Instanz übernimmt (0–1, Standard 1.0).
+        Im Einzelbetrieb immer 1.0. Im Multi-Instanz-Betrieb von der Leistungsverteilungs-Automation
+        gesetzt: `(SOC − Min-SOC) / Σ(SOC_i − Min-SOC_i)` — proportional zur nutzbaren Kapazität.
     - **Kapazitäts-Clamping:** Fehler wird auf tatsächlich verfügbare Kapazität begrenzt.
     - **Dynamisches Power-Limit (`max_power` ans Script):**
       - Zone 1: Hard Limit
@@ -32,7 +35,7 @@ blueprint:
       - Tarif-Laden aktiv → direkte Leistungssetzung, kein PI
       - AC Laden aktiv → PI mit `ac_charge_mode=true`, `at_max/at_min`-Guards deaktiviert
       - Normal → PI nur wenn `|Fehler| > Toleranz` UND kein At-Limit
-    - **Separate P/I-Faktoren für AC Laden:** Wegen langer Hardware-Flanke (~25 s) empfiehlt sich ein kleiner P-Faktor (~0.3–0.5); der I-Anteil macht die eigentliche Regelarbeit.
+    - **Separate P/I-Faktoren für AC Laden:** Wegen langer Hardware-Flanke (~25 s) empfiehlt sich ein kleiner P-Faktor (~0.3–0.5). Der I-Anteil ist wegen der trägen Hardware kaum wirksam — Standardwert 0 belassen.
 
     </details>
 
@@ -106,7 +109,7 @@ blueprint:
     - **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`
       - Positiver Fehler (Grid zu negativ) → Ladeleistung erhöhen
       - `at_max/at_min`-Guards deaktiviert (Richtung invertiert)
-    - **Separate P/I-Faktoren:** P klein (~0.3–0.5), I macht die eigentliche Regelarbeit
+    - **Separate P/I-Faktoren:** P klein (~0.3–0.5), I auf 0 belassen (Hardware zu träge)
     - **Rückkehr:**
       - Zone 1 → Integral = 0, AC-Bool = `off`, Output → 0 W, Timer-Toggle, Modus → `'1'`
       - Zone 2 → Integral = 0, AC-Bool = `off`, Output → 0 W, Modus → `'0'`
@@ -176,7 +179,7 @@ blueprint:
     </details>
 
   domain: automation
-  source_url: https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/main/solakon_one_nulleinspeisung.yaml
+  source_url: https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/experimental_multi_instancing/solakon_one_nulleinspeisung.yaml
   input:
 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -481,6 +484,35 @@ blueprint:
                 max: 1200
                 unit_of_measurement: W
 
+      max_power_entity:
+            name: 🔀 Max. Ausgangsleistung — Dynamisch (Multi-Instancing)
+            description: |
+              ⚠️ NUR für Multi-Instancing erforderlich — im Einzelbetrieb leer lassen.
+              Optionale input_number-Entität, die den statischen Hard-Limit-Wert überschreibt.
+              Eine übergeordnete Automatisierung schreibt die aufgeteilte Leistung hinein:
+              - Instanz 1: input_number.solakon_instanz1_limit → 500 W
+              - Instanz 2: input_number.solakon_instanz2_limit → 300 W
+              Summe aller Instanzen muss ≤ physisches Wechselrichter-Limit bleiben.
+              ⚠️ Wenn leer gelassen, gilt der statische Hard-Limit-Wert oben.
+            default: {}
+            selector:
+              entity:
+                domain: input_number
+
+      error_share_entity:
+            name: ⚖️ Fehler-Anteil Helfer (input_number, Optional — Multi-Instancing)
+            description: |
+              ⚠️ NUR für Multi-Instancing erforderlich — im Einzelbetrieb leer lassen.
+              input_number-Entität (0.0–1.0), die den Anteil des Netzfehlers enthält,
+              den diese Instanz regeln soll.
+              Die Leistungsverteilungs-Automation berechnet den Anteil proportional zur
+              nutzbaren Kapazität (SOC − Min-SOC) und schreibt ihn in diesen Helfer.
+              ⚠️ Wenn leer gelassen, übernimmt die Instanz den vollen Netzfehler (= 1.0).
+            default: {}
+            selector:
+              entity:
+                domain: input_number
+
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # ☀️ ÜBERSCHUSS-EINSPEISUNG (Optional - Zone 0)
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -681,9 +713,8 @@ blueprint:
             name: 🎛️ I-Faktor AC Laden
             description: |
               Integral-Verstärkung für den AC-Lade-Modus.
-              Der P-Anteil dämpft bereits — ein zu früh eingesetzter I-Faktor
-              führt zu Überschwingen. Startwert: 0 (sicher). Nur erhöhen
-              wenn P allein eine bleibende Regelabweichung hinterlässt.
+              Wegen der trägen Hardware (~25 s Flanke) ist der I-Anteil
+              kaum wirksam — Standardwert 0 belassen.
             default: 0
             selector:
               number:
@@ -800,6 +831,45 @@ blueprint:
             selector:
               entity:
                 domain: input_boolean
+
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 🌤️ PV-FORECAST TARIF-UNTERDRÜCKUNG (Optional)
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      pv_forecast_parameter:
+        name: "🌤️ PV-FORECAST TARIF-UNTERDRÜCKUNG (Optional):"
+        collapsed: true
+        input:
+          pv_forecast_enabled:
+            name: 🌤️ PV-Forecast Tarif-Unterdrückung aktivieren
+            description: |
+              Wenn aktiviert und PV-Forecast ≥ Schwelle: GT- und TM-Blöcke werden übersprungen.
+              Verhindert Tarif-Laden an sonnigen Tagen.
+              ⚠️ Nur wirksam wenn Tarif-Arbitrage aktiviert ist.
+            default: false
+            selector:
+              boolean:
+
+          pv_forecast_sensor:
+            name: 🌤️ PV-Forecast Sensor (Optional)
+            description: |
+              PV-Ertragsprognose in W (z.B. Solcast-Sensor).
+              ⚠️ Leer lassen wenn PV-Forecast nicht genutzt wird.
+            default: {}
+            selector:
+              entity:
+                domain: sensor
+
+          pv_forecast_threshold:
+            name: 🌤️ PV-Forecast Schwelle (W)
+            description: |
+              Mindest-Vorhersagewert für Tarif-Unterdrückung.
+            default: 5000
+            selector:
+              number:
+                min: 0
+                max: 20000
+                step: 100
+                unit_of_measurement: W
 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🌙 NACHTABSCHALTUNG (Optional)
@@ -942,6 +1012,16 @@ variables:
       {{ ac_charge_offset_static }}
     {% endif %}
 
+  # Fehler-Anteil (Multi-Instancing)
+  error_share_entity_id: !input error_share_entity
+  error_share_value: >
+    {% if error_share_entity_id is string and error_share_entity_id | length > 0
+       and states(error_share_entity_id) not in ['unknown', 'unavailable'] %}
+      {{ states(error_share_entity_id) | float(1.0) }}
+    {% else %}
+      1.0
+    {% endif %}
+
   # Tarif-Arbitrage
   tariff_arbitrage_enabled_bool: !input tariff_arbitrage_enabled
   price_sensor_entity: !input price_sensor
@@ -994,8 +1074,16 @@ variables:
        price_sensor_valid | bool(false) and
        states(price_sensor_entity) | float(999) < expensive_threshold_float | float(0) }}
 
-  # Hard Limit (auch in BLOCK 1 für Surplus-Forecast-Eintritt)
+  # Hard Limit (auch in BLOCK 1 für Surplus-Forecast-Eintritt und Zone-0-Pfad)
   max_active_power_limit_int: !input max_active_power_limit
+  max_power_entity_id: !input max_power_entity
+  hard_limit_int: >
+    {% if max_power_entity_id is string and max_power_entity_id | length > 0
+         and states(max_power_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+      {{ states(max_power_entity_id) | int(max_active_power_limit_int) }}
+    {% else %}
+      {{ max_active_power_limit_int }}
+    {% endif %}
 
   # Surplus-Forecast erzwungener Eintritt
   surplus_forecast_enabled_bool: !input surplus_forecast_enabled
@@ -1082,9 +1170,8 @@ actions:
           - condition: template
             value_template: >
               {{ ((states(soc) | float(0) >= soc_export_limit_int) and
-                  (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int) or solar_power_float == 0))
-                 or
-                 (surplus_forecast_forced | bool(false) and solar_power_float > max_active_power_limit_int) }}
+                  (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int) or solar_power_float == 0)) or
+                 (surplus_forecast_forced | bool(false) and solar_power_float > hard_limit_int) }}
         sequence:
           # 1. Logbuch-Eintrag
           - action: logbook.log
@@ -1376,6 +1463,8 @@ actions:
             value_template: "{{ states(solakon_mode) != '3' }}"
           - condition: template
             value_template: "{{ not (surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on')) }}"
+          - condition: template
+            value_template: "{{ not (pv_forecast_suppressed | bool(false)) }}"
         sequence:
           # 1. Logbuch-Eintrag
           - action: logbook.log
@@ -1505,6 +1594,7 @@ actions:
       # Stoppt laufende Entladung (Zone 1 UND Zone 2) wenn Preis zwischen günstig und teuer liegt.
       # Guard: kein AC/Tarif-Laden aktiv, Modus = '1' (Entladung läuft)
       # Guard: pv_forecast_suppressed — sonnige Tage überspringen Discharge-Lock
+      # Guard: not price_is_cheap — explizit nur mittlere Zone (günstig ≤ Preis < teuer)
       - conditions:
           - condition: template
             value_template: "{{ tariff_arbitrage_enabled_bool }}"
@@ -1513,13 +1603,15 @@ actions:
           - condition: template
             value_template: "{{ price_discharge_locked | bool(false) }}"
           - condition: template
-            value_template: "{{ not (pv_forecast_suppressed | bool(false)) }}"
+            value_template: "{{ not (price_is_cheap | bool(false)) }}"
           - condition: template
             value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
           - condition: template
             value_template: "{{ not (ac_charge_mode_active | bool(false)) }}"
           - condition: template
             value_template: "{{ states(solakon_mode) == '1' }}"
+          - condition: template
+            value_template: "{{ not (pv_forecast_suppressed | bool(false)) }}"
         sequence:
           # 1. Logbuch-Eintrag
           - action: logbook.log
@@ -1909,6 +2001,14 @@ actions:
       wait_time_int: !input wait_time
       pi_script: !input PI_regler_script
       max_active_power_limit_int: !input max_active_power_limit
+      max_power_entity_id: !input max_power_entity
+      hard_limit_int: >
+        {% if max_power_entity_id is string and max_power_entity_id | length > 0
+             and states(max_power_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+          {{ states(max_power_entity_id) | int(max_active_power_limit_int) }}
+        {% else %}
+          {{ max_active_power_limit_int }}
+        {% endif %}
       regulator_factor_float: !input regulator_factor
       ki_factor_float: !input ki_factor
       ac_charge_p_factor_float: !input ac_charge_p_factor
@@ -1953,7 +2053,7 @@ actions:
         {% if states(solakon_mode) == '3' %}
           {{ ac_charge_power_limit_int }}
         {% elif is_state(cycle_active, 'on') %}
-          {{ max_active_power_limit_int }}
+          {{ hard_limit_int }}
         {% else %}
           {{ [0, solar_power_float - (pv_charge_reserve_int | float(0))] | max }}
         {% endif %}
@@ -1965,7 +2065,7 @@ actions:
 
       # At-Limit Guards — nur für normalen Entlade-Modus relevant
       # Im AC-Modus ist die Fehlerrichtung invertiert, Guards würden PI fälschlich blockieren
-      # dynamic_max_power ist das effektive Limit dieser Zone (Zone 1: hard_limit, Zone 2: PV-basiert)
+      # dynamic_max_power ist das effektive Limit dieser Zone (Zone 1: hard_limit_int, Zone 2: PV-basiert)
       at_max_limit: "{{ raw_error > 0 and current_active_power >= dynamic_max_power | float(0) }}"
       at_min_limit: "{{ raw_error < 0 and current_active_power <= 0 }}"
 
@@ -2052,7 +2152,7 @@ actions:
                 target:
                   entity_id: !input active_power_number
                 data:
-                  value: "{{ max_active_power_limit_int }}"
+                  value: "{{ hard_limit_int }}"
               # Integral einfrieren (unverändert zurückschreiben)
               - action: input_number.set_value
                 target:
@@ -2104,6 +2204,7 @@ actions:
               integral_entity: !input integral_helper
               output_entity: !input active_power_number
               ac_charge_mode: true
+              error_share: "{{ error_share_value }}"
           # Wartezeit — adaptiv bis Ist-Leistung ≈ Sollwert oder Timeout
           - wait_template: >
               {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
@@ -2133,6 +2234,7 @@ actions:
               integral_entity: !input integral_helper
               output_entity: !input active_power_number
               ac_charge_mode: false
+              error_share: "{{ error_share_value }}"
           # Wartezeit — adaptiv bis Ist-Leistung ≈ Sollwert oder Timeout
           - wait_template: >
               {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}

@@ -1,0 +1,673 @@
+blueprint:
+  name: "Solakon Leistungsverteilung (Multi-Instancing)"
+  description: >-
+    Verteilt Ausgangsleistung und Netzfehler-Anteil adaptiv auf 2-4 Solakon-Nulleinspeisung-Instanzen.
+    Erkennung aktiver Instanzen via Modus '1' (INV Discharge PV Priority).
+    Gesamtleistung per PV-Einfluss-Parameter steuerbar (0=Global-Max, 1=PV-Cap).
+    Verteilung per Umschalter Gleichverteilung oder SOC/PV-Schieberegler gewichtet.
+    Gewichtung basiert auf nutzbarer Energie: (SOC - Min-SOC) / 100 x Kapazitaet_kWh pro Instanz.
+    Ohne Kapazitaetssensor: Kapazitaet = 100 — Gewichtung nach SOC-Prozentpunkten.
+    Jede Instanz erhaelt einen Anteil proportional zu ihrer nutzbaren Energie —
+    sowohl fuer das Leistungslimit als auch fuer den Netzfehler-Anteil (error_share).
+    Ausfuehrungsintervall: Trigger alle 10 s, Intervallkontrolle per last_updated der Limit-Entity.
+    Voraussetzung pro Instanz: je eine input_number fuer Max. Ausgangsleistung und Fehler-Anteil
+    (0.0-1.0) sowie der konfigurierte Min-SOC (Zone 3 Stopp) der jeweiligen Instanz.
+    Nicht konfigurierte optionale Instanzen (3/4) werden sicher uebersprungen —
+    states()-Aufruf nur bei aktiver Instanz mit gueltigem Sensor-String.
+  domain: automation
+  source_url: https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/experimental_multi_instancing/solakon_leistungsverteilung.yaml
+  input:
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # 🌐 GLOBALE EINSTELLUNGEN
+    # ═══════════════════════════════════════════════════════════════════════
+    global_settings:
+      name: "🌐 GLOBALE EINSTELLUNGEN"
+      collapsed: false
+      input:
+
+        global_max_power:
+          name: ⚡ Gesamte Max. Ausgangsleistung
+          description: |
+            Absolute Obergrenze aller Instanzen zusammen.
+            Wird nach PV-Einfluss und Gewichtung aufgeteilt.
+            Darf das physische Wechselrichter-Limit nicht überschreiten.
+          default: 800
+          selector:
+            number:
+              min: 0
+              max: 800
+              step: 10
+              unit_of_measurement: W
+
+        interval_seconds:
+          name: ⏱️ Aktualisierungsintervall
+          description: |
+            Wie oft Leistungsverteilung berechnet und geschrieben wird.
+            Intern: Trigger alle 10 s, Ausführung per Zeitabstand-Prüfung — kein Helper nötig.
+          default: "30"
+          selector:
+            select:
+              options:
+                - label: "10 Sekunden"
+                  value: "10"
+                - label: "30 Sekunden (empfohlen)"
+                  value: "30"
+                - label: "60 Sekunden"
+                  value: "60"
+                - label: "120 Sekunden"
+                  value: "120"
+                - label: "300 Sekunden"
+                  value: "300"
+
+        pv_sensor:
+          name: ☀️ Solarleistung-Sensor (gemeinsam, für Gesamtleistungs-Berechnung)
+          description: |
+            Aktueller PV-Gesamtertrag in Watt.
+            Wird für die Berechnung der verfügbaren Gesamtleistung verwendet (PV-Einfluss).
+            Kann derselbe Sensor sein den die Instanzen nutzen.
+          selector:
+            entity:
+              domain: sensor
+              device_class: power
+
+        pv_influence:
+          name: ☀️ PV-Einfluss auf Gesamtleistung
+          description: |
+            Wie stark PV die GESAMTE verteilte Leistung begrenzt.
+            0,0 → PV ohne Einfluss, immer Global-Max verteilt.
+            1,0 → Gesamtleistung = min(PV, Global-Max).
+            0,5 → Mittelweg: 50 % PV-limitiert, 50 % Global-Max.
+            Formel: total = Global-Max × (1 − Einfluss) + min(PV, Global-Max) × Einfluss
+          default: 0.5
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # ⚖️ VERTEILUNGS-MODUS
+    # ═══════════════════════════════════════════════════════════════════════
+    weighting_settings:
+      name: "⚖️ VERTEILUNGS-MODUS"
+      collapsed: false
+      input:
+
+        equal_distribution:
+          name: ⚖️ Gleichverteilung aktivieren
+          description: |
+            Ein  → Alle aktiven Instanzen erhalten gleich viel Leistung.
+                    SOC/PV-Schieberegler wird ignoriert.
+            Aus  → Gewichtete Verteilung nach SOC / PV-Schieberegler.
+          default: true
+          selector:
+            boolean:
+
+        soc_pv_balance:
+          name: 🎚️ SOC ←→ PV Gewichtung
+          description: |
+            Nur wirksam wenn Gleichverteilung = Aus.
+            0,0  → Verteilung ausschließlich nach SOC (höherer SOC → mehr Leistung).
+            1,0  → Verteilung ausschließlich nach individueller PV-Leistung
+                   (höhere PV → mehr Leistung).
+            0,5  → 50 % SOC + 50 % PV.
+            SOC-Anteil + PV-Anteil = immer 1,0.
+            ⚠️ Wenn kein PV-Sensor pro Instanz konfiguriert ist, wird der
+            PV-Anteil automatisch auf SOC umgeleitet.
+          default: 0.5
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.05
+              mode: slider
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # 🔋 INSTANZ 1 (PFLICHT)
+    # ═══════════════════════════════════════════════════════════════════════
+    instance1_settings:
+      name: "🔋 INSTANZ 1 (PFLICHT)"
+      collapsed: false
+      input:
+
+        inst1_mode_select:
+          name: 🔄 Instanz 1 — Betriebsmodus-Auswahl
+          description: |
+            Mode-Select der ersten Solakon-Instanz.
+            Instanz gilt als aktiv wenn Modus = '1' (INV Discharge PV Priority).
+          selector:
+            entity:
+              domain: select
+
+        inst1_soc_sensor:
+          name: 🔋 Instanz 1 — SOC-Sensor
+          description: Batterieladestand in % — steuert SOC-Gewichtung.
+          selector:
+            entity:
+              domain: sensor
+              device_class: battery
+
+        inst1_pv_sensor:
+          name: ☀️ Instanz 1 — PV-Leistung (Optional)
+          description: |
+            Individueller PV-Sensor dieser Instanz in Watt.
+            Wird nur für die Verteilungsgewichtung verwendet (nicht Gesamtleistung).
+            ⚠️ Nur relevant wenn Gleichverteilung = Aus und Schieberegler > 0,0.
+            Leer lassen → Instanz erhält nur SOC-Gewichtung.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+              device_class: power
+
+        inst1_min_soc:
+          name: 🔋 Instanz 1 — Min-SOC (Zone 3 Stopp)
+          description: |
+            Untere SOC-Schwelle aus den Blueprint-Einstellungen der Instanz 1.
+            Wird zur Berechnung der nutzbaren Kapazität verwendet:
+            nutzbar = SOC − Min-SOC (nur der Bereich über dem Minimum zählt).
+          default: 20
+          selector:
+            number:
+              min: 0
+              max: 49
+              unit_of_measurement: "%"
+
+        inst1_capacity_sensor:
+          name: 🔋 Instanz 1 — Batteriekapazität in kWh (Optional)
+          description: |
+            Kapazitätssensor der Solakon-ONE-Integration.
+            Optional: verbessert die Gewichtung bei Batterien unterschiedlicher Kapazität.
+            Ohne Angabe: Gewichtung rein nach SOC-Prozentpunkten (gleichwertige Kapazität angenommen).
+            ⚠️ Entweder für alle Instanzen setzen oder für keine.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+
+        inst1_limit_number:
+          name: ⚙️ Instanz 1 — Max. Leistung (input_number)
+          description: |
+            Die input_number-Entität in die die zugeteilte Leistung geschrieben wird.
+            ⚠️ Muss in der Instanz-Automation als "Max. Ausgangsleistung — Dynamisch"
+            eingetragen sein. Einstellungen: min: 0, max: ≥ Global-Max, step: 1.
+          selector:
+            entity:
+              domain: input_number
+
+        inst1_share_number:
+          name: ⚖️ Instanz 1 — Fehler-Anteil Helfer (input_number)
+          description: |
+            input_number-Entität in die der berechnete Fehler-Anteil (0.0–1.0) geschrieben wird.
+            ⚠️ Muss in der Instanz-Automation als "Fehler-Anteil Helfer" eingetragen sein.
+            Einstellungen: min: 0, max: 1, step: 0.01.
+          selector:
+            entity:
+              domain: input_number
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # 🔋 INSTANZ 2 (PFLICHT)
+    # ═══════════════════════════════════════════════════════════════════════
+    instance2_settings:
+      name: "🔋 INSTANZ 2 (PFLICHT)"
+      collapsed: false
+      input:
+
+        inst2_mode_select:
+          name: 🔄 Instanz 2 — Betriebsmodus-Auswahl
+          selector:
+            entity:
+              domain: select
+
+        inst2_soc_sensor:
+          name: 🔋 Instanz 2 — SOC-Sensor
+          selector:
+            entity:
+              domain: sensor
+              device_class: battery
+
+        inst2_pv_sensor:
+          name: ☀️ Instanz 2 — PV-Leistung (Optional)
+          description: Leer lassen → Instanz erhält nur SOC-Gewichtung.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+              device_class: power
+
+        inst2_min_soc:
+          name: 🔋 Instanz 2 — Min-SOC (Zone 3 Stopp)
+          default: 20
+          selector:
+            number:
+              min: 0
+              max: 49
+              unit_of_measurement: "%"
+
+        inst2_capacity_sensor:
+          name: 🔋 Instanz 2 — Batteriekapazität in kWh (Optional)
+          description: Siehe Instanz 1 — Kapazitätssensor der Solakon-ONE-Integration.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+
+        inst2_limit_number:
+          name: ⚙️ Instanz 2 — Max. Leistung (input_number)
+          selector:
+            entity:
+              domain: input_number
+
+        inst2_share_number:
+          name: ⚖️ Instanz 2 — Fehler-Anteil Helfer (input_number)
+          selector:
+            entity:
+              domain: input_number
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # 🔋 INSTANZ 3 (Optional)
+    # ═══════════════════════════════════════════════════════════════════════
+    instance3_settings:
+      name: "🔋 INSTANZ 3 (Optional — leer lassen wenn nicht genutzt)"
+      collapsed: true
+      input:
+
+        inst3_mode_select:
+          name: 🔄 Instanz 3 — Betriebsmodus-Auswahl
+          default: {}
+          selector:
+            entity:
+              domain: select
+
+        inst3_soc_sensor:
+          name: 🔋 Instanz 3 — SOC-Sensor
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+              device_class: battery
+
+        inst3_pv_sensor:
+          name: ☀️ Instanz 3 — PV-Leistung (Optional)
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+              device_class: power
+
+        inst3_min_soc:
+          name: 🔋 Instanz 3 — Min-SOC (Zone 3 Stopp)
+          default: 20
+          selector:
+            number:
+              min: 0
+              max: 49
+              unit_of_measurement: "%"
+
+        inst3_capacity_sensor:
+          name: 🔋 Instanz 3 — Batteriekapazität in kWh (Optional)
+          description: Siehe Instanz 1 — Kapazitätssensor der Solakon-ONE-Integration.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+
+        inst3_limit_number:
+          name: ⚙️ Instanz 3 — Max. Leistung (input_number)
+          default: {}
+          selector:
+            entity:
+              domain: input_number
+
+        inst3_share_number:
+          name: ⚖️ Instanz 3 — Fehler-Anteil Helfer (input_number)
+          default: {}
+          selector:
+            entity:
+              domain: input_number
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # 🔋 INSTANZ 4 (Optional)
+    # ═══════════════════════════════════════════════════════════════════════
+    instance4_settings:
+      name: "🔋 INSTANZ 4 (Optional — leer lassen wenn nicht genutzt)"
+      collapsed: true
+      input:
+
+        inst4_mode_select:
+          name: 🔄 Instanz 4 — Betriebsmodus-Auswahl
+          default: {}
+          selector:
+            entity:
+              domain: select
+
+        inst4_soc_sensor:
+          name: 🔋 Instanz 4 — SOC-Sensor
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+              device_class: battery
+
+        inst4_pv_sensor:
+          name: ☀️ Instanz 4 — PV-Leistung (Optional)
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+              device_class: power
+
+        inst4_min_soc:
+          name: 🔋 Instanz 4 — Min-SOC (Zone 3 Stopp)
+          default: 20
+          selector:
+            number:
+              min: 0
+              max: 49
+              unit_of_measurement: "%"
+
+        inst4_capacity_sensor:
+          name: 🔋 Instanz 4 — Batteriekapazität in kWh (Optional)
+          description: Siehe Instanz 1 — Kapazitätssensor der Solakon-ONE-Integration.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+
+        inst4_limit_number:
+          name: ⚙️ Instanz 4 — Max. Leistung (input_number)
+          default: {}
+          selector:
+            entity:
+              domain: input_number
+
+        inst4_share_number:
+          name: ⚖️ Instanz 4 — Fehler-Anteil Helfer (input_number)
+          default: {}
+          selector:
+            entity:
+              domain: input_number
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# AUTOMATION
+# ═══════════════════════════════════════════════════════════════════════════
+
+mode: single
+max_exceeded: silent
+
+variables:
+  global_max:    !input global_max_power
+  interval_s:    !input interval_seconds
+  pv_infl:       !input pv_influence
+  pv_entity:     !input pv_sensor
+  equal_dist:    !input equal_distribution
+  balance:       !input soc_pv_balance
+  i1_mode:       !input inst1_mode_select
+  i1_soc:        !input inst1_soc_sensor
+  i1_pv:         !input inst1_pv_sensor
+  i1_limit:      !input inst1_limit_number
+  i1_share:      !input inst1_share_number
+  i1_min_soc:    !input inst1_min_soc
+  i1_cap:        !input inst1_capacity_sensor
+  i2_mode:       !input inst2_mode_select
+  i2_soc:        !input inst2_soc_sensor
+  i2_pv:         !input inst2_pv_sensor
+  i2_limit:      !input inst2_limit_number
+  i2_share:      !input inst2_share_number
+  i2_min_soc:    !input inst2_min_soc
+  i2_cap:        !input inst2_capacity_sensor
+  i3_mode:       !input inst3_mode_select
+  i3_soc:        !input inst3_soc_sensor
+  i3_pv:         !input inst3_pv_sensor
+  i3_limit:      !input inst3_limit_number
+  i3_share:      !input inst3_share_number
+  i3_min_soc:    !input inst3_min_soc
+  i3_cap:        !input inst3_capacity_sensor
+  i4_mode:       !input inst4_mode_select
+  i4_soc:        !input inst4_soc_sensor
+  i4_pv:         !input inst4_pv_sensor
+  i4_limit:      !input inst4_limit_number
+  i4_share:      !input inst4_share_number
+  i4_min_soc:    !input inst4_min_soc
+  i4_cap:        !input inst4_capacity_sensor
+
+triggers:
+  # Alle 10 Sekunden triggern — last_updated-Vergleich in der ersten Condition
+  # steuert das konfigurierbare effektive Intervall ohne Extra-Helper.
+  - trigger: time_pattern
+    seconds: "/10"
+
+actions:
+  # ── Intervall-Check ───────────────────────────────────────────────────────
+  # Ausführung nur wenn seit letztem erfolgreichen Durchlauf mindestens
+  # 'interval_s' Sekunden vergangen sind. last_updated der Instanz-1-Limit-Entity
+  # dient als impliziter Zeitstempel — kein extra Helper nötig.
+  - condition: template
+    value_template: >
+      {% set last_ts = states[i1_limit].last_updated | as_timestamp(0) %}
+      {{ (as_timestamp(now()) - last_ts) >= (interval_s | int(30)) }}
+
+  # ── Werte berechnen ───────────────────────────────────────────────────────
+  - variables:
+      pv_power: "{{ states(pv_entity) | float(0) }}"
+
+      # Optional-Instanzen: konfiguriert wenn mode, limit und share gesetzt sind
+      i3_configured: >
+        {{ i3_mode is string and i3_mode | length > 0
+           and i3_limit is string and i3_limit | length > 0
+           and i3_share is string and i3_share | length > 0 }}
+      i4_configured: >
+        {{ i4_mode is string and i4_mode | length > 0
+           and i4_limit is string and i4_limit | length > 0
+           and i4_share is string and i4_share | length > 0 }}
+
+      # Aktiv-Status: Modus '1' = INV Discharge PV Priority = Nulleinspeisung läuft
+      i1_active: "{{ states(i1_mode) == '1' }}"
+      i2_active: "{{ states(i2_mode) == '1' }}"
+      i3_active: "{{ i3_configured and states(i3_mode) == '1' }}"
+      i4_active: "{{ i4_configured and states(i4_mode) == '1' }}"
+
+      # Kapazitätssensoren (Standard 100.0 → Gewichtung nach SOC-Prozentpunkten wenn nicht gesetzt).
+      i1_cap_valid: "{{ i1_cap is string and i1_cap | length > 0 }}"
+      i2_cap_valid: "{{ i2_cap is string and i2_cap | length > 0 }}"
+      i3_cap_valid: "{{ i3_cap is string and i3_cap | length > 0 }}"
+      i4_cap_valid: "{{ i4_cap is string and i4_cap | length > 0 }}"
+      cap1: "{{ states(i1_cap) | float(100.0) if i1_cap_valid else 100.0 }}"
+      cap2: "{{ states(i2_cap) | float(100.0) if i2_cap_valid else 100.0 }}"
+      cap3: "{{ states(i3_cap) | float(100.0) if i3_cap_valid else 100.0 }}"
+      cap4: "{{ states(i4_cap) | float(100.0) if i4_cap_valid else 100.0 }}"
+
+      # Nutzbare Energie pro Instanz = (SOC − Min-SOC) / 100 × Kapazität_kWh
+      # Inaktive Instanzen erhalten 0 → kein Gewicht.
+      soc1: >
+        {% set usable = [states(i1_soc) | float(0) - i1_min_soc | float(0), 0] | max %}
+        {{ (usable / 100 * cap1) if i1_active else 0 }}
+      soc2: >
+        {% set usable = [states(i2_soc) | float(0) - i2_min_soc | float(0), 0] | max %}
+        {{ (usable / 100 * cap2) if i2_active else 0 }}
+      soc3: >
+        {% if i3_active and i3_soc is string and i3_soc | length > 0 %}
+          {% set usable = [states(i3_soc) | float(0) - i3_min_soc | float(0), 0] | max %}
+          {{ usable / 100 * cap3 }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+      soc4: >
+        {% if i4_active and i4_soc is string and i4_soc | length > 0 %}
+          {% set usable = [states(i4_soc) | float(0) - i4_min_soc | float(0), 0] | max %}
+          {{ usable / 100 * cap4 }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+
+      # Anzahl aktiver Instanzen
+      active_count: >
+        {{ [i1_active, i2_active, i3_active, i4_active]
+           | select('equalto', true) | list | count }}
+
+      # PV-Sensor vorhanden-Check pro Instanz
+      i1_pv_valid: "{{ i1_pv is string and i1_pv | length > 0 }}"
+      i2_pv_valid: "{{ i2_pv is string and i2_pv | length > 0 }}"
+      i3_pv_valid: "{{ i3_pv is string and i3_pv | length > 0 }}"
+      i4_pv_valid: "{{ i4_pv is string and i4_pv | length > 0 }}"
+
+      # Individuelle PV der aktiven Instanzen (0 wenn nicht konfiguriert oder inaktiv)
+      pv1: "{{ states(i1_pv) | float(0) if i1_active and i1_pv_valid else 0 }}"
+      pv2: "{{ states(i2_pv) | float(0) if i2_active and i2_pv_valid else 0 }}"
+      pv3: "{{ states(i3_pv) | float(0) if i3_active and i3_pv_valid else 0 }}"
+      pv4: "{{ states(i4_pv) | float(0) if i4_active and i4_pv_valid else 0 }}"
+
+      # total_soc = Summe der nutzbaren Kapazitäten (SOC − Min-SOC, inaktive = 0).
+      # Wird als Nenner für die Gewichtsberechnung genutzt (proportionaler Anteil).
+      total_soc:     "{{ soc1 + soc2 + soc3 + soc4 }}"
+      total_pv_dist: "{{ pv1 + pv2 + pv3 + pv4 }}"
+
+      # Gesamtleistung nach PV-Einfluss auf Global-Max
+      pv_capped:   "{{ [pv_power, global_max | float(800)] | min }}"
+      total_power: >
+        {% set gmax = global_max | float(800) %}
+        {% set pi   = pv_infl | float(0.5) %}
+        {{ (gmax * (1.0 - pi) + pv_capped * pi) | round(0) | int }}
+
+      # Anteile aus dem Schieberegler (SOC + PV = 1,0)
+      # Wenn kein PV-Sensor vorhanden (total_pv_dist = 0), wird der PV-Anteil
+      # automatisch auf SOC umgeleitet → reine SOC-Gewichtung als Fallback.
+      _pv_share:  "{{ balance | float(0.5) }}"
+      _soc_share: "{{ 1.0 - _pv_share }}"
+
+      # Gewichte (w1–w4) bestimmen gleichzeitig:
+      #   a) Leistungsverteilung: power_i = total_power × w_i
+      #   b) Fehler-Anteil:       error_share_i = w_i → direkt in Instanz-PI-Regler
+      # Gleichverteilung:  1/n für alle aktiven
+      # Gewichtet (SOC):   nutzbare Kapazität (SOC − Min-SOC) / Σ nutzbare Kapazität
+      #                    → Instanz mit mehr nutzbarer Kapazität übernimmt mehr Last
+      #                    → SOC-Werte gleichen sich automatisch an
+      # Gewichtet (PV):    PV_i / ΣPV (nur wenn individuelle PV-Sensoren konfiguriert)
+      #   → fehlt ΣPV:     PV-Anteil fließt in SOC-Anteil (total_pv_dist = 0 Guard)
+      w1: >
+        {% if not i1_active or active_count | int(0) == 0 %}{{ 0.0 }}
+        {% elif equal_dist %}{{ 1.0 / active_count }}
+        {% else %}
+          {% set eq = 1.0 / active_count %}
+          {% set ss = soc1 / total_soc if total_soc > 0 else eq %}
+          {% if total_pv_dist > 0 %}
+            {% set ps = pv1 / total_pv_dist %}
+            {{ _soc_share * ss + _pv_share * ps }}
+          {% else %}
+            {{ ss }}
+          {% endif %}
+        {% endif %}
+      w2: >
+        {% if not i2_active or active_count | int(0) == 0 %}{{ 0.0 }}
+        {% elif equal_dist %}{{ 1.0 / active_count }}
+        {% else %}
+          {% set eq = 1.0 / active_count %}
+          {% set ss = soc2 / total_soc if total_soc > 0 else eq %}
+          {% if total_pv_dist > 0 %}
+            {% set ps = pv2 / total_pv_dist %}
+            {{ _soc_share * ss + _pv_share * ps }}
+          {% else %}
+            {{ ss }}
+          {% endif %}
+        {% endif %}
+      w3: >
+        {% if not i3_active or active_count | int(0) == 0 %}{{ 0.0 }}
+        {% elif equal_dist %}{{ 1.0 / active_count }}
+        {% else %}
+          {% set eq = 1.0 / active_count %}
+          {% set ss = soc3 / total_soc if total_soc > 0 else eq %}
+          {% if total_pv_dist > 0 %}
+            {% set ps = pv3 / total_pv_dist %}
+            {{ _soc_share * ss + _pv_share * ps }}
+          {% else %}
+            {{ ss }}
+          {% endif %}
+        {% endif %}
+      w4: >
+        {% if not i4_active or active_count | int(0) == 0 %}{{ 0.0 }}
+        {% elif equal_dist %}{{ 1.0 / active_count }}
+        {% else %}
+          {% set eq = 1.0 / active_count %}
+          {% set ss = soc4 / total_soc if total_soc > 0 else eq %}
+          {% if total_pv_dist > 0 %}
+            {% set ps = pv4 / total_pv_dist %}
+            {{ _soc_share * ss + _pv_share * ps }}
+          {% else %}
+            {{ ss }}
+          {% endif %}
+        {% endif %}
+
+      # Zugeteilte Leistung pro Instanz (auf ganze Watt gerundet)
+      power1: "{{ (total_power * w1 | float(0)) | round(0) | int }}"
+      power2: "{{ (total_power * w2 | float(0)) | round(0) | int }}"
+      power3: "{{ (total_power * w3 | float(0)) | round(0) | int }}"
+      power4: "{{ (total_power * w4 | float(0)) | round(0) | int }}"
+
+      # Schreibwert: aktive Instanz → berechnete Leistung
+      #              inaktive Instanz → Global-Max als sicherer Fallback
+      #              (inaktiv = Modus '0' oder '3'; Limit hat dort keine Wirkung)
+      limit1: "{{ power1 if i1_active else global_max | int }}"
+      limit2: "{{ power2 if i2_active else global_max | int }}"
+      limit3: "{{ power3 if i3_active else global_max | int }}"
+      limit4: "{{ power4 if i4_active else global_max | int }}"
+
+  # ── Schreiben ─────────────────────────────────────────────────────────────
+
+  # Instanz 1 (immer vorhanden) — Leistungslimit und Fehler-Anteil
+  - action: input_number.set_value
+    target:
+      entity_id: !input inst1_limit_number
+    data:
+      value: "{{ limit1 }}"
+  - action: input_number.set_value
+    target:
+      entity_id: !input inst1_share_number
+    data:
+      value: "{{ w1 | round(3) }}"
+
+  # Instanz 2 (immer vorhanden) — Leistungslimit und Fehler-Anteil
+  - action: input_number.set_value
+    target:
+      entity_id: !input inst2_limit_number
+    data:
+      value: "{{ limit2 }}"
+  - action: input_number.set_value
+    target:
+      entity_id: !input inst2_share_number
+    data:
+      value: "{{ w2 | round(3) }}"
+
+  # Instanz 3 (nur wenn konfiguriert) — Leistungslimit und Fehler-Anteil
+  - if:
+      - condition: template
+        value_template: "{{ i3_configured }}"
+    then:
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ i3_limit }}"
+        data:
+          value: "{{ limit3 }}"
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ i3_share }}"
+        data:
+          value: "{{ w3 | round(3) }}"
+
+  # Instanz 4 (nur wenn konfiguriert) — Leistungslimit und Fehler-Anteil
+  - if:
+      - condition: template
+        value_template: "{{ i4_configured }}"
+    then:
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ i4_limit }}"
+        data:
+          value: "{{ limit4 }}"
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ i4_share }}"
+        data:
+          value: "{{ w4 | round(3) }}"

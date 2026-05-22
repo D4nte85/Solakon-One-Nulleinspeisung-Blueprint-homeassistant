@@ -88,9 +88,9 @@ flowchart TD
     style SG_AC fill:none,stroke:#0066cc,stroke-width:5,stroke-dasharray:6,color:#000
 
     %% ── ZONE_CHECK → Fall-Verzweigungen ──────────────────────────────────
-    ZONE_CHECK -- "FALL A   NICHT AC-Lade-Bool = on   UND NICHT Entladesperre (Preis < teuer)   UND SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
-    ZONE_CHECK -- "FALL B   NICHT AC-Lade-Bool = on   UND SOC < Zone-3-Schwelle UND Zyklus = on" --> Z3_A
-    ZONE_CHECK -- "FALL C   NICHT AC-Lade-Bool = on   UND SOC < Zone-3-Schwelle UND Zyklus = off UND Modus ≠ '0'" --> Z3_B
+    ZONE_CHECK -- "FALL A   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND NICHT Entladesperre (Preis < teuer)   UND SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
+    ZONE_CHECK -- "FALL B   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND SOC < Zone-3-Schwelle UND Zyklus = on" --> Z3_A
+    ZONE_CHECK -- "FALL C   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND SOC < Zone-3-Schwelle UND Zyklus = off UND Modus ≠ '0'" --> Z3_B
     ZONE_CHECK -- "FALL D   Zyklus = on   UND Modus ∉ {'1','3'} ← '3' explizit ausgenommen!   UND SOC > Zone-3-Schwelle" --> RECOVERY
     ZONE_CHECK -- "FALL GT   Tarif-Arbitrage aktiviert   UND Preis < Günstig-Schwelle   UND SOC < Tarif-Ladeziel   UND Modus ≠ '3' ← Guard!   UND NICHT Surplus-Bool = on   UND NICHT PV-Forecast-Suppressed" --> TARIFF_START
     ZONE_CHECK -- "FALL HT   Modus = '3'   UND Tarif-Lade-Bool = on   UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Tarif-Ladeziel)" --> TARIFF_END
@@ -98,8 +98,8 @@ flowchart TD
     ZONE_CHECK -- "FALL G   AC Laden aktiviert   UND SOC < Ladeziel   UND Modus ≠ '3' ← Guard!   UND NICHT Tarif-Lade-Bool = on   UND NICHT Surplus-Bool = on   UND (Grid + Output) < −Hysterese" --> AC_START
     ZONE_CHECK -- "FALL H   Modus = '3'   UND (SOC ≥ Ladeziel ODER (Grid ≥ AC-Offset + Hysterese UND Output = 0 W))" --> AC_END
     ZONE_CHECK -- "FALL I   Modus = '3'   UND NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on" --> SAFETY_I
-    ZONE_CHECK -- "FALL E   NICHT AC-Lade-Bool = on   UND NICHT Entladesperre (Preis < teuer)   UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = '0' UND NICHT Nacht" --> Z2_START
-    ZONE_CHECK -- "FALL F   NICHT AC-Lade-Bool = on   UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = off UND Modus aktiv" --> NIGHT
+    ZONE_CHECK -- "FALL E   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND NICHT Entladesperre (Preis < teuer)   UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = '0' UND NICHT Nacht" --> Z2_START
+    ZONE_CHECK -- "FALL F   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = off UND Modus aktiv" --> NIGHT
     ZONE_CHECK -- "Kein Zonenwechsel" --> PI_GATE
 
     TARIFF_END -- "Zyklus = on (Zone 1)" --> TARIFF_END_Z1
@@ -166,14 +166,14 @@ flowchart TD
         AC_GATE -- Ja --> CALC_AC
         AC_GATE -- Nein --> NORMAL_GATE
 
-        CALC_AC["⚡ AC Laden — PI-Script (ac_charge_mode=true)   raw_error = ac_charge_offset − grid ← eigener Offset!   max_power = ac_charge_power_limit   Kapazitäts-Clamping   Integral += error → clamp(−1000, 1000)   Korrektur = P·error + I·integral   (separate ac_charge_p/i_factor)   new_power = current + Korrektur   clamp(0, Lade-Limit) → Output → WR   Integral speichern   Wartezeit   (at_max / at_min Guards NICHT angewendet)"]
+        CALC_AC["⚡ AC Laden — PI-Script (ac_charge_mode=true)   raw_error = (ac_charge_offset − grid) × error_share   error_share: usable_i / Σ(usable_j) — von Leistungsverteilung gesetzt (Standard 1.0)   usable_i = (SOC_i−Min-SOC_i)/100 × Kap_i   (Kap_i = Kap-Sensor kWh oder 100 wenn nicht gesetzt)   max_power = ac_charge_power_limit   Kapazitäts-Clamping   Integral += error → clamp(−1000, 1000)   Korrektur = P·error + I·integral   (separate ac_charge_p/i_factor)   new_power = current + Korrektur   clamp(0, Lade-Limit) → Output → WR   Integral speichern   Wartezeit   (at_max / at_min Guards NICHT angewendet)"]
 
         %% ── Normaler PI-Pfad ─────────────────────────────────────────────
         NORMAL_GATE{{"Fehler > Toleranz?   UND kein At-Max / At-Min-Limit?"}}
         NORMAL_GATE -- Ja --> CALC_NORMAL
         NORMAL_GATE -- Nein --> INTEGRAL_DECAY
 
-        CALC_NORMAL["🧠 PI-Script (ac_charge_mode=false)   raw_error = grid − target_offset   dynamic_max:      Zone 1 → Hard Limit      Zone 2 → Max(0, PV − Reserve)   Kapazitäts-Clamping   Integral += error → clamp(−1000, 1000)   Korrektur = P·error + I·integral   new_power = current + Korrektur   clamp(0, dynamic_max) → Output → WR   Integral speichern   Wartezeit"]
+        CALC_NORMAL["🧠 PI-Script (ac_charge_mode=false)   raw_error = (grid − target_offset) × error_share   error_share: usable_i / Σ(usable_j) — von Leistungsverteilung gesetzt (Standard 1.0)   usable_i = (SOC_i−Min-SOC_i)/100 × Kap_i   (Kap_i = Kap-Sensor kWh oder 100 wenn nicht gesetzt)   dynamic_max:      Zone 1 → Hard Limit      Zone 2 → Max(0, PV − Reserve)   Kapazitäts-Clamping   Integral += error → clamp(−1000, 1000)   Korrektur = P·error + I·integral   new_power = current + Korrektur   clamp(0, dynamic_max) → Output → WR   Integral speichern   Wartezeit"]
 
         INTEGRAL_DECAY["📉 Integral-Decay   |Integral| > 10 → Integral × 0,95   sonst → kein Update"]
 

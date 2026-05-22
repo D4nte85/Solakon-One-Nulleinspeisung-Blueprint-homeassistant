@@ -1,4 +1,4 @@
-# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V304
+# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V306
 
 Dieser Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung** für den Solakon ONE Wechselrichter, basierend auf einem **PI-Regler (Proportional-Integral-Regler)** und einer intelligenten **SOC-Zonen-Logik** mit optionaler **Überschuss-Einspeisung bei vollem Akku**, optionalem **AC Laden aus externer Einspeisung** und optionaler **Tarif-Arbitrage** (günstig laden, Entladesperre bei niedrigem Tarif).
 
@@ -15,13 +15,30 @@ Für eine wie im Folgenden gewollte Funktion sollte als Standard ein 0W für 24s
 
 Installieren Sie den Blueprint direkt über diesen Button in Ihrer Home Assistant Instanz:
 
-[![Open your Home Assistant instance and show the blueprint import dialog with a pre-filled URL.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fmain%2Fsolakon_one_nulleinspeisung.yaml)
+[![Open your Home Assistant instance and show the blueprint import dialog with a pre-filled URL.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fexperimental_multi_instancing%2Fsolakon_one_nulleinspeisung.yaml)
 
 Der zugehörige **PI-Regler Script-Blueprint** muss ebenfalls importiert werden:
 
-[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fmain%2FPI-Regler.yaml)
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fexperimental_multi_instancing%2FPI-Regler.yaml)
+
+Für das Multi instancing:
+
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2FD4nte85%2FSolakon-One-Nulleinspeisung-Blueprint-homeassistant%2Fexperimental_multi_instancing%2Fsolakon_leistungsverteilung.yaml)
 
 ---
+| Artefakt | Instanz 1 | Instanz 2 |
+| :--- | :--- | :--- |
+| `input_boolean` Zyklus | `...entladezyklus_status_i1` | `...entladezyklus_status_i2` |
+| `input_number` Integral | `...integral_i1` | `...integral_i2` |
+| `input_boolean` Surplus | `...surplus_aktiv_i1` | `...surplus_aktiv_i2` |
+| `input_boolean` AC Laden | `...ac_laden_aktiv_i1` | `...ac_laden_aktiv_i2` |
+| `input_boolean` Tarif Laden | `...tarif_laden_aktiv_i1` | `...tarif_laden_aktiv_i2` |
+| PI-Regler Script | `script.pi_regler_i1` | `script.pi_regler_i2` |
+| `input_number` Hard Limit | `...instanz1_limit` | `...instanz2_limit` |
+| **NEU** `input_number` Fehler-Anteil | `...instanz1_share` | `...instanz2_share` |
+
+> **Hinweis:** Der Netz-Sensor (Shelly) wird von beiden Instanzen gleichzeitig gelesen — kein Problem, da nur lesend.
+...
 
 ## 🛠️ Vorbereitung: Erstellung der erforderlichen Helper
 
@@ -81,7 +98,28 @@ Persistenter Zustandsspeicher für das Tarif-Laden. Steuert den direkten Leistun
 3. Name: z.B. `Solakon Tarif Laden Aktiv`
 4. Speichern (Entity ID: z.B. `input_boolean.solakon_tarif_laden_aktiv`)
 
-### 7. Input Number Helper für Dynamischen Offset (Optional)
+### 7. Input Number Helper (Leistungslimit Dynamisch) — NUR für Multi-Instancing
+
+Wird von der Leistungsverteilungs-Automation beschrieben und begrenzt den Ausgangsleistungs-Hardlimit der Instanz dynamisch.
+
+1. **Einstellungen:** Min: `0`, Max: `≥ Global-Max`, Step: `1`, Initialwert: `800`
+2. In der Leistungsverteilung als „Max. Leistung (input_number)" eintragen
+3. In der Instanz-Automation als „Max. Ausgangsleistung — Dynamisch" eintragen
+
+### 8. Input Number Helper (Fehler-Anteil) — NUR für Multi-Instancing
+
+Enthält den Anteil des Netzfehlers (0.0–1.0), den diese Instanz über ihren PI-Regler übernimmt.
+Wird von der Leistungsverteilungs-Automation berechnet: `usable_i / Σ usable_j` mit `usable_i = (SOC_i − Min-SOC_i) / 100 × Kap_i`. Ohne Kapazitätssensor gilt `Kap_i = 100` — reine SOC-%-Gewichtung.
+
+1. Gehen Sie zu **Einstellungen** → **Geräte & Dienste** → **Helfer** → **Number**
+2. Name: z.B. `Solakon Instanz 1 Share`
+3. **Einstellungen:** Min: `0`, Max: `1`, Step: `0.001`, Initialwert: `1`
+4. Speichern (Entity ID: z.B. `input_number.solakon_instanz1_share`)
+5. Wiederholen für jede weitere Instanz
+6. In der Leistungsverteilung als „Fehler-Anteil Helfer" eintragen
+7. In der Instanz-Automation als „Fehler-Anteil Helfer" eintragen
+
+### 9. Input Number Helper für Dynamischen Offset (Optional)
 
 Wenn Sie den Nullpunkt-Offset zur Laufzeit dynamisch anpassen möchten, empfehlen wir den **Solakon ONE — Dynamischer Offset Blueprint**. Dieser erstellt und befüllt die benötigten Helper automatisch.
 
@@ -103,7 +141,7 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
 
 * **P-Anteil:** Reagiert sofort auf aktuelle Abweichungen. Konfigurierbare Aggressivität über den P-Faktor.
 * **I-Anteil:** Summiert Abweichungen über die Zeit auf, eliminiert bleibende Regelabweichungen. Anti-Windup auf ±1000. Automatischer Reset bei Zonenwechsel. Toleranz-Decay 5%/Zyklus wenn Fehler ≤ Toleranz und |Integral| > 10. Zone-0-Einfrieren bei aktivem Überschuss.
-* **Fehlerberechnung:** Normal (`ac_charge_mode=false`): `raw_error = grid − target_offset`. AC Laden (`ac_charge_mode=true`): `raw_error = target_offset − grid` (invertiert).
+* **Fehlerberechnung:** Normal (`ac_charge_mode=false`): `raw_error = (grid − target_offset) × error_share`. AC Laden (`ac_charge_mode=true`): `raw_error = (target_offset − grid) × error_share` (invertiert). `error_share` skaliert den Fehler auf den Anteil dieser Instanz (Standard 1.0 = voller Fehler).
 * **Dynamisches Power-Limit:** Zone 1 → Hard Limit. Zone 2 → `Max(0, PV − Reserve)`. AC Laden → konfigurierbares Lade-Limit. Tarif-Laden → kein PI (direkter Wert).
 * **PI-Aufruf-Guard:** Zone 0 aktiv → PI nicht aufgerufen, Integral eingefroren. Tarif-Laden aktiv → direkt setzen. AC Laden aktiv → PI mit `ac_charge_mode=true`. Normal → PI nur wenn `|Fehler| > Toleranz` UND kein At-Limit.
 
@@ -148,9 +186,9 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 |:-----|:----------|:-------|
 | **0A** | Surplus-Bool = `off` UND (SOC ≥ Export-Schwelle UND (PV > Output + Grid + PV-Hysterese ODER PV = 0) **ODER** Surplus-Forecast-Forced UND PV > Hard Limit) | Zone 0 Start: Surplus-Bool → `on` |
 | **0B** | Surplus-Bool = `on` UND **NICHT Surplus-Forecast-Forced** UND (SOC < Export-Schwelle − SOC-Hysterese ODER PV ≤ Output + Grid − PV-Hysterese) | Zone 0 Ende: Surplus-Bool → `off`, Integral = 0 |
-| **A** | NICHT AC-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'` |
-| **B** | NICHT AC-Lade-Bool = `on` UND SOC < Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
-| **C** | NICHT AC-Lade-Bool = `on` UND SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
+| **A** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'` |
+| **B** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC < Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
+| **C** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
 | **D** | Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle | Recovery: Timer-Toggle, Modus → `'3'` wenn AC-Lade-Bool **oder** Tarif-Lade-Bool = `on`, sonst `'1'` |
 | **GT** | Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel UND **Modus ≠ `'3'`** UND **NICHT Surplus-Bool = `on`** UND **NICHT PV-Forecast-Suppressed** | Tarif-Laden Start: Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'` |
 | **HT** | Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Tarif-Ladeziel) | Tarif-Laden Ende: Tarif-Bool = `off`, Integral = 0, Zone 1 → `'1'` / Zone 2 → `'0'` |
@@ -158,8 +196,8 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 | **G** | AC aktiv UND SOC < Ladeziel UND **Modus ≠ `'3'`** UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + Output) < −Hysterese | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
 | **H** | Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ `ac_charge_offset + Hysterese` UND Output = 0 W)) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` / Zone 2 → `'0'` |
 | **I** | Modus = `'3'` UND NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` | Safety-Korrektur: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
-| **E** | NICHT AC-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Timer-Toggle, Modus → `'1'` |
-| **F** | NICHT AC-Lade-Bool = `on` UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Modus → `'0'`, Output → 0W |
+| **E** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Timer-Toggle, Modus → `'1'` |
+| **F** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Modus → `'0'`, Output → 0W |
 
 ---
 
@@ -182,7 +220,7 @@ Laden der Batterie wenn eine externe Einspeisung ins Netz erkannt wird. Eintritt
 
 * **Blockiert durch:** Zone 0 (Überschuss-Bool = `on`) und Tarif-Laden (Tarif-Bool = `on`).
 * **Eintritts-Bedingung (Fall G):** AC Laden aktiviert UND SOC < Ladeziel UND Modus ≠ `'3'` UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + Output) < −Hysterese.
-* **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`. Separate P/I-Faktoren.
+* **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`. Separate P/I-Faktoren. P klein halten (~0.3–0.5), I auf 0 belassen (Hardware zu träge).
 * **Rückkehr:** Zone 1 → Modus `'1'` (Timer-Toggle) + Integral Reset. Zone 2 → Modus `'0'` + Output 0W + Integral Reset.
 
 ---
@@ -353,7 +391,7 @@ Erzwingt frühzeitigen Zone-0-Eintritt auf Basis einer PV-Überschuss-Prognose.
 | **AC Laden Offset (Statisch)** | -50 W | -100 | 100 W | Regelziel im AC-Lade-Modus. Negativ = Einspeisung angestrebt. |
 | **AC Laden Offset (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
 | **AC Laden P-Faktor** | 0.5 | 0.1 | 5.0 | Klein halten wegen langer Hardware-Flanke (~25 s). |
-| **AC Laden I-Faktor** | 0.07 | 0.01 | 0.2 | Macht bei langen Wartezeiten die eigentliche Regelarbeit. |
+| **AC Laden I-Faktor** | 0 | 0 | 0.2 | Wegen träger Hardware (~25 s) kaum wirksam — Standardwert 0 belassen. |
 
 ---
 
@@ -363,9 +401,9 @@ Erzwingt frühzeitigen Zone-0-Eintritt auf Basis einer PV-Überschuss-Prognose.
 |:----------|:---------|:----|:----|:-------------|
 | **Tarif-Arbitrage aktivieren** | false | — | — | Schalter für die gesamte Tarif-Logik. |
 | **Strompreis-Sensor** | *(leer)* | — | — | Generischer Sensor. Einheit muss zu den Schwellwerten passen. |
-| **Günstig-Schwelle** | 10 | -100 | 100 | Unter diesem Wert: Laden + Entladesperre (Zone 1 und Zone 2). |
-| **Teuer-Schwelle** | 25 | -100 | 100 | Ab diesem Wert: Entladesperre aufgehoben, normale SOC-Logik. |
-| **SOC-Ladeziel Tarif-Laden** | 90 % | 10 % | 99 % | Tarif-Laden stoppt bei diesem SOC. Empfohlen: > Zone-1-Schwelle. Unabhängig vom AC-Laden-Ladeziel. |
+| **Günstig-Schwelle** | 0.20 | 0 | 1 | Unter diesem Wert: Laden + Entladesperre (Zone 1 und Zone 2). |
+| **Teuer-Schwelle** | 0.25 | 0 | 1 | Ab diesem Wert: Entladesperre aufgehoben, normale SOC-Logik. |
+| **SOC-Ladeziel Tarif-Laden** | 90 % | 10 % | 99 % | Tarif-Laden stoppt bei diesem SOC. Unabhängig vom AC-Laden-Ladeziel. |
 | **Ladeleistung Tarif-Laden** | 800 W | 50 | 1200 W | Direkt gesetzter Wert — kein PI-Regler. |
 
 ---
@@ -438,7 +476,7 @@ Schrittweise erhöhen bis System leicht anfängt zu zittern — dann einen Schri
 I-Faktor: 0.02   # Startpunkt
 ```
 
-Typischer Arbeitsbereich: **0.03–0.08**. Für AC Laden separat tunen — P besonders klein halten (~0.3–0.5). Tarif-Laden verwendet keinen PI-Regler.
+Typischer Arbeitsbereich: **0.03–0.08**. Für AC Laden separat tunen — P besonders klein halten (~0.3–0.5), I-Faktor auf 0 lassen (Hardware zu träge). Tarif-Laden verwendet keinen PI-Regler.
 
 ---
 
@@ -457,7 +495,8 @@ Typischer Arbeitsbereich: **0.03–0.08**. Für AC Laden separat tunen — P bes
 ### Architektur
 
 1. **Hauptautomatisierung** (`solakon_one_nulleinspeisung.yaml`): Zonen-Steuerung, SOC-Logik, Surplus/AC/Tarif-Lade-Zustand, Entladestrom-Verwaltung, Timeout-Reset, PI-Aufruf-Guard, Integral-Decay/-Einfrieren
-2. **PI-Regler Script** (`PI-Regler.yaml`): Reine Berechnungslogik — wird für AC-Laden genutzt, nicht für Tarif-Laden
+2. **PI-Regler Script** (`PI-Regler.yaml`): Reine Berechnungslogik — skaliert `raw_error` mit `error_share` vor der PI-Berechnung
+3. **Leistungsverteilung** (`solakon_leistungsverteilung.yaml`): Multi-Instanz-Koordination — berechnet Leistungslimits und Fehler-Anteile; nur für Multi-Instancing erforderlich
 
 ### Tarif-Arbitrage State-Machine
 
@@ -526,6 +565,57 @@ Zone 2 (cycle = off):                   Max(0, PV - pv_charge_reserve)
 | Zone 0 (Überschuss) | 2 A | Nur wenn abweichend |
 | Zone 1 (Aggressiv) | Konfigurierter Maximalwert | Nur wenn abweichend und kein Surplus, kein AC/Tarif-Laden |
 | Zone 2 / AC/Tarif-Laden (Modus 3) | 0 A | Nur wenn abweichend |
+
+---
+
+## 🔀 Multi-Instancing (Mehrere Batterien)
+
+### Funktionsweise
+
+Jede Instanz übernimmt nur ihren proportionalen Anteil des Netzfehlers (`error_share`).
+Die Leistungsverteilungs-Automation berechnet diesen Anteil pro Instanz aus der nutzbaren
+Kapazität — also dem SOC-Bereich über dem konfigurierten Min-SOC (Zone 3 Stopp):
+
+```
+usable_i    = (SOC_i − Min-SOC_i) / 100 × Kap_i
+error_share_i = usable_i / Σ usable_j
+```
+
+Ohne Kapazitätssensor gilt `Kap_i = 100` — Gewichtung nach SOC-Prozentpunkten (identisch zum Vorgänger).
+
+Beispiel mit zwei Instanzen (Min-SOC jeweils 20 %, Kapazitäten 10 kWh / 5 kWh):
+
+```
+Instanz 1: SOC=60% → (40/100) × 10 = 4,0 kWh nutzbar
+Instanz 2: SOC=40% → (20/100) ×  5 = 1,0 kWh nutzbar
+→ share1 = 4.0/5.0 = 0.80, share2 = 1.0/5.0 = 0.20
+```
+
+Der berechnete Anteil wird von der Leistungsverteilung in einen `input_number`-Helfer
+geschrieben, den der PI-Regler jeder Instanz als `error_share` liest und auf `raw_error`
+anwendet. Im Einzelbetrieb (kein Helfer konfiguriert) gilt `error_share = 1.0`.
+
+Da die Gewichtung auf der nutzbaren Kapazität basiert, gleichen sich die Ladezustände
+mehrerer Batterien automatisch an: eine Instanz mit mehr nutzbarer Kapazität übernimmt
+mehr Last und entlädt sich entsprechend stärker, bis beide wieder auf gleichem Stand sind.
+
+### Erforderliche Helper pro Instanz (zusätzlich zu Einzelinstanz)
+
+| Helper / Sensor | Typ | Einstellungen | Verwendung |
+|:----------------|:----|:--------------|:-----------|
+| `...instanz_N_limit` | `input_number` | min:0, max:≥Global-Max, step:1 | Leistungslimit von Leistungsverteilung → Instanz |
+| `...instanz_N_share` | `input_number` | min:0, max:1, step:0.001 | Fehler-Anteil von Leistungsverteilung → PI-Regler |
+| Kapazitätssensor (optional) | `sensor` | kWh — von Solakon-Integration bereitgestellt | kWh-genaue Gewichtung bei unterschiedlichen Batteriekapazitäten |
+
+### Konfigurationsschritte
+
+1. Alle Instanz-Blueprints wie gewohnt einrichten
+2. Pro Instanz die zwei neuen Helper (`limit`, `share`) erstellen
+3. In jeder Instanz-Automation eintragen: „Max. Ausgangsleistung — Dynamisch" und „Fehler-Anteil Helfer"
+4. Leistungsverteilungs-Blueprint (`solakon_leistungsverteilung.yaml`) als Automation anlegen:
+   - Min-SOC pro Instanz eintragen — identisch mit dem Wert „Zone 3 Stopp" der jeweiligen Instanz
+   - `limit`- und `share`-Helper pro Instanz zuordnen
+   - Optional: Kapazitätssensor der Solakon-ONE-Integration pro Instanz eintragen — empfohlen bei unterschiedlichen Batteriekapazitäten
 
 ---
 
