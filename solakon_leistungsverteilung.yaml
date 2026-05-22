@@ -9,7 +9,7 @@ blueprint:
     Ohne Kapazitaetssensor: Kapazitaet = 100 — Gewichtung nach SOC-Prozentpunkten.
     Jede Instanz erhaelt einen Anteil proportional zu ihrer nutzbaren Energie —
     sowohl fuer das Leistungslimit als auch fuer den Netzfehler-Anteil (error_share).
-    Ausfuehrungsintervall: Trigger alle 10 s, Intervallkontrolle per last_updated der Limit-Entity.
+    Ausfuehrungsintervall: Trigger alle 10 s, Intervallkontrolle per last_updated der Share-Entity (Instanz 1).
     Voraussetzung pro Instanz: je eine input_number fuer Max. Ausgangsleistung und Fehler-Anteil
     (0.0-1.0) sowie der konfigurierte Min-SOC (Zone 3 Stopp) der jeweiligen Instanz.
     Nicht konfigurierte optionale Instanzen (3/4) werden sicher uebersprungen —
@@ -443,11 +443,12 @@ triggers:
 actions:
   # ── Intervall-Check ───────────────────────────────────────────────────────
   # Ausführung nur wenn seit letztem erfolgreichen Durchlauf mindestens
-  # 'interval_s' Sekunden vergangen sind. last_updated der Instanz-1-Limit-Entity
-  # dient als impliziter Zeitstempel — kein extra Helper nötig.
+  # 'interval_s' Sekunden vergangen sind. last_updated der Instanz-1-Share-Entity
+  # dient als impliziter Zeitstempel — diese Entity wird ausschließlich von dieser
+  # Automation beschrieben, nicht von der Hauptautomation (die schreibt i1_limit).
   - condition: template
     value_template: >
-      {% set last_ts = states[i1_limit].last_updated | as_timestamp(0) %}
+      {% set last_ts = states[i1_share].last_updated | as_timestamp(0) %}
       {{ (as_timestamp(now()) - last_ts) >= (interval_s | int(30)) }}
 
   # ── Werte berechnen ───────────────────────────────────────────────────────
