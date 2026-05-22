@@ -7,7 +7,7 @@ blueprint:
     ac_charge_mode = false (Standard): normale Fehlerberechnung (raw_error = grid - target_offset).
     error_share (0.0-1.0): skaliert raw_error auf den Anteil dieser Instanz. Standard = 1.0.
   domain: script
-  source_url: https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/experimental_multi_instancing/PI-Regler.yaml
+  source_url: https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/main/PI-Regler.yaml
 
 mode: single
 
