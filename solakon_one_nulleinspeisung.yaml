@@ -888,45 +888,6 @@ blueprint:
             selector:
               boolean:
 
-        # ═══════════════════════════════════════════════════════════════════════════════════════════════
-        # 🌤️ PV-FORECAST TARIF-UNTERDRÜCKUNG (Optional)
-        # ═══════════════════════════════════════════════════════════════════════════════════════════════
-      pv_forecast_parameter:
-        name: "🌤️ PV-FORECAST TARIF-UNTERDRÜCKUNG (Optional):"
-        collapsed: true
-        input:
-          pv_forecast_enabled:
-            name: 🌤️ PV-Forecast Tarif-Unterdrückung aktivieren
-            description: |
-              Wenn aktiviert und PV-Forecast ≥ Schwelle: GT- und TM-Blöcke werden übersprungen.
-              Verhindert Tarif-Laden an sonnigen Tagen.
-              ⚠️ Nur wirksam wenn Tarif-Arbitrage aktiviert ist.
-            default: false
-            selector:
-              boolean:
-
-          pv_forecast_sensor:
-            name: 🌤️ PV-Forecast Sensor (Optional)
-            description: |
-              PV-Ertragsprognose in W (z.B. Solcast-Sensor).
-              ⚠️ Leer lassen wenn PV-Forecast nicht genutzt wird.
-            default: {}
-            selector:
-              entity:
-                domain: sensor
-
-          pv_forecast_threshold:
-            name: 🌤️ PV-Forecast Schwelle (W)
-            description: |
-              Ab diesem Vorhersagewert werden GT und TM übersprungen.
-            default: 5000
-            selector:
-              number:
-                min: 0
-                max: 20000
-                step: 100
-                unit_of_measurement: W
-
 
 mode: single
 max_exceeded: silent
