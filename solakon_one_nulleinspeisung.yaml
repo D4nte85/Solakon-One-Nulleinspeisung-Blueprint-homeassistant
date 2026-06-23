@@ -2006,17 +2006,18 @@ actions:
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
       integral_old: "{{ states(integral_entity) | float(0) }}"
 
-      # Dynamisches Power-Limit (zonenabhängig)
+      # Dynamisches Power-Limit (zonenabhängig, gedeckelt auf WR-Entity-Max)
       # Modus '3' (AC Laden) → Lade-Limit als max_power ans Script
       # Zone 1               → Hard Limit
       # Zone 2               → Max(0, PV - Reserve)
+      inverter_entity_max: "{{ state_attr(active_power_entity, 'max') | float(9999) }}"
       dynamic_max_power: >
         {% if states(solakon_mode) == '3' %}
-          {{ ac_charge_power_limit_int }}
+          {{ [ac_charge_power_limit_int, inverter_entity_max] | min }}
         {% elif is_state(cycle_active, 'on') %}
-          {{ hard_limit_int }}
+          {{ [hard_limit_int, inverter_entity_max] | min }}
         {% else %}
-          {{ [0, solar_power_float - (pv_charge_reserve_int | float(0))] | max }}
+          {{ [[0, solar_power_float - (pv_charge_reserve_int | float(0))] | max, inverter_entity_max] | min }}
         {% endif %}
 
       # Fehler für Guards (immer in Entlade-Richtung: grid − offset)
@@ -2108,12 +2109,12 @@ actions:
             value_template: "{{ surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on') }}"
         sequence:
           - parallel:
-              # Output → Hard Limit
+              # Output → Hard Limit (gedeckelt auf WR-Entity-Max)
               - action: number.set_value
                 target:
                   entity_id: !input active_power_number
                 data:
-                  value: "{{ hard_limit_int }}"
+                  value: "{{ [hard_limit_int, state_attr(active_power_entity, 'max') | float(hard_limit_int)] | min }}"
               # Integral einfrieren (unverändert zurückschreiben)
               - action: input_number.set_value
                 target:

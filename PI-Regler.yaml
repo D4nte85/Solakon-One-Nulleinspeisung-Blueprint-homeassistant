@@ -84,9 +84,13 @@ variables:
   integral_old: "{{ states(integral_entity) | float(0) }}"
   integral_new: "{{ (integral_old + error_float) | float(0) | clamp(-1000, 1000) }}"
 
+  # Hardware-Max der Ziel-Entität (Fallback: max_pwr_float wenn Attribut fehlt)
+  entity_max: "{{ state_attr(output_entity, 'max') | float(max_pwr_float) }}"
+  effective_max: "{{ [max_pwr_float, entity_max] | min }}"
+
   # PI-Korrektur und Endergebnis
   power_correction: "{{ (error_float * p_val) + (integral_new * i_val) }}"
-  final_power: "{{ (current_float + power_correction) | float(0) | round(0) | clamp(0, max_pwr_float) }}"
+  final_power: "{{ (current_float + power_correction) | float(0) | round(0) | clamp(0, effective_max) }}"
 
 sequence:
   - parallel:
