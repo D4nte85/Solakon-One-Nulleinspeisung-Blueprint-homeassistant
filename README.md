@@ -167,6 +167,8 @@ Um die Stabilität der Kommunikation mit dem Solakon ONE zu gewährleisten:
 | **Helper** | Entladezyklus-Speicher | `input_select.soc_entladezyklus_status` | Input Select: `on`/`off` |
 | **Helper** | Integral-Speicher | `input_number.solakon_integral` | Input Number: -1000 bis 1000 |
 
+> **Hinweis zum „Maximalen Entladestrom":** In der offiziellen Solakon Home-Assistant-Integration ist die Entität `number.solakon_one_maximaler_entladestrom` **standardmäßig deaktiviert**. Wird sie nicht gefunden bzw. als „unbekannte Entität" angezeigt, muss sie zunächst in HA unter dem Solakon-Gerät bei den **Konfigurations-Entitäten** aktiviert werden (Gerät → Entität → Zahnrad → „Aktivieren"). Ohne diese Entität kann der Entladestrom nicht gesteuert werden.
+
 ---
 
 ### 🎚️ Regelungs-Parameter
