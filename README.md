@@ -331,6 +331,8 @@ Erzwingt frühzeitigen Zone-0-Eintritt auf Basis einer PV-Überschuss-Prognose.
 | **Helper** | AC-Lade-Zustand-Speicher | `input_boolean.solakon_ac_laden_aktiv` | Nur wenn AC Laden aktiv. |
 | **Helper** | Tarif-Lade-Zustand-Speicher | `input_boolean.solakon_tarif_laden_aktiv` | Nur wenn Tarif-Arbitrage aktiv. |
 
+> **Hinweis zum „Maximalen Entladestrom":** In der offiziellen Solakon Home-Assistant-Integration ist die Entität `number.solakon_one_maximaler_entladestrom` **standardmäßig deaktiviert**. Wird sie nicht gefunden bzw. als „unbekannte Entität" angezeigt, muss sie zunächst in HA unter dem Solakon-Gerät bei den **Konfigurations-Entitäten** aktiviert werden (Gerät → Entität → Zahnrad → „Aktivieren"). Ohne diese Entität kann der Entladestrom nicht gesteuert werden.
+
 ---
 
 ### 🎚️ Regelungs-Parameter
