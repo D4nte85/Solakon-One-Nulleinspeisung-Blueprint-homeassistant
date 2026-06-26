@@ -245,6 +245,8 @@ Applies to **Zone 2 only** (Case F). Zone 1 and AC Charging continue at night.
 | **Helper** | Surplus State Storage | `input_boolean.solakon_surplus_aktiv` | Only when Zone 0 active. |
 | **Helper** | AC Charge State Storage | `input_boolean.solakon_ac_laden_aktiv` | Only when AC Charging active. |
 
+> **Note on "Max. Discharge Current":** In the official Solakon Home Assistant integration the entity `number.solakon_one_maximaler_entladestrom` is **disabled by default**. If it is not found or shows up as an "unknown entity", enable it first in HA under the Solakon device among the **configuration entities** (Device → Entity → gear icon → "Enable"). Without this entity the discharge current cannot be controlled.
+
 ---
 
 ### 🎚️ Control Parameters
