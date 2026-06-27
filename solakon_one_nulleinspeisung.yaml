@@ -86,7 +86,7 @@ blueprint:
 
     - **Eintritt (Standard):** SOC ≥ Export-Schwelle UND (PV > (Output + Grid + PV-Hysterese) ODER PV = 0)
     - **Eintritt (Forecast):** Surplus-Forecast-Sensor ≥ Schwelle UND PV > Hard Limit → erzwungener Eintritt **ohne SOC-Gate**
-    - **Austritt:** SOC < (Export-Schwelle − SOC-Hysterese) ODER PV ≤ (Output + Grid − PV-Hysterese) — **blockiert wenn Surplus-Forecast aktiv**
+    - **Austritt:** PV ≤ (Output + Grid − PV-Hysterese) — greift immer; ODER SOC < (Export-Schwelle − SOC-Hysterese) — nur wenn **kein** Surplus-Forecast aktiv
     - **Persistenz:** Zustand in `input_boolean` — überlebt mehrere Automation-Läufe
     - **Verhalten:** Output → Hard Limit, Entladestrom → 2 A (Stabilitätspuffer), Integral eingefroren
     - **Hysterese:** Doppelte Absicherung (SOC + PV) verhindert instabiles Hin- und Herschalten
@@ -172,7 +172,7 @@ blueprint:
 
     - **Sensor:** PV-Überschuss-Prognose in W (z.B. Solcast `power_now_1h`)
     - **Eintritt (Fall 0A, OR-Branch):** Forecast ≥ Schwelle UND PV > Hard Limit → Zone-0-Eintritt ohne SOC-Gate
-    - **Exit-Sperre (Fall 0B):** `surplus_forecast_forced = true` blockiert Austritt aus Zone 0
+    - **Exit-Sperre (Fall 0B):** `surplus_forecast_forced = true` blockiert nur den SOC-Austritt; der PV-Austritt (PV ≤ Output + Grid − Hysterese) greift weiterhin → Surplus endet nachts trotz Forecast
     - **Nur wirksam wenn:** Überschuss-Einspeisung ebenfalls aktiviert ist
     - **Fallback:** Sensor `unknown`/`unavailable` → Forecast inaktiv, normales SOC-Gate gilt
 
@@ -1154,9 +1154,9 @@ actions:
             state: 'on'
           - condition: template
             value_template: >
-              {{ not (surplus_forecast_forced | bool(false)) and
-                 ((states(soc) | float(0) < (soc_export_limit_int - surplus_exit_hysteresis_int)) or
-                  (solar_power_float <= (actual_power_float + grid_power_float - surplus_pv_hysteresis_int))) }}
+              {{ (solar_power_float <= (actual_power_float + grid_power_float - surplus_pv_hysteresis_int)) or
+                 (not (surplus_forecast_forced | bool(false)) and
+                  (states(soc) | float(0) < (soc_export_limit_int - surplus_exit_hysteresis_int))) }}
         sequence:
           # 1. Logbuch-Eintrag
           - action: logbook.log

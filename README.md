@@ -207,7 +207,7 @@ Ermöglicht aktives Einspeisen von PV-Überschuss wenn der Akku voll ist. SOC- u
 
 * **Aktivierung:** Über den Parameter "Überschuss-Einspeisung aktivieren"
 * **Eintritts-Bedingung:** SOC ≥ Export-Schwelle UND (PV > (Output + Grid + PV-Hysterese) ODER PV = 0)
-* **Austritts-Bedingung:** SOC < (Export-Schwelle − SOC-Hysterese) ODER PV ≤ (Output + Grid − PV-Hysterese)
+* **Austritts-Bedingung:** PV ≤ (Output + Grid − PV-Hysterese) — greift immer; ODER SOC < (Export-Schwelle − SOC-Hysterese) — nur wenn kein Surplus-Forecast aktiv
 * **Blockiert:** Tarif-Laden (Fall GT) und AC-Laden (Fall G) können nicht starten solange Zone 0 aktiv ist.
 * **Verhalten:** Output auf Hard Limit, Entladestrom 2 A (Stabilitätspuffer), Integral eingefroren.
 * **Deaktiviert:** Klassische Nulleinspeisung — kein aktives Einspeisen.
@@ -303,7 +303,7 @@ Erzwingt frühzeitigen Zone-0-Eintritt auf Basis einer PV-Überschuss-Prognose.
 
 * **Voraussetzung:** Überschuss-Einspeisung muss ebenfalls aktiviert sein.
 * **Eintritt (Fall 0A, OR-Branch):** Wenn Forecast ≥ Schwelle UND Solar > Hard Limit → Zone-0-Eintritt **ohne SOC-Gate** (SOC-Schwelle wird ignoriert).
-* **Exit-Sperre (Fall 0B):** Solange `surplus_forecast_forced = true` wird Fall 0B **blockiert** — Zone 0 bleibt aktiv auch wenn SOC oder PV sonst den Austritt auslösen würden.
+* **Exit-Sperre (Fall 0B):** Solange `surplus_forecast_forced = true` wird nur der **SOC-basierte** Austritt blockiert — Zone 0 bleibt bei vollem Akku aktiv. Der **PV-basierte** Austritt (PV ≤ Output + Grid − Hysterese) greift weiterhin, sodass Surplus nachts (PV = 0) auch bei aktivem Forecast endet.
 * **Sensor:** Z.B. Solcast `power_now_1h` oder stündlicher Überschuss-Forecast in W.
 * **Fallback:** Sensor unavailable/unknown → Forecast inaktiv, normales SOC-Gate gilt.
 
