@@ -169,11 +169,11 @@ flowchart TD
         CALC_AC["⚡ AC Laden — PI-Script (ac_charge_mode=true)   raw_error = (ac_charge_offset − grid) × error_share   error_share: usable_i / Σ(usable_j) — von Leistungsverteilung gesetzt (Standard 1.0)   usable_i = (SOC_i−Min-SOC_i)/100 × Kap_i   (Kap_i = Kap-Sensor kWh oder 100 wenn nicht gesetzt)   max_power = ac_charge_power_limit   Kapazitäts-Clamping   Integral += error → clamp(−1000, 1000)   Korrektur = P·error + I·integral   (separate ac_charge_p/i_factor)   new_power = current + Korrektur   clamp(0, Lade-Limit) → Output → WR   Integral speichern   Wartezeit   (at_max / at_min Guards NICHT angewendet)"]
 
         %% ── Normaler PI-Pfad ─────────────────────────────────────────────
-        NORMAL_GATE{{"Fehler > Toleranz?   UND kein At-Max / At-Min-Limit?"}}
+        NORMAL_GATE{{"Fehler > Toleranz?   UND kein At-Max / At-Min-Limit?   (at_max = false wenn current > dynamic_max — PI korrigiert nach unten)"}}
         NORMAL_GATE -- Ja --> CALC_NORMAL
         NORMAL_GATE -- Nein --> INTEGRAL_DECAY
 
-        CALC_NORMAL["🧠 PI-Script (ac_charge_mode=false)   raw_error = (grid − target_offset) × error_share   error_share: usable_i / Σ(usable_j) — von Leistungsverteilung gesetzt (Standard 1.0)   usable_i = (SOC_i−Min-SOC_i)/100 × Kap_i   (Kap_i = Kap-Sensor kWh oder 100 wenn nicht gesetzt)   dynamic_max:      Zone 1 → Hard Limit      Zone 2 → Max(0, PV − Reserve)   Kapazitäts-Clamping   Integral += error → clamp(−1000, 1000)   Korrektur = P·error + I·integral   new_power = current + Korrektur   clamp(0, dynamic_max) → Output → WR   Integral speichern   Wartezeit"]
+        CALC_NORMAL["🧠 PI-Script (ac_charge_mode=false)   raw_error = (grid − target_offset) × error_share   error_share: usable_i / Σ(usable_j) — von Leistungsverteilung gesetzt (Standard 1.0)   usable_i = (SOC_i−Min-SOC_i)/100 × Kap_i   (Kap_i = Kap-Sensor kWh oder 100 wenn nicht gesetzt)   dynamic_max:      Zone 1 → Hard Limit      Zone 2 → Min(Hard Limit, Max(0, PV − Reserve))   Kapazitäts-Clamping   Integral += error → clamp(−1000, 1000)   Korrektur = P·error + I·integral   new_power = current + Korrektur   clamp(0, dynamic_max) → Output → WR   Integral speichern   Wartezeit"]
 
         INTEGRAL_DECAY["📉 Integral-Decay   |Integral| > 10 → Integral × 0,95   sonst → kein Update"]
 

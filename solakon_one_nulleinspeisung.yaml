@@ -28,13 +28,14 @@ blueprint:
     - **Kapazitäts-Clamping:** Fehler wird auf tatsächlich verfügbare Kapazität begrenzt.
     - **Dynamisches Power-Limit (`max_power` ans Script):**
       - Zone 1: Hard Limit
-      - Zone 2: `Max(0, PV − Reserve)`
+      - Zone 2: `Min(Hard Limit, Max(0, PV − Reserve))`
       - AC Laden (Modus `'3'`): konfigurierbares Lade-Limit
     - **PI-Aufruf-Guard:**
       - Zone 0 aktiv → kein PI-Aufruf, Integral eingefroren
       - Tarif-Laden aktiv → direkte Leistungssetzung, kein PI
       - AC Laden aktiv → PI mit `ac_charge_mode=true`, `at_max/at_min`-Guards deaktiviert
       - Normal → PI nur wenn `|Fehler| > Toleranz` UND kein At-Limit
+      - `at_max_limit` = false wenn `current > dynamic_max` (PV-Einbruch) → PI kann nach unten korrigieren
     - **Separate P/I-Faktoren für AC Laden:** Wegen langer Hardware-Flanke (~25 s) empfiehlt sich ein kleiner P-Faktor (~0.3–0.5). Der I-Anteil ist wegen der trägen Hardware kaum wirksam — Standardwert 0 belassen.
 
     </details>
@@ -46,7 +47,7 @@ blueprint:
     |:-----|:----------|:------|:------------|:-------------|
     | **0 — Überschuss** | SOC ≥ Export-Schwelle UND PV > Output + Grid + PV-Hysterese | `'1'` | 2 A | Optional. Integral eingefroren. |
     | **1 — Aggressiv** | SOC > Zone-1-Schwelle | `'1'` | Max (z.B. 40 A) | Läuft bis SOC ≤ Zone-3-Schwelle. Auch nachts aktiv. |
-    | **2 — Batterieschonend** | Zone-3 < SOC ≤ Zone-1, Zyklus = off | `'1'` | 0 A | Dynamisches Limit: `Max(0, PV − Reserve)`. Optional: Nachtabschaltung. |
+    | **2 — Batterieschonend** | Zone-3 < SOC ≤ Zone-1, Zyklus = off | `'1'` | 0 A | Dynamisches Limit: `Min(Hard Limit, Max(0, PV − Reserve))`. Optional: Nachtabschaltung. |
     | **3 — Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` | 0 A | Output = 0 W. Vollständiger Batterieschutz. Hat immer Vorrang. |
 
     **Steuer-Falls (Reihenfolge ist entscheidend):**
@@ -458,7 +459,7 @@ blueprint:
             name: ⚙️ Zone 2 - PV-Ladereserve
             description: |
               PV-Leistung, die in Zone 2 für Ladung reserviert wird (z.B. 50 W).
-              Dynamische Obergrenze: Max. Entladung = PV - Reserve.
+              Dynamische Obergrenze: Max. Entladung = Min(Hard Limit, Max(0, PV − Reserve)).
               ⚠️ Wird auch als PV-Schwelle für die Nachtabschaltung verwendet.
             default: 50
             selector:
@@ -2006,10 +2007,10 @@ actions:
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
       integral_old: "{{ states(integral_entity) | float(0) }}"
 
-      # Dynamisches Power-Limit (zonenabhängig, gedeckelt auf WR-Entity-Max)
+      # Dynamisches Power-Limit (zonenabhängig, Zone 2 gedeckelt auf min(Hard Limit, WR-Entity-Max))
       # Modus '3' (AC Laden) → Lade-Limit als max_power ans Script
       # Zone 1               → Hard Limit
-      # Zone 2               → Max(0, PV - Reserve)
+      # Zone 2               → Min(Hard Limit, Max(0, PV - Reserve))
       inverter_entity_max: "{{ state_attr(active_power_entity, 'max') | float(9999) }}"
       dynamic_max_power: >
         {% if states(solakon_mode) == '3' %}
@@ -2017,7 +2018,7 @@ actions:
         {% elif is_state(cycle_active, 'on') %}
           {{ [hard_limit_int, inverter_entity_max] | min }}
         {% else %}
-          {{ [[0, solar_power_float - (pv_charge_reserve_int | float(0))] | max, inverter_entity_max] | min }}
+          {{ [[0, solar_power_float - (pv_charge_reserve_int | float(0))] | max, hard_limit_int, inverter_entity_max] | min }}
         {% endif %}
 
       # Fehler für Guards (immer in Entlade-Richtung: grid − offset)
@@ -2027,8 +2028,10 @@ actions:
 
       # At-Limit Guards — nur für normalen Entlade-Modus relevant
       # Im AC-Modus ist die Fehlerrichtung invertiert, Guards würden PI fälschlich blockieren
-      # dynamic_max_power ist das effektive Limit dieser Zone (Zone 1: hard_limit_int, Zone 2: PV-basiert)
-      at_max_limit: "{{ raw_error > 0 and current_active_power >= dynamic_max_power | float(0) }}"
+      # dynamic_max_power ist das effektive Limit (Zone 1: hard_limit_int, Zone 2: min(hard_limit_int, Max(0, PV−Reserve)))
+      # above_dynamic_max: PI läuft weiter wenn current > dynamic_max (z.B. PV-Einbruch) — erlaubt Abwärtskorrektur
+      above_dynamic_max: "{{ current_active_power > dynamic_max_power | float(0) }}"
+      at_max_limit: "{{ raw_error > 0 and current_active_power >= dynamic_max_power | float(0) and not above_dynamic_max }}"
       at_min_limit: "{{ raw_error < 0 and current_active_power <= 0 }}"
 
 

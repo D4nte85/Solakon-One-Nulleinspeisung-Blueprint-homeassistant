@@ -142,8 +142,8 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
 * **P-Anteil:** Reagiert sofort auf aktuelle Abweichungen. Konfigurierbare Aggressivität über den P-Faktor.
 * **I-Anteil:** Summiert Abweichungen über die Zeit auf, eliminiert bleibende Regelabweichungen. Anti-Windup auf ±1000. Automatischer Reset bei Zonenwechsel. Toleranz-Decay 5%/Zyklus wenn Fehler ≤ Toleranz und |Integral| > 10. Zone-0-Einfrieren bei aktivem Überschuss.
 * **Fehlerberechnung:** Normal (`ac_charge_mode=false`): `raw_error = (grid − target_offset) × error_share`. AC Laden (`ac_charge_mode=true`): `raw_error = (target_offset − grid) × error_share` (invertiert). `error_share` skaliert den Fehler auf den Anteil dieser Instanz (Standard 1.0 = voller Fehler).
-* **Dynamisches Power-Limit:** Zone 1 → Hard Limit. Zone 2 → `Max(0, PV − Reserve)`. AC Laden → konfigurierbares Lade-Limit. Tarif-Laden → kein PI (direkter Wert).
-* **PI-Aufruf-Guard:** Zone 0 aktiv → PI nicht aufgerufen, Integral eingefroren. Tarif-Laden aktiv → direkt setzen. AC Laden aktiv → PI mit `ac_charge_mode=true`. Normal → PI nur wenn `|Fehler| > Toleranz` UND kein At-Limit.
+* **Dynamisches Power-Limit:** Zone 1 → Hard Limit. Zone 2 → `Min(Hard Limit, Max(0, PV − Reserve))`. AC Laden → konfigurierbares Lade-Limit. Tarif-Laden → kein PI (direkter Wert).
+* **PI-Aufruf-Guard:** Zone 0 aktiv → PI nicht aufgerufen, Integral eingefroren. Tarif-Laden aktiv → direkt setzen. AC Laden aktiv → PI mit `ac_charge_mode=true`. Normal → PI nur wenn `|Fehler| > Toleranz` UND kein At-Limit. `at_max_limit` = false wenn `current > dynamic_max` (PV-Einbruch) → PI kann nach unten korrigieren.
 
 ---
 
@@ -153,7 +153,7 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
 |:-----|:------------------------|:------|:-----------------|:---------|:--------------|
 | **0 — Überschuss-Einspeisung** | SOC ≥ Export-Schwelle UND PV > Output + Grid + PV-Hysterese | `'1'` | 2 A | Hard Limit | **Optional.** Integral eingefroren. Blockiert GT und G. |
 | **1 — Aggressive Entladung** | SOC > Zone-1-Schwelle | `'1'` | Konfigurierter Max-Wert | 0W + Offset 1 | Läuft **bis SOC ≤ Zone-3-Schwelle**. Auch nachts aktiv. |
-| **2 — Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `'1'` | **0 A** | 0W + Offset 2 | Dynamisches Limit: `Max(0, PV − Reserve)`. Optional: Nachtabschaltung. |
+| **2 — Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `'1'` | **0 A** | 0W + Offset 2 | Dynamisches Limit: `Min(Hard Limit, Max(0, PV − Reserve))`. Optional: Nachtabschaltung. |
 | **3 — Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` | 0 A | — | Output = 0 W. Vollständiger Batterieschutz. Absoluter Vorrang. |
 
 ---
@@ -359,7 +359,7 @@ Erzwingt frühzeitigen Zone-0-Eintritt auf Basis einer PV-Überschuss-Prognose.
 | **Nullpunkt-Offset 1 (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
 | **Nullpunkt-Offset 2 (Statisch)** | 30 W | -100 | 100 W | Statischer Fallback für Zone 2. |
 | **Nullpunkt-Offset 2 (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
-| **PV-Ladereserve** | 50 W | 0 | 1000 W | Zone-2-Limit: `Max(0, PV − Reserve)`. Auch PV-Schwelle für Nachtabschaltung. |
+| **PV-Ladereserve** | 50 W | 0 | 1000 W | Zone-2-Limit: `Min(Hard Limit, Max(0, PV − Reserve))`. Auch PV-Schwelle für Nachtabschaltung. |
 
 ---
 
@@ -557,7 +557,7 @@ Eintritts-Bedingung (Fall G):
 Modus '3' + tariff_charge_mode_active:  tariff_charge_power (Zweig BT, kein PI)
 Modus '3' + ac_charge_mode_active:      ac_charge_power_limit (PI mit ac_charge_mode=true)
 Zone 1 (cycle = on):                    hard_limit
-Zone 2 (cycle = off):                   Max(0, PV - pv_charge_reserve)
+Zone 2 (cycle = off):                   Min(Hard Limit, Max(0, PV - pv_charge_reserve))
 ```
 
 ### Automatische Entladestrom-Steuerung
