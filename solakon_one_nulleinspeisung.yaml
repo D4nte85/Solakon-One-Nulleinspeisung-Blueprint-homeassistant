@@ -15,7 +15,7 @@ blueprint:
     - **Stellgröße:** AC-Ausgangsleistung des Wechselrichters.
     - **P-Anteil:** Reagiert sofort auf die aktuelle Abweichung vom Sollwert.
     - **I-Anteil:** Summiert Abweichungen über die Zeit auf — eliminiert bleibende Regelabweichungen.
-    - **Anti-Windup:** Integral wird auf ±1000 begrenzt (im Script).
+    - **Anti-Windup:** Back-Calculation im Script — Integral wird nach jedem Stelleingriff auf den Wert zurückgesetzt, der den tatsächlichen (ggf. geklemmten) Ausgang produziert. Clamp auf ±effective_max.
     - **Integral-Reset:** Bei jedem Zonenwechsel auf 0.
     - **Integral-Decay:** 5 % Abbau pro Zyklus solange Fehler ≤ Toleranz und |Integral| > 10 (in Hauptautomatisierung).
     - **Integral-Einfrieren:** In Zone 0 (Überschuss) kein Decay, kein PI-Aufruf.

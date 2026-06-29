@@ -80,17 +80,26 @@ variables:
       {{ [raw_error, (0 - current_float)] | max }}
     {% endif %}
 
-  # Integral mit Anti-Windup
   integral_old: "{{ states(integral_entity) | float(0) }}"
-  integral_new: "{{ (integral_old + error_float) | float(0) | clamp(-1000, 1000) }}"
 
   # Hardware-Max der Ziel-Entität (Fallback: max_pwr_float wenn Attribut fehlt)
   entity_max: "{{ state_attr(output_entity, 'max') | float(max_pwr_float) }}"
   effective_max: "{{ [max_pwr_float, entity_max] | min }}"
 
   # PI-Korrektur und Endergebnis
-  power_correction: "{{ (error_float * p_val) + (integral_new * i_val) }}"
-  final_power: "{{ (current_float + power_correction) | float(0) | round(0) | clamp(0, effective_max) }}"
+  integral_candidate: "{{ (integral_old + error_float) | float(0) }}"
+  power_correction: "{{ (error_float * p_val) + (integral_candidate * i_val) }}"
+  new_power: "{{ (current_float + power_correction) | float(0) }}"
+  final_power: "{{ new_power | round(0) | clamp(0, effective_max) }}"
+
+  # Anti-Windup via Back-Calculation: Integral auf den Wert korrigieren,
+  # der genau final_power produziert. Bei ungeklemmtem Ausgang = integral_candidate.
+  integral_new: >
+    {% if i_val != 0 %}
+      {{ ((final_power - current_float - error_float * p_val) / i_val) | clamp(-effective_max, effective_max) }}
+    {% else %}
+      {{ integral_candidate | clamp(-effective_max, effective_max) }}
+    {% endif %}
 
 sequence:
   - parallel:
