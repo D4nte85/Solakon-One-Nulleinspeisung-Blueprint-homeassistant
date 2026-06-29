@@ -299,7 +299,7 @@ blueprint:
             name: 🛠️ Integral-Speicher (input_number - ERFORDERLICH!)
             description: |
               ⚠️ WICHTIG: input_number Helper für den PI-Regler.
-              Min: -1000, Max: 1000, Step: 1, Initial: 0
+              Min: -1200, Max: 1200, Step: 1, Initial: 0
               - Name: e.g. 'Solakon Integral'
             default: input_number.solakon_integral
             selector:
