@@ -3,10 +3,11 @@ blueprint:
   description: >
     A pure calculation script. Expects all entities and values as variables
     passed from an automation.
-    ac_charge_mode = true: inverted error calculation for AC Charging (target = target_offset - grid).
-    ac_charge_mode = false (default): normal error calculation (target = grid - target_offset).
+    ac_charge_mode = true: inverted error calculation for AC Charging (raw_error = target_offset - grid).
+    ac_charge_mode = false (default): normal error calculation (raw_error = grid - target_offset).
+    error_share (0.0-1.0): scales raw_error to this instance's share. Default = 1.0.
   domain: script
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/Solakon-ONE-Zero-Export/PI-Controller.yaml
+  source_url: https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/Solakon-ONE-Zero-Export/PI-Controller.yaml
 
 mode: single
 
@@ -39,11 +40,19 @@ fields:
   ac_charge_mode:
     name: AC Charging Active (Bool)
     description: >
-      true  = AC Charging: raw_error = target_offset − grid (sign inverted).
-              Positive error → increase charge power.
-      false = Normal:       raw_error = grid − target_offset (standard zero export).
+      Determines sign direction of base error (before error_share scaling).
+      true  = AC Charging: base = target_offset − grid (positive error → increase charge power).
+      false = Normal:      base = grid − target_offset (positive error → increase output).
     required: false
     default: false
+
+  error_share:
+    name: Error Share (0.0–1.0)
+    description: >
+      Share of grid error this instance handles (multi-instance operation).
+      Leave unset in single-instance operation — default = 1.0 (full error).
+    required: false
+    default: 1.0
 
 variables:
   grid_float: "{{ states(grid_power) | float(0) }}"
@@ -57,12 +66,10 @@ variables:
   # Error direction depending on mode:
   #   Normal:      grid - target  → positive with grid import (increase output)
   #   AC Charging: target - grid  → positive when Grid < setpoint (increase charge power)
+  # error_share scales the error to this instance's share (multi-instance).
   raw_error: >
-    {% if ac_charge_mode | bool(false) %}
-      {{ target_float - grid_float }}
-    {% else %}
-      {{ grid_float - target_float }}
-    {% endif %}
+    {% set base = (target_float - grid_float) if ac_charge_mode | bool(false) else (grid_float - target_float) %}
+    {{ base * (error_share | float(1.0)) }}
   grid_error_abs: "{{ raw_error | abs }}"
 
   # Capacity clamping: limits error to actually usable capacity
@@ -73,13 +80,26 @@ variables:
       {{ [raw_error, (0 - current_float)] | max }}
     {% endif %}
 
-  # Integral with Anti-Windup
   integral_old: "{{ states(integral_entity) | float(0) }}"
-  integral_new: "{{ (integral_old + error_float) | float(0) | clamp(-1000, 1000) }}"
+
+  # Hardware max of target entity (fallback: max_pwr_float if attribute missing)
+  entity_max: "{{ state_attr(output_entity, 'max') | float(max_pwr_float) }}"
+  effective_max: "{{ [max_pwr_float, entity_max] | min }}"
 
   # PI correction and final result
-  power_correction: "{{ (error_float * p_val) + (integral_new * i_val) }}"
-  final_power: "{{ (current_float + power_correction) | float(0) | round(0) | clamp(0, max_pwr_float) }}"
+  integral_candidate: "{{ (integral_old + error_float) | float(0) }}"
+  power_correction: "{{ (error_float * p_val) + (integral_candidate * i_val) }}"
+  new_power: "{{ (current_float + power_correction) | float(0) }}"
+  final_power: "{{ new_power | round(0) | clamp(0, effective_max) }}"
+
+  # Anti-windup via back-calculation: integral corrected to the value that exactly
+  # produces final_power. Equals integral_candidate when output is not clamped.
+  integral_new: >
+    {% if i_val != 0 %}
+      {{ ((final_power - current_float - error_float * p_val) / i_val) | clamp(-effective_max, effective_max) }}
+    {% else %}
+      {{ integral_candidate | clamp(-effective_max, effective_max) }}
+    {% endif %}
 
 sequence:
   - parallel:

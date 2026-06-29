@@ -1,8 +1,9 @@
 blueprint:
-  name: Solakon ONE Zero Export (EN) - Dynamic & SOC-Controlled (V302)
+  name: Solakon ONE Zero Export (EN) - Dynamic & SOC-Controlled (V306)
   description: |
     Dynamic zero export for the Solakon ONE inverter with PI controller, SOC zone logic,
-    optional surplus export, and optional AC charging from external feed-in.
+    optional surplus export (incl. surplus forecast entry), optional AC charging from external
+    feed-in, optional tariff arbitrage (incl. PV forecast suppression), and adaptive wait time.
 
     <details>
     <summary><b>🧠 PI Controller & Control Logic</b> 👈</summary>
@@ -14,23 +15,28 @@ blueprint:
     - **Manipulated Variable:** AC output power of the inverter.
     - **P Component:** Responds immediately to current deviation from setpoint.
     - **I Component:** Accumulates deviations over time — eliminates steady-state errors.
-    - **Anti-Windup:** Integral is limited to ±1000 (in the script).
+    - **Anti-Windup:** Back-calculation in script — after each control action, the integral is reset to the value that produces the actual (possibly clamped) output. Clamped to ±effective_max.
     - **Integral Reset:** Set to 0 on every zone change.
     - **Integral Decay:** 5% reduction per cycle while error ≤ tolerance and |Integral| > 10 (in main automation).
     - **Integral Freeze:** In Zone 0 (Surplus) no decay, no PI call.
     - **Error Calculation (mode-dependent, in script):**
-      - Normal (`ac_charge_mode=false`): `raw_error = grid − target_offset`
-      - AC Charging (`ac_charge_mode=true`): `raw_error = target_offset − grid` (inverted)
+      - Normal (`ac_charge_mode=false`): `raw_error = (grid − target_offset) × error_share`
+      - AC Charging (`ac_charge_mode=true`): `raw_error = (target_offset − grid) × error_share` (inverted)
+      - `error_share` = share of grid error this instance handles (0–1, default 1.0).
+        Single instance always 1.0. In multi-instance operation set by power distribution automation:
+        `(SOC − Min-SOC) / Σ(SOC_i − Min-SOC_i)` — proportional to usable capacity.
     - **Capacity Clamping:** Error is limited to actually available capacity.
     - **Dynamic Power Limit (`max_power` to script):**
       - Zone 1: Hard Limit
-      - Zone 2: `Max(0, PV − Reserve)`
+      - Zone 2: `Min(Hard Limit, Max(0, PV − Reserve))`
       - AC Charging (Mode `'3'`): configurable charge limit
     - **PI Call Guard:**
       - Zone 0 active → no PI call, integral frozen
+      - Tariff Charging active → direct power set, no PI
       - AC Charging active → PI with `ac_charge_mode=true`, `at_max/at_min` guards disabled
       - Normal → PI only if `|error| > tolerance` AND no at-limit
-    - **Separate P/I Factors for AC Charging:** Due to long hardware response (~25 s) a small P factor (~0.3–0.5) is recommended; the I component does the actual control work.
+      - `at_max_limit` = false if `current > dynamic_max` (PV drop) → PI can correct downward
+    - **Separate P/I Factors for AC Charging:** Due to long hardware response (~25 s) keep P small (~0.3–0.5). I component is barely effective due to sluggish hardware — leave at default 0.
 
     </details>
 
@@ -41,21 +47,36 @@ blueprint:
     |:-----|:----------|:-----|:-----------------|:------|
     | **0 — Surplus** | SOC ≥ export threshold AND PV > Output + Grid + PV-Hysteresis | `'1'` | 2 A | Optional. Integral frozen. |
     | **1 — Aggressive** | SOC > Zone 1 threshold | `'1'` | Max (e.g. 40 A) | Runs until SOC ≤ Zone 3 threshold. Active at night too. |
-    | **2 — Conserving** | Zone 3 < SOC ≤ Zone 1, Cycle = off | `'1'` | 0 A | Dynamic limit: `Max(0, PV − Reserve)`. Optional: Night Shutdown. |
+    | **2 — Conserving** | Zone 3 < SOC ≤ Zone 1, Cycle = off | `'1'` | 0 A | Dynamic limit: `Min(Hard Limit, Max(0, PV − Reserve))`. Optional: Night Shutdown. |
     | **3 — Safety Stop** | SOC ≤ Zone 3 threshold | `'0'` | 0 A | Output = 0 W. Full battery protection. Always takes priority. |
 
     **Control Cases (order is critical):**
-    - **A** — Zone 1 Start: SOC > Zone 1 threshold AND Cycle = `off` → Integral = 0, Cycle = `on`, reset Surplus/AC booleans, Timer-Toggle, Mode → `'1'`
-    - **B** — Zone 3 Stop: SOC < Zone 3 threshold AND Cycle = `on` → Integral = 0, Cycle = `off`, reset Surplus/AC booleans, Output → 0W, Mode → `'0'`
-    - **C** — Zone 3 Guard: SOC < Zone 3 threshold AND Cycle = `off` AND Mode ≠ `'0'` → reset Surplus/AC booleans, Output → 0W, Mode → `'0'`
-    - **D** — Recovery: Cycle = `on` AND Mode ∉ `{'1','3'}` AND SOC > Zone 3 threshold → Timer-Toggle, Mode → `'3'` if AC-Charge-Bool = `on`, otherwise `'1'` (no integral reset, no zone change)
-    - **G** — AC Charging Start: AC active AND SOC < charge target AND Mode ≠ `'3'` AND (Grid + Output) < −Hysteresis → AC-Bool = `on`, Timer-Toggle, Output → 0W, Mode → `'3'`
+    - **A** — Zone 1 Start: SOC > Zone 1 threshold AND Cycle = `off` AND no AC/Tariff charging AND no discharge lock → Integral = 0, Cycle = `on`, reset Surplus/AC booleans, Timer-Toggle, Mode → `'1'`
+    - **B** — Zone 3 Stop: SOC < Zone 3 threshold AND Cycle = `on` AND no AC/Tariff charging → Integral = 0, Cycle = `off`, reset Surplus/AC booleans, Output → 0W, Mode → `'0'`
+    - **C** — Zone 3 Guard: SOC < Zone 3 threshold AND Cycle = `off` AND Mode ≠ `'0'` AND no AC/Tariff charging → reset Surplus/AC booleans, Output → 0W, Mode → `'0'`
+    - **D** — Recovery: Cycle = `on` AND Mode ∉ `{'1','3'}` AND SOC > Zone 3 threshold → Timer-Toggle, Mode → `'3'` if AC or Tariff-Charge-Bool = `on`, otherwise `'1'` (no integral reset, no zone change)
+    - **GT** — Tariff Charging Start: Tariff arbitrage active AND price < cheap threshold AND SOC < tariff charge target AND Mode ≠ `'3'` AND no surplus AND **NOT PV-forecast-suppressed** → Tariff-Bool = `on`, Timer-Toggle, Output → charge power (direct), Mode → `'3'`
+    - **HT** — Tariff Charging End: Mode = `'3'` AND Tariff-Bool = `on` AND (price ≥ cheap threshold OR SOC ≥ target) → Integral = 0, Tariff-Bool = `off`, Zone 1: Timer-Toggle + Mode `'1'` / Zone 2: Mode `'0'` + 0W
+    - **TM** — Discharge Lock (mid-price): Tariff active AND cheap ≤ price < expensive AND no charging AND Mode = `'1'` AND **NOT PV-forecast-suppressed** → Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Mode → `'0'`
+    - **G** — AC Charging Start: AC active AND SOC < charge target AND Mode ≠ `'3'` AND (Grid + Output) < −Hysteresis AND no Tariff charging AND no surplus → AC-Bool = `on`, Timer-Toggle, Output → 0W, Mode → `'3'`
     - **H** — AC Charging End: Mode = `'3'` AND (SOC ≥ charge target OR (Grid ≥ Offset + Hysteresis AND Output = 0W)) → Integral = 0, AC-Bool = `off`, Zone 1: Output → 0W, Timer-Toggle, Mode → `'1'` / Zone 2: Output → 0W, Mode → `'0'`
-    - **I** — Safety: Mode = `'3'` without active AC charging session → Integral = 0, Zone 1: Output → 0W, Timer-Toggle, Mode → `'1'` / Zone 2: Output → 0W, Mode → `'0'`
-    - **E** — Zone 2 Start: Zone 3 < SOC ≤ Zone 1 AND Cycle = `off` AND Mode = `'0'` AND NOT night → Integral = 0, Timer-Toggle, Mode → `'1'`
-    - **F** — Night Shutdown: Night AND PV < PV charge reserve AND Cycle = `off` AND Mode active → Integral = 0, Output → 0W, Mode → `'0'`
+    - **I** — Safety: Mode = `'3'` without active AC or Tariff charging session → Integral = 0, Zone 1: Output → 0W, Timer-Toggle, Mode → `'1'` / Zone 2: Output → 0W, Mode → `'0'`
+    - **E** — Zone 2 Start: Zone 3 < SOC ≤ Zone 1 AND Cycle = `off` AND Mode = `'0'` AND NOT night AND no discharge lock → Integral = 0, Timer-Toggle, Mode → `'1'`
+    - **F** — Night Shutdown: Night AND PV < PV charge reserve AND Cycle = `off` AND Mode active AND no AC/Tariff charging → Integral = 0, Output → 0W, Mode → `'0'`
 
     **Timer-Toggle:** Instead of a fixed value, toggles between 3598 and 3599 — creates a state change so the Solakon reliably adopts the new mode. Performed at every mode change directly before setting the mode.
+
+    **Priority & Order in choose block:**
+
+    | Priority | Module | Cases |
+    |:---------|:-------|:------|
+    | 1 (highest) | Zone 0 — Surplus | 0A, 0B |
+    | 2 | Tariff Charging | GT, HT, TM |
+    | 3 | AC Charging | G, H |
+    | 4 | SOC Zones | A, B, C, D, E, F |
+    | — | Safety | I |
+
+    **Execution order:** A → B → C → D → GT → HT → TM → G → H → I → E → F
 
     </details>
 
@@ -64,8 +85,9 @@ blueprint:
 
     Enables active export of PV surplus when the battery is full.
 
-    - **Entry:** SOC ≥ export threshold AND (PV > (Output + Grid + PV-Hysteresis) OR PV = 0)
-    - **Exit:** SOC < (export threshold − SOC-Hysteresis) OR PV ≤ (Output + Grid − PV-Hysteresis)
+    - **Entry (standard):** SOC ≥ export threshold AND (PV > (Output + Grid + PV-Hysteresis) OR PV = 0)
+    - **Entry (forecast):** Surplus forecast sensor ≥ threshold AND PV > Hard Limit → forced entry **without SOC gate**
+    - **Exit:** PV ≤ (Output + Grid − PV-Hysteresis) — always applies; OR SOC < (export threshold − SOC-Hysteresis) — only when **no** surplus forecast active
     - **Persistence:** State in `input_boolean` — survives multiple automation runs
     - **Behavior:** Output → Hard Limit, discharge current → 2 A (stability buffer), integral frozen
     - **Hysteresis:** Dual protection (SOC + PV) prevents unstable toggling
@@ -80,7 +102,7 @@ blueprint:
     Detection: `(Grid + Output) < −Hysteresis` — i.e. after subtracting the Solakon's contribution, surplus remains.
     Typical use case: external PV system feeds surplus into the grid.
 
-    - **Entry (Case G):** AC Charging enabled AND SOC < charge target AND Mode ≠ `'3'` AND (Grid + Output) < −Hysteresis
+    - **Entry (Case G):** AC Charging enabled AND SOC < charge target AND Mode ≠ `'3'` AND (Grid + Output) < −Hysteresis AND no Tariff charging AND no surplus
       - Guard `Mode ≠ '3'` prevents re-entry when AC Charging is already active
     - **Stay:** Mode `'3'` while SOC < charge target AND Grid < (Offset + Hysteresis)
     - **Exit (Case H):** SOC ≥ charge target OR (Grid ≥ Offset + Hysteresis AND Output = 0 W)
@@ -88,11 +110,34 @@ blueprint:
     - **PI Control:** `ac_charge_mode=true` → inverted error: `target_offset − grid`
       - Positive error (Grid too negative) → increase charge power
       - `at_max/at_min` guards disabled (direction inverted)
-    - **Separate P/I Factors:** P small (~0.3–0.5), I does the actual control work
+    - **Separate P/I Factors:** P small (~0.3–0.5) due to long hardware response (~25 s); I barely effective — leave at 0
     - **Return:**
       - Zone 1 → Integral = 0, AC-Bool = `off`, Output → 0 W, Timer-Toggle, Mode → `'1'`
       - Zone 2 → Integral = 0, AC-Bool = `off`, Output → 0 W, Mode → `'0'`
-    - **Priority:** Zone 3 (SOC protection) always takes priority
+    - **Priority:** Zone 3 (SOC protection) always takes priority. Tariff charging takes priority over AC charging.
+
+    </details>
+
+    <details>
+    <summary><b>💹 Tariff Arbitrage (Optional)</b> 👈</summary>
+
+    Charges the battery at low prices and locks discharge during neutral price phases.
+
+    #### Price Control (Static & Dynamic)
+    Use fixed values or **dynamic helpers** (`input_number`). A configured helper overrides the static value automatically.
+
+    | Threshold | Behavior when price falls below | Override |
+    |:---------|:------------------------------------|:---------|
+    | **Cheap** | **Charging active (Case GT)** + discharge lock | `input_number` |
+    | **Expensive** | **Discharge lock (Case TM)** — battery passive | `input_number` |
+
+    #### Logic Details
+    - **Case GT (price < cheap):** Charges with `tariff_charge_power` until SOC target. Priority over AC charging. Returns to Zone 1 (Timer-Toggle) or Zone 2 (0W). **Skipped when PV-forecast-suppressed.**
+    - **Case TM (cheap ≤ price < expensive):** Stops Zone 1 & 2 immediately (Mode `'0'`). Resets cycle helper. Preserves battery for expensive peaks. **Skipped when PV-forecast-suppressed.**
+    - **Normal operation (price ≥ expensive):** Discharge lock lifted, standard zone logic (Cases A/E) takes over.
+
+    #### ⚠️ Sensor & Units
+    No conversion! The price sensor unit **must** match the thresholds (static/helper) (e.g. all in €). With `unknown` sensor status, tariff logic is disabled.
 
     </details>
 
@@ -108,8 +153,34 @@ blueprint:
 
     </details>
 
+    <details>
+    <summary><b>🌤️ PV Forecast Tariff Suppression (Optional)</b> 👈</summary>
+
+    Prevents tariff charging (GT) and discharge lock (TM) on sunny days.
+
+    - **Sensor:** PV yield forecast in W (e.g. Solcast `energy_production_today`)
+    - **Condition:** Forecast ≥ threshold → `pv_forecast_suppressed = true`
+    - **Effect:** GT and TM are completely skipped — battery can discharge normally
+    - **Only active when:** Tariff arbitrage is also enabled
+    - **Fallback:** Sensor `unknown`/`unavailable` → suppression inactive, tariff logic applies normally
+
+    </details>
+
+    <details>
+    <summary><b>🌤️ Surplus Forecast Entry (Optional)</b> 👈</summary>
+
+    Forces early Zone 0 entry based on a PV surplus forecast.
+
+    - **Sensor:** PV surplus forecast in W (e.g. Solcast `power_now_1h`)
+    - **Entry (Case 0A, OR-branch):** Forecast ≥ threshold AND PV > Hard Limit → Zone 0 entry without SOC gate
+    - **Exit lock (Case 0B):** `surplus_forecast_forced = true` only blocks SOC exit; PV exit (PV ≤ Output + Grid − Hysteresis) still applies → surplus ends at night despite forecast
+    - **Only active when:** Surplus export is also enabled
+    - **Fallback:** Sensor `unknown`/`unavailable` → forecast inactive, normal SOC gate applies
+
+    </details>
+
   domain: automation
-  source_url: https://github.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/blob/Solakon-ONE-Zero-Export/solakon_one_zeroexport.yaml
+  source_url: https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/Solakon-ONE-Zero-Export/solakon_one_zeroexport.yaml
   input:
 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -228,7 +299,7 @@ blueprint:
             name: 🛠️ Integral Storage (input_number - REQUIRED!)
             description: |
               ⚠️ IMPORTANT: input_number Helper for the PI Controller.
-              Min: -1000, Max: 1000, Step: 1, Initial: 0
+              Min: -1200, Max: 1200, Step: 1, Initial: 0
               - Name: e.g. 'Solakon Integral'
             default: input_number.solakon_integral
             selector:
@@ -283,9 +354,9 @@ blueprint:
           wait_time:
             name: ⏱️ Wait Time After Setting Output
             description: |
-              Delay (in seconds) after setting the output power.
-              Compensates for the inverter's response time before the next
-              trigger is evaluated (e.g. 3 s).
+              Maximum wait time (in seconds) after setting output power.
+              Adaptive: exits early once actual power ≈ setpoint ± tolerance.
+              Compensates for the inverter's response time (e.g. 3 s).
             default: 3
             selector:
               number:
@@ -388,7 +459,7 @@ blueprint:
             name: ⚙️ Zone 2 - PV Charge Reserve
             description: |
               PV power reserved for charging in Zone 2 (e.g. 50 W).
-              Dynamic upper limit: Max. discharge = PV - Reserve.
+              Dynamic upper limit: Max. discharge = Min(Hard Limit, Max(0, PV - Reserve)).
               ⚠️ Also used as PV threshold for Night Shutdown.
             default: 50
             selector:
@@ -413,6 +484,34 @@ blueprint:
                 min: 0
                 max: 1200
                 unit_of_measurement: W
+
+      max_power_entity:
+            name: 🔀 Max. Output Power — Dynamic (Multi-Instancing)
+            description: |
+              ⚠️ Only required for multi-instancing — leave empty in single-instance operation.
+              Optional input_number entity that overrides the static hard limit value.
+              A parent automation writes the assigned power share here:
+              - Instance 1: input_number.solakon_instance1_limit → 500 W
+              - Instance 2: input_number.solakon_instance2_limit → 300 W
+              Sum of all instances must remain ≤ physical inverter limit.
+              ⚠️ If left empty, the static hard limit value above applies.
+            default: {}
+            selector:
+              entity:
+                domain: input_number
+
+      error_share_entity:
+            name: ⚖️ Error Share Helper (input_number, Optional — Multi-Instancing)
+            description: |
+              ⚠️ Only required for multi-instancing — leave empty in single-instance operation.
+              input_number entity (0.0–1.0) containing the share of grid error this instance handles.
+              The power distribution automation calculates the share proportional to usable
+              capacity (SOC − Min-SOC) and writes it into this helper.
+              ⚠️ If left empty, the instance handles the full grid error (= 1.0).
+            default: {}
+            selector:
+              entity:
+                domain: input_number
 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # ☀️ SURPLUS EXPORT (Optional - Zone 0)
@@ -477,6 +576,38 @@ blueprint:
               entity:
                 domain: input_boolean
 
+          surplus_forecast_enabled:
+            name: 🌤️ Enable Surplus Forecast Entry (Optional)
+            description: |
+              Forces Zone 0 entry when PV forecast ≥ threshold AND Solar > Hard Limit.
+              No SOC gate on entry. Exit remains locked while forecast active.
+              ⚠️ Only active when Surplus Export is also enabled.
+            default: false
+            selector:
+              boolean:
+
+          surplus_forecast_sensor:
+            name: 🌤️ Surplus Forecast Sensor (Optional)
+            description: |
+              PV surplus forecast in W (e.g. Solcast sensor).
+              ⚠️ Leave empty when Surplus Forecast is not used.
+            default: {}
+            selector:
+              entity:
+                domain: sensor
+
+          surplus_forecast_threshold:
+            name: 🌤️ Surplus Forecast Threshold (W)
+            description: |
+              Minimum forecast value for forced Zone 0 entry.
+            default: 5000
+            selector:
+              number:
+                min: 0
+                max: 20000
+                step: 100
+                unit_of_measurement: W
+
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # ⚡ AC CHARGING (Optional)
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -500,7 +631,7 @@ blueprint:
             name: 🔋 SOC Charge Target (%)
             description: |
               Charging stops when SOC reaches this value.
-              ⚠️ Recommended: ≤ Zone 1 threshold so Zone 1 takes over seamlessly after charging.
+              ⚠️ Recommended: > Zone 1 threshold so Zone 1 takes over seamlessly after charging.
             default: 90
             selector:
               number:
@@ -582,14 +713,162 @@ blueprint:
             name: 🎛️ I Factor AC Charging
             description: |
               Integral gain for AC charging mode.
-              Does the actual control work with long hardware response (~25 s).
-              Recommendation: 0.05–0.1.
-            default: 0.07
+              Barely effective due to sluggish hardware (~25 s) — leave at default 0.
+            default: 0
             selector:
               number:
                 min: 0
                 max: 0.2
                 step: 0.01
+
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 💹 TARIFF ARBITRAGE (Optional)
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      tariff_parameter:
+        name: "💹 TARIFF ARBITRAGE (Optional):"
+        description: |
+          Charge at cheap prices, lock discharge at mid prices.
+          ⚠️ Sensor unit and thresholds must match (no conversion in blueprint).
+          ⚠️ Tibber delivers EUR/kWh → thresholds also in EUR/kWh.
+        collapsed: true
+        input:
+          tariff_arbitrage_enabled:
+            name: 💹 Enable Tariff Arbitrage
+            description: |
+              ✅ ON: Charge at cheap price, discharge lock at mid price.
+              ❌ OFF: Feature disabled — standard SOC zone logic.
+            default: false
+            selector:
+              boolean:
+
+          price_sensor:
+            name: 💰 Electricity Price Sensor
+            description: |
+              Sensor with the current electricity price.
+              Unit must match thresholds (e.g. EUR/kWh or ct/kWh).
+              With unavailable/unknown: neither charging nor lock.
+            default: {}
+            selector:
+              entity:
+                domain: sensor
+
+          cheap_threshold:
+            name: 💚 Cheap Threshold Static (Fallback)
+            description: |
+              Below this threshold charging starts (e.g. 0.20 EUR/kWh).
+              Used when no dynamic override is set or unavailable.
+            default: 0.20
+            selector:
+              number:
+                min: 0
+                max: 1
+                step: 0.01
+
+          cheap_threshold_entity:
+            name: 💚 Dynamic Cheap Threshold (Optional Override)
+            description: |
+              Optional entity (e.g. input_number). When set, overrides the static threshold.
+              Ideal for dynamic calculations based on daily EPEX variance.
+            default: {}
+            selector:
+              entity:
+                domain: input_number
+
+          expensive_threshold:
+            name: 🔴 Expensive Threshold Static (Fallback)
+            description: |
+              Below this threshold discharge is locked (e.g. 0.25 EUR/kWh).
+              Used when no dynamic override is set.
+            default: 0.25
+            selector:
+              number:
+                min: 0
+                max: 1
+                step: 0.01
+
+          expensive_threshold_entity:
+            name: 🔴 Dynamic Expensive Threshold (Optional Override)
+            description: |
+              Optional entity (e.g. input_number). When set, overrides the static threshold.
+            default: {}
+            selector:
+              entity:
+                domain: input_number
+
+          tariff_soc_charge_target:
+            name: 🔋 Tariff Charging SOC Target (%)
+            description: |
+              Charging stops when SOC reaches this value.
+              ⚠️ Recommended: > Zone 1 threshold so Zone 1 takes over after tariff charging.
+            default: 90
+            selector:
+              number:
+                min: 10
+                max: 99
+                unit_of_measurement: "%"
+
+          tariff_charge_power:
+            name: ⚡ Tariff Charge Power (W)
+            description: |
+              Directly set charge power (no PI controller).
+              Recommendation: use maximum available charge power (e.g. 1200 W).
+            default: 1200
+            selector:
+              number:
+                min: 50
+                max: 1200
+                unit_of_measurement: W
+
+          tariff_charge_state_helper:
+            name: 💹 Tariff Charge State Storage (input_boolean - Tariff Arbitrage only)
+            description: |
+              input_boolean helper for persistent tracking of the tariff charging state.
+              ⚠️ Only required when Tariff Arbitrage is enabled.
+              Settings → Create Helper → Toggle
+              - Name: e.g. 'Solakon Tariff Charging Active'
+            default: input_boolean.solakon_tariff_charging_active
+            selector:
+              entity:
+                domain: input_boolean
+
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 🌤️ PV FORECAST TARIFF SUPPRESSION (Optional)
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      pv_forecast_parameter:
+        name: "🌤️ PV FORECAST TARIFF SUPPRESSION (Optional):"
+        collapsed: true
+        input:
+          pv_forecast_enabled:
+            name: 🌤️ Enable PV Forecast Tariff Suppression
+            description: |
+              When enabled and PV forecast ≥ threshold: GT and TM blocks are skipped.
+              Prevents tariff charging on sunny days.
+              ⚠️ Only active when Tariff Arbitrage is also enabled.
+            default: false
+            selector:
+              boolean:
+
+          pv_forecast_sensor:
+            name: 🌤️ PV Forecast Sensor (Optional)
+            description: |
+              PV yield forecast in W (e.g. Solcast sensor).
+              ⚠️ Leave empty when PV Forecast is not used.
+            default: {}
+            selector:
+              entity:
+                domain: sensor
+
+          pv_forecast_threshold:
+            name: 🌤️ PV Forecast Threshold (W)
+            description: |
+              Minimum forecast value for tariff suppression.
+            default: 5000
+            selector:
+              number:
+                min: 0
+                max: 20000
+                step: 100
+                unit_of_measurement: W
 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🌙 NIGHT SHUTDOWN (Optional)
@@ -618,13 +897,19 @@ variables:
   # (Always required)
   # ===========================================
 
-  # Grid / Solar / Actual Power
+  # Grid / Solar / Actual Power (kW→W normalized)
   grid_power: !input grid_power_sensor
-  grid_power_float: "{{ states(grid_power) | float(0) }}"
+  grid_power_float: >
+    {% set v = states(grid_power) | float(0) %}
+    {{ v * 1000 if state_attr(grid_power, 'unit_of_measurement') == 'kW' else v }}
   solar_power: !input solar_power_sensor
-  solar_power_float: "{{ states(solar_power) | float(0) }}"
+  solar_power_float: >
+    {% set v = states(solar_power) | float(0) %}
+    {{ v * 1000 if state_attr(solar_power, 'unit_of_measurement') == 'kW' else v }}
   actual_power_sensor: !input actual_power_sensor
-  actual_power_float: "{{ states(actual_power_sensor) | float(0) }}"
+  actual_power_float: >
+    {% set v = states(actual_power_sensor) | float(0) %}
+    {{ v * 1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else v }}
 
   # Zone thresholds
   soc_fast_limit_int: !input soc_fast_limit
@@ -686,6 +971,99 @@ variables:
     {% else %}
       {{ ac_charge_offset_static }}
     {% endif %}
+
+  # Error share (Multi-Instancing)
+  error_share_entity_id: !input error_share_entity
+  error_share_value: >
+    {% if error_share_entity_id is string and error_share_entity_id | length > 0
+       and states(error_share_entity_id) not in ['unknown', 'unavailable'] %}
+      {{ states(error_share_entity_id) | float(1.0) }}
+    {% else %}
+      1.0
+    {% endif %}
+
+  # Tariff Arbitrage
+  tariff_arbitrage_enabled_bool: !input tariff_arbitrage_enabled
+  price_sensor_entity: !input price_sensor
+  tariff_soc_charge_target_int: !input tariff_soc_charge_target
+  tariff_charge_power_int: !input tariff_charge_power
+
+  # === CHEAP THRESHOLD LOGIC ===
+  cheap_threshold_static: !input cheap_threshold
+  cheap_threshold_entity_id: !input cheap_threshold_entity
+  cheap_threshold_float: >
+    {% if cheap_threshold_entity_id is string and cheap_threshold_entity_id | length > 0 and states(cheap_threshold_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+      {{ states(cheap_threshold_entity_id) | float(cheap_threshold_static) }}
+    {% else %}
+      {{ cheap_threshold_static }}
+    {% endif %}
+
+  # === EXPENSIVE THRESHOLD LOGIC ===
+  expensive_threshold_static: !input expensive_threshold
+  expensive_threshold_entity_id: !input expensive_threshold_entity
+  expensive_threshold_float: >
+    {% if expensive_threshold_entity_id is string and expensive_threshold_entity_id | length > 0 and states(expensive_threshold_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+      {{ states(expensive_threshold_entity_id) | float(expensive_threshold_static) }}
+    {% else %}
+      {{ expensive_threshold_static }}
+    {% endif %}
+
+  tariff_charge_state_entity: !input tariff_charge_state_helper
+  # Valid when Tariff Arbitrage enabled and helper available
+  tariff_charge_entity_valid: >
+    {{ tariff_arbitrage_enabled_bool and
+       tariff_charge_state_entity is string and
+       tariff_charge_state_entity | length > 0 and
+       states(tariff_charge_state_entity) not in ['unknown', 'unavailable'] }}
+  # Tariff charging mode active? Read from persistent helper.
+  tariff_charge_mode_active: "{{ tariff_charge_entity_valid | bool(false) and is_state(tariff_charge_state_entity, 'on') }}"
+  # Price sensor valid (available and tariff arbitrage active)?
+  price_sensor_valid: >
+    {{ tariff_arbitrage_enabled_bool and
+       price_sensor_entity is string and
+       price_sensor_entity | length > 0 and
+       states(price_sensor_entity) not in ['unknown', 'unavailable'] }}
+  # Price currently cheap (below cheap threshold)?
+  price_is_cheap: >
+    {{ price_sensor_valid | bool(false) and
+       states(price_sensor_entity) | float(999) < cheap_threshold_float | float(0) }}
+  # Discharge lock active? (price < expensive threshold AND sensor valid)
+  # Applies to Zone 1 and Zone 2 — guards in Cases A and E
+  price_discharge_locked: >
+    {{ tariff_arbitrage_enabled_bool and
+       price_sensor_valid | bool(false) and
+       states(price_sensor_entity) | float(999) < expensive_threshold_float | float(0) }}
+
+  # Hard Limit (also in BLOCK 1 for surplus forecast entry and Zone 0 path)
+  max_active_power_limit_int: !input max_active_power_limit
+  max_power_entity_id: !input max_power_entity
+  hard_limit_int: >
+    {% if max_power_entity_id is string and max_power_entity_id | length > 0
+         and states(max_power_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+      {{ states(max_power_entity_id) | int(max_active_power_limit_int) }}
+    {% else %}
+      {{ max_active_power_limit_int }}
+    {% endif %}
+
+  # Surplus forecast forced entry
+  surplus_forecast_enabled_bool: !input surplus_forecast_enabled
+  surplus_forecast_sensor_id: !input surplus_forecast_sensor
+  surplus_forecast_threshold_float: !input surplus_forecast_threshold
+  surplus_forecast_forced: >
+    {{ surplus_forecast_enabled_bool | bool(false) and
+       surplus_forecast_sensor_id is string and surplus_forecast_sensor_id | length > 0 and
+       states(surplus_forecast_sensor_id) not in ['unknown', 'unavailable'] and
+       states(surplus_forecast_sensor_id) | float(0) >= surplus_forecast_threshold_float | float(0) }}
+
+  # PV forecast tariff suppression
+  pv_forecast_enabled_bool: !input pv_forecast_enabled
+  pv_forecast_sensor_id: !input pv_forecast_sensor
+  pv_forecast_threshold_float: !input pv_forecast_threshold
+  pv_forecast_suppressed: >
+    {{ pv_forecast_enabled_bool | bool(false) and
+       pv_forecast_sensor_id is string and pv_forecast_sensor_id | length > 0 and
+       states(pv_forecast_sensor_id) not in ['unknown', 'unavailable'] and
+       states(pv_forecast_sensor_id) | float(0) >= pv_forecast_threshold_float | float(0) }}
 
 triggers:
   # Grid power change
@@ -751,8 +1129,9 @@ actions:
             state: 'off'
           - condition: template
             value_template: >
-              {{ (states(soc) | float(0) >= soc_export_limit_int) and
-                 (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int) or solar_power_float == 0) }}
+              {{ ((states(soc) | float(0) >= soc_export_limit_int) and
+                  (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int) or solar_power_float == 0)) or
+                 (surplus_forecast_forced | bool(false) and solar_power_float > hard_limit_int) }}
         sequence:
           # 1. Logbook entry
           - action: logbook.log
@@ -774,8 +1153,9 @@ actions:
             state: 'on'
           - condition: template
             value_template: >
-              {{ (states(soc) | float(0) < (soc_export_limit_int - surplus_exit_hysteresis_int)) or
-                 (solar_power_float <= (actual_power_float + grid_power_float - surplus_pv_hysteresis_int)) }}
+              {{ (solar_power_float <= (actual_power_float + grid_power_float - surplus_pv_hysteresis_int)) or
+                 (not (surplus_forecast_forced | bool(false)) and
+                  (states(soc) | float(0) < (soc_export_limit_int - surplus_exit_hysteresis_int))) }}
         sequence:
           # 1. Logbook entry
           - action: logbook.log
@@ -796,13 +1176,18 @@ actions:
 
   # -------------------------------------------------------------------------------------------------
   # MAIN LOGIC: Mode and Cycle Control
-  # Order: A, B, C, D (before G!), G, H, E, F
+  # Order: A, B, C, D (before GT/G!), GT, HT, TM, G, H, I, E, F
   # -------------------------------------------------------------------------------------------------
   - choose:
       # CASE A: ZONE 1 - Aggressive Discharge START
+      # Guard: no AC/Tariff charging active, no discharge lock (price < expensive)
       - conditions:
           - condition: template
             value_template: "{{ not (ac_charge_mode_active | bool(false)) }}"
+          - condition: template
+            value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
+          - condition: template
+            value_template: "{{ not (price_discharge_locked | bool(false)) }}"
           - condition: template
             value_template: "{{ states(soc) | float(0) > soc_fast_limit_int }}"
           - condition: state
@@ -866,9 +1251,12 @@ actions:
                       option: '1'
 
       # CASE B: ZONE 3 - Safety STOP (Cycle ON)
+      # Guard: no AC/Tariff charging active (charging at Zone 3 still allowed)
       - conditions:
           - condition: template
             value_template: "{{ not (ac_charge_mode_active | bool(false)) }}"
+          - condition: template
+            value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
           - condition: template
             value_template: "{{ states(soc) | float(0) < soc_conservation_limit_int }}"
           - condition: state
@@ -919,9 +1307,12 @@ actions:
               option: '0'
 
       # CASE C: ZONE 3 - Safety Guard (Cycle OFF, mode still active)
+      # Guard: no AC/Tariff charging active
       - conditions:
           - condition: template
             value_template: "{{ not (ac_charge_mode_active | bool(false)) }}"
+          - condition: template
+            value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
           - condition: template
             value_template: "{{ states(soc) | float(0) < soc_conservation_limit_int }}"
           - condition: state
@@ -958,7 +1349,7 @@ actions:
               option: '0'
 
       # CASE D: Recovery - Mode dropped, cycle still active
-      # BEFORE Case G! Excludes Mode '3' (AC Charging continues undisturbed).
+      # BEFORE Cases GT/G! Excludes Mode '3' (AC/Tariff charging continues undisturbed).
       - conditions:
           - condition: state
             entity_id: !input cycle_active_boolean_helper
@@ -991,13 +1382,15 @@ actions:
                   entity_id: !input remote_timeout_set_number
                 data:
                   value: 3599
-          # 3. Restore mode: '3' if AC Charging active, otherwise '1'
+          # 3. Restore mode: '3' if AC Charging OR Tariff Charging active, otherwise '1'
           - choose:
               - conditions:
                   - condition: template
                     value_template: >
-                      {{ ac_charge_entity_valid | bool(false) and
-                         is_state(ac_charge_state_entity, 'on') }}
+                      {{ (ac_charge_entity_valid | bool(false) and
+                          is_state(ac_charge_state_entity, 'on')) or
+                         (tariff_charge_entity_valid | bool(false) and
+                          is_state(tariff_charge_state_entity, 'on')) }}
                 sequence:
                   - action: select.select_option
                     target:
@@ -1011,13 +1404,227 @@ actions:
                 data:
                   option: '1'
 
+      # CASE GT: TARIFF CHARGING — Entry
+      # Guard: Mode ≠ '3' — prevents re-entry when Tariff Charging already active
+      # Guard: NOT Surplus-Bool = on — Zone 0 blocks charging
+      # Guard: pv_forecast_suppressed — sunny days skip charging
+      - conditions:
+          - condition: template
+            value_template: "{{ tariff_arbitrage_enabled_bool }}"
+          - condition: template
+            value_template: "{{ tariff_charge_entity_valid | bool(false) }}"
+          - condition: template
+            value_template: "{{ price_is_cheap | bool(false) }}"
+          - condition: template
+            value_template: "{{ not (pv_forecast_suppressed | bool(false)) }}"
+          - condition: template
+            value_template: "{{ states(soc) | float(0) < tariff_soc_charge_target_int }}"
+          - condition: template
+            value_template: "{{ states(solakon_mode) != '3' }}"
+          - condition: template
+            value_template: "{{ not (surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on')) }}"
+        sequence:
+          # 1. Logbook entry
+          - action: logbook.log
+            data:
+              name: Solakon Tariff Arbitrage
+              message: >
+                💹 Tariff Charging activated
+                (Zone {{ '1' if is_state(cycle_active, 'on') else '2' }})
+                — Price: {{ states(price_sensor_entity) }}, SOC: {{ states(soc) }}%
+              entity_id: !input soc_sensor
+          # 2. Tariff charge state → on
+          - action: input_boolean.turn_on
+            target:
+              entity_id: !input tariff_charge_state_helper
+          # 3. Timer-Toggle (3598↔3599)
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                sequence:
+                  - action: number.set_value
+                    target:
+                      entity_id: !input remote_timeout_set_number
+                    data:
+                      value: 3598
+            default:
+              - action: number.set_value
+                target:
+                  entity_id: !input remote_timeout_set_number
+                data:
+                  value: 3599
+          # 4. Output → charge power (direct, no PI)
+          - action: number.set_value
+            target:
+              entity_id: !input active_power_number
+            data:
+              value: "{{ tariff_charge_power_int }}"
+          # 5. Mode → '3' (INV Charge PV Priority)
+          - action: select.select_option
+            target:
+              entity_id: !input mode_select
+            data:
+              option: '3'
+          - stop: ""
+
+      # CASE HT: END TARIFF CHARGING
+      # Stop condition price: ONLY when sensor valid — sensor failure does NOT stop charging
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ tariff_arbitrage_enabled_bool and
+                 states(solakon_mode) == '3' and
+                 (tariff_charge_mode_active | bool(false)) }}
+          - condition: template
+            value_template: >
+              {{ states(soc) | float(0) >= tariff_soc_charge_target_int or
+                 ((price_sensor_valid | bool(false)) and not (price_is_cheap | bool(false))) }}
+        sequence:
+          # 1. Logbook entry
+          - action: logbook.log
+            data:
+              name: Solakon Tariff Arbitrage
+              message: >
+                💹 Tariff Charging ended
+                (Zone {{ '1' if is_state(cycle_active, 'on') else '2' }})
+                — Price: {{ states(price_sensor_entity) }}, SOC: {{ states(soc) }}%
+              entity_id: !input soc_sensor
+          # 2. Reset integral
+          - action: input_number.set_value
+            target:
+              entity_id: !input integral_helper
+            data:
+              value: 0
+          # 3. Tariff charge state → off
+          - action: input_boolean.turn_off
+            target:
+              entity_id: !input tariff_charge_state_helper
+          # 4. Zone 1 → Mode '1' (Timer-Toggle) | Zone 2 → Disabled + 0 W
+          - choose:
+              - conditions: "{{ is_state(cycle_active, 'on') }}"
+                sequence:
+                  # 4a. Output → 0 W (before mode change)
+                  - action: number.set_value
+                    target:
+                      entity_id: !input active_power_number
+                    data:
+                      value: 0
+                  # 4b. Timer-Toggle (3598↔3599)
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                        sequence:
+                          - action: number.set_value
+                            target:
+                              entity_id: !input remote_timeout_set_number
+                            data:
+                              value: 3598
+                    default:
+                      - action: number.set_value
+                        target:
+                          entity_id: !input remote_timeout_set_number
+                        data:
+                          value: 3599
+                  # 4c. Mode → '1'
+                  - action: select.select_option
+                    target:
+                      entity_id: !input mode_select
+                    data:
+                      option: '1'
+                  - stop: ""
+            default:
+              # 4a. Output → 0 W
+              - action: number.set_value
+                target:
+                  entity_id: !input active_power_number
+                data:
+                  value: 0
+              # 4b. Mode → '0'
+              - action: select.select_option
+                target:
+                  entity_id: !input mode_select
+                data:
+                  option: '0'
+
+      # CASE TM: TARIFF DISCHARGE LOCK — Mid-price zone (cheap ≤ price < expensive)
+      # Stops active discharge (Zone 1 AND Zone 2) when price is between cheap and expensive.
+      # Guard: no AC/Tariff charging active, Mode = '1' (discharge running)
+      # Guard: pv_forecast_suppressed — sunny days skip discharge lock
+      # Guard: not price_is_cheap — explicitly only mid zone (cheap ≤ price < expensive)
+      - conditions:
+          - condition: template
+            value_template: "{{ tariff_arbitrage_enabled_bool }}"
+          - condition: template
+            value_template: "{{ price_sensor_valid | bool(false) }}"
+          - condition: template
+            value_template: "{{ price_discharge_locked | bool(false) }}"
+          - condition: template
+            value_template: "{{ not (price_is_cheap | bool(false)) }}"
+          - condition: template
+            value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
+          - condition: template
+            value_template: "{{ not (ac_charge_mode_active | bool(false)) }}"
+          - condition: template
+            value_template: "{{ states(solakon_mode) == '1' }}"
+          - condition: template
+            value_template: "{{ not (pv_forecast_suppressed | bool(false)) }}"
+        sequence:
+          # 1. Logbook entry
+          - action: logbook.log
+            data:
+              name: Solakon Tariff Arbitrage
+              message: >
+                🔒 Discharge Lock: Price {{ states(price_sensor_entity) }} in mid-price zone.
+                Zone {{ '1' if is_state(cycle_active, 'on') else '2' }} deactivated.
+              entity_id: !input soc_sensor
+          # 2. Reset integral
+          - action: input_number.set_value
+            target:
+              entity_id: !input integral_helper
+            data:
+              value: 0
+          # 3. Deactivate cycle if Zone 1 was active
+          - choose:
+              - conditions: "{{ is_state(cycle_active, 'on') }}"
+                sequence:
+                  - action: input_boolean.turn_off
+                    target:
+                      entity_id: !input cycle_active_boolean_helper
+                  # Reset surplus state (only if active)
+                  - choose:
+                      - conditions: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
+                        sequence:
+                          - action: input_boolean.turn_off
+                            target:
+                              entity_id: !input surplus_state_helper
+          # 4. Output → 0 W
+          - action: number.set_value
+            target:
+              entity_id: !input active_power_number
+            data:
+              value: 0
+          # 5. Mode → '0'
+          - action: select.select_option
+            target:
+              entity_id: !input mode_select
+            data:
+              option: '0'
+
       # CASE G: AC CHARGING — Entry
       # Guard: Mode ≠ '3' — prevents re-entry when AC Charging already active
+      # Guard: NOT Tariff-Charge-Bool = on — Tariff charging has priority
+      # Guard: NOT Surplus-Bool = on — Zone 0 blocks charging
       - conditions:
           - condition: template
             value_template: "{{ ac_charge_enabled_bool }}"
           - condition: template
             value_template: "{{ ac_charge_entity_valid | bool(false) }}"
+          - condition: template
+            value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
+          - condition: template
+            value_template: "{{ not (surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on')) }}"
           - condition: template
             value_template: "{{ states(soc) | float(0) < soc_ac_charge_limit_int }}"
           - condition: template
@@ -1071,13 +1678,16 @@ actions:
 
 
       # CASE H: END AC CHARGING
+      # Guard: ac_charge_mode_active (not just enabled) AND no Tariff charging active
       - conditions:
           - condition: template
-            value_template: "{{ ac_charge_enabled_bool and states(solakon_mode) == '3' }}"
+            value_template: "{{ ac_charge_enabled_bool and (ac_charge_mode_active | bool(false)) and states(solakon_mode) == '3' }}"
+          - condition: template
+            value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
           - condition: template
             value_template: >
               {{ states(soc) | float(0) >= soc_ac_charge_limit_int or
-                 (grid_power_float >= (ac_charge_offset_int | float(0) + ac_charge_hysteresis_int | float(0)) and (actual_power_float |float(0) == 0 ))}}
+                 (grid_power_float >= (ac_charge_offset_int | float(0) + ac_charge_hysteresis_int | float(0)) and (actual_power_float | float(0) == 0)) }}
         sequence:
           # 1. Logbook entry
           - action: logbook.log
@@ -1146,8 +1756,8 @@ actions:
                 data:
                   option: '0'
 
-      # CASE I: Safety — Mode '3' but AC Charging not active
-      # Catches external mode set to '3' when AC Charging is disabled or helper is off
+      # CASE I: Safety — Mode '3' but neither AC Charging nor Tariff Charging active
+      # Catches external mode set to '3' when no charging active or helper is off
       - conditions:
           - condition: template
             value_template: "{{ states(solakon_mode) == '3' }}"
@@ -1156,13 +1766,15 @@ actions:
               {{ not ac_charge_enabled_bool or
                  not (ac_charge_entity_valid | bool(false)) or
                  not is_state(ac_charge_state_entity, 'on') }}
+          - condition: template
+            value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
         sequence:
           # 1. Logbook entry
           - action: logbook.log
             data:
               name: Solakon Safety
               message: >
-                ⚠️ Case I — Mode '3' detected, AC Charging not active. Correcting.
+                ⚠️ Case I — Mode '3' detected, AC/Tariff Charging not active. Correcting.
                 Zone {{ '1' if is_state(cycle_active, 'on') else '2' }}
                 — SOC: {{ states(soc) }}%
               entity_id: !input mode_select
@@ -1221,9 +1833,14 @@ actions:
                   option: '0'
 
       # CASE E: ZONE 2 - Battery Conserving START
+      # Guard: no AC/Tariff charging active, no discharge lock (price < expensive)
       - conditions:
           - condition: template
             value_template: "{{ not (ac_charge_mode_active | bool(false)) }}"
+          - condition: template
+            value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
+          - condition: template
+            value_template: "{{ not (price_discharge_locked | bool(false)) }}"
           - condition: template
             value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int and states(soc) | float(0) <= soc_fast_limit_int }}"
           - condition: state
@@ -1234,7 +1851,7 @@ actions:
           - condition: template
             value_template: >
               {{ not night_shutdown_enabled_bool or
-                 (states(solar_power) | float(0)) >= pv_charge_reserve_int | float(0) }}
+                 solar_power_float | float(0) >= pv_charge_reserve_int | float(0) }}
         sequence:
           # 1. Logbook entry
           - action: logbook.log
@@ -1275,13 +1892,16 @@ actions:
                       option: '1'
 
       # CASE F: Night Shutdown (Zone 2 when PV < PV charge reserve)
+      # Guard: no AC/Tariff charging active (charging allowed at night)
       - conditions:
           - condition: template
             value_template: "{{ not (ac_charge_mode_active | bool(false)) }}"
           - condition: template
+            value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
+          - condition: template
             value_template: "{{ night_shutdown_enabled_bool }}"
           - condition: template
-            value_template: "{{ (states(solar_power) | float(0)) < pv_charge_reserve_int | float(0) }}"
+            value_template: "{{ solar_power_float | float(0) < pv_charge_reserve_int | float(0) }}"
           - condition: state
             entity_id: !input cycle_active_boolean_helper
             state: 'off'
@@ -1321,20 +1941,32 @@ actions:
       {{ states(solakon_mode) in ['1', '3'] and
          (is_state(cycle_active, 'on') or
           not night_shutdown_enabled_bool or
-          (states(solar_power) | float(0)) >= pv_charge_reserve_int | float(0)) }}
+          solar_power_float | float(0) >= pv_charge_reserve_int | float(0)) }}
 
   # ===========================================
   # BLOCK 2: Variables ONLY for PI Controller
   # ===========================================
   - variables:
-      # Fresh sensor values at the time of PI calculation
-      grid_power_float: "{{ states(grid_power) | float(0) }}"
-      solar_power_float: "{{ states(solar_power) | float(0) }}"
+      # Fresh sensor values at time of PI calculation (kW→W normalized)
+      grid_power_float: >
+        {% set v = states(grid_power) | float(0) %}
+        {{ v * 1000 if state_attr(grid_power, 'unit_of_measurement') == 'kW' else v }}
+      solar_power_float: >
+        {% set v = states(solar_power) | float(0) %}
+        {{ v * 1000 if state_attr(solar_power, 'unit_of_measurement') == 'kW' else v }}
 
       # Configuration
       wait_time_int: !input wait_time
       pi_script: !input PI_regler_script
       max_active_power_limit_int: !input max_active_power_limit
+      max_power_entity_id: !input max_power_entity
+      hard_limit_int: >
+        {% if max_power_entity_id is string and max_power_entity_id | length > 0
+             and states(max_power_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+          {{ states(max_power_entity_id) | int(max_active_power_limit_int) }}
+        {% else %}
+          {{ max_active_power_limit_int }}
+        {% endif %}
       regulator_factor_float: !input regulator_factor
       ki_factor_float: !input ki_factor
       ac_charge_p_factor_float: !input ac_charge_p_factor
@@ -1367,21 +1999,22 @@ actions:
           {{ offset_2_int }}
         {% endif %}
 
-      # PI Controller variables
+      # PI controller variables
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
       integral_old: "{{ states(integral_entity) | float(0) }}"
 
-      # Dynamic power limit (zone-dependent)
+      # Dynamic power limit (zone-dependent, Zone 2 capped to min(Hard Limit, inverter entity max))
       # Mode '3' (AC Charging) → charge limit as max_power to script
       # Zone 1               → Hard Limit
-      # Zone 2               → Max(0, PV - Reserve)
+      # Zone 2               → Min(Hard Limit, Max(0, PV - Reserve))
+      inverter_entity_max: "{{ state_attr(active_power_entity, 'max') | float(9999) }}"
       dynamic_max_power: >
         {% if states(solakon_mode) == '3' %}
-          {{ ac_charge_power_limit_int }}
+          {{ [ac_charge_power_limit_int, inverter_entity_max] | min }}
         {% elif is_state(cycle_active, 'on') %}
-          {{ max_active_power_limit_int }}
+          {{ [hard_limit_int, inverter_entity_max] | min }}
         {% else %}
-          {{ [0, solar_power_float - (pv_charge_reserve_int | float(0))] | max }}
+          {{ [[0, solar_power_float - (pv_charge_reserve_int | float(0))] | max, hard_limit_int, inverter_entity_max] | min }}
         {% endif %}
 
       # Error for guards (always in discharge direction: grid − offset)
@@ -1391,13 +2024,16 @@ actions:
 
       # At-Limit Guards — only relevant for normal discharge mode
       # In AC mode the error direction is inverted, guards would incorrectly block PI
-      at_max_limit: "{{ raw_error > 0 and current_active_power >= max_active_power_limit_int | float(0) }}"
+      # dynamic_max_power is the effective limit (Zone 1: hard_limit, Zone 2: min(hard_limit, Max(0, PV−Reserve)))
+      # above_dynamic_max: PI continues when current > dynamic_max (e.g. PV drop) — allows downward correction
+      above_dynamic_max: "{{ current_active_power > dynamic_max_power | float(0) }}"
+      at_max_limit: "{{ raw_error > 0 and current_active_power >= dynamic_max_power | float(0) and not above_dynamic_max }}"
       at_min_limit: "{{ raw_error < 0 and current_active_power <= 0 }}"
 
 
   # STEP 1: Set discharge current
   - choose:
-      # STEP 1a: Zone 1 — Max value (only if Surplus NOT active AND NOT AC Charging)
+      # STEP 1a: Zone 1 — Max value (only if Surplus NOT active AND NOT AC/Tariff Charging)
       - conditions:
           - condition: state
             entity_id: !input cycle_active_boolean_helper
@@ -1427,7 +2063,7 @@ actions:
             data:
               value: 2
 
-      # STEP 1c: Zone 2 or AC Charging — 0 A
+      # STEP 1c: Zone 2 or AC/Tariff Charging — 0 A
       - conditions:
           - condition: template
             value_template: >
@@ -1472,21 +2108,43 @@ actions:
             value_template: "{{ surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on') }}"
         sequence:
           - parallel:
-              # Output → Hard Limit
+              # Output → Hard Limit (capped to inverter entity max)
               - action: number.set_value
                 target:
                   entity_id: !input active_power_number
                 data:
-                  value: "{{ max_active_power_limit_int }}"
+                  value: "{{ [hard_limit_int, state_attr(active_power_entity, 'max') | float(hard_limit_int)] | min }}"
               # Freeze integral (write back unchanged)
               - action: input_number.set_value
                 target:
                   entity_id: !input integral_helper
                 data:
                   value: "{{ integral_old }}"
-          # Wait time
-          - delay:
+          # Wait time — adaptive until actual power ≈ setpoint or timeout
+          - wait_template: >
+              {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+            timeout:
               seconds: "{{ wait_time_int }}"
+            continue_on_timeout: true
+
+      # BRANCH BT: Tariff Charging — Direct set (no PI)
+      # Output → tariff_charge_power (constant, independent of grid)
+      - conditions:
+          - condition: template
+            value_template: "{{ tariff_charge_mode_active | bool(false) }}"
+        sequence:
+          # Output → charge power (direct, no PI call)
+          - action: number.set_value
+            target:
+              entity_id: !input active_power_number
+            data:
+              value: "{{ tariff_charge_power_int }}"
+          # Wait time — adaptive until actual power ≈ setpoint or timeout
+          - wait_template: >
+              {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+            timeout:
+              seconds: "{{ wait_time_int }}"
+            continue_on_timeout: true
 
       # BRANCH B: AC Charging — PI Script with ac_charge_mode=true (inverted error calculation)
       # at_max/at_min guards not applied: error direction is inverted in script
@@ -1507,9 +2165,13 @@ actions:
               integral_entity: !input integral_helper
               output_entity: !input active_power_number
               ac_charge_mode: true
-          # Wait time
-          - delay:
+              error_share: "{{ error_share_value }}"
+          # Wait time — adaptive until actual power ≈ setpoint or timeout
+          - wait_template: >
+              {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+            timeout:
               seconds: "{{ wait_time_int }}"
+            continue_on_timeout: true
 
       # BRANCH C: Normal PI Controller (Zone 1 / Zone 2)
       - conditions:
@@ -1533,9 +2195,13 @@ actions:
               integral_entity: !input integral_helper
               output_entity: !input active_power_number
               ac_charge_mode: false
-          # Wait time
-          - delay:
+              error_share: "{{ error_share_value }}"
+          # Wait time — adaptive until actual power ≈ setpoint or timeout
+          - wait_template: >
+              {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+            timeout:
               seconds: "{{ wait_time_int }}"
+            continue_on_timeout: true
 
     # DEFAULT: Integral Decay (error within tolerance or at limit)
     default:
