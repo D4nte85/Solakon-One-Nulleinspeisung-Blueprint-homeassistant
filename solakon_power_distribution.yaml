@@ -3,7 +3,7 @@ blueprint:
   description: >-
     Distributes output power and grid-error share adaptively across 2-4 Solakon Zero-Export instances.
     Active instances detected via mode '1' (INV Discharge PV Priority).
-    Distribution via toggle: equal split or SOC/PV-slider weighted.
+    Distribution via toggle: equal split or SOC-weighted (usable capacity).
     Weighting based on usable energy: (SOC - Min-SOC) / 100 x capacity_kWh per instance.
     Without capacity sensor: capacity = 100 — weighting by SOC percentage points.
     Each instance receives a share proportional to its usable energy —
