@@ -70,30 +70,12 @@ blueprint:
           name: ⚖️ Gleichverteilung aktivieren
           description: |
             Ein  → Alle aktiven Instanzen erhalten gleich viel Leistung.
-                    SOC/PV-Schieberegler wird ignoriert.
-            Aus  → Gewichtete Verteilung nach SOC / PV-Schieberegler.
+            Aus  → SOC-gewichtete Verteilung: Instanz mit mehr nutzbarer
+                   Kapazität (SOC − Min-SOC) übernimmt mehr Last.
+                   SOC-Werte gleichen sich dadurch automatisch an.
           default: true
           selector:
             boolean:
-
-        soc_pv_balance:
-          name: 🎚️ SOC ←→ PV Gewichtung
-          description: |
-            Nur wirksam wenn Gleichverteilung = Aus.
-            0,0  → Verteilung ausschließlich nach SOC (höherer SOC → mehr Leistung).
-            1,0  → Verteilung ausschließlich nach individueller PV-Leistung
-                   (höhere PV → mehr Leistung).
-            0,5  → 50 % SOC + 50 % PV.
-            SOC-Anteil + PV-Anteil = immer 1,0.
-            ⚠️ Wenn kein PV-Sensor pro Instanz konfiguriert ist, wird der
-            PV-Anteil automatisch auf SOC umgeleitet.
-          default: 0.5
-          selector:
-            number:
-              min: 0.0
-              max: 1.0
-              step: 0.05
-              mode: slider
 
     # ═══════════════════════════════════════════════════════════════════════
     # 🔋 INSTANZ 1 (PFLICHT)
@@ -119,19 +101,6 @@ blueprint:
             entity:
               domain: sensor
               device_class: battery
-
-        inst1_pv_sensor:
-          name: ☀️ Instanz 1 — PV-Leistung (Optional)
-          description: |
-            Individueller PV-Sensor dieser Instanz in Watt.
-            Wird nur für die Verteilungsgewichtung verwendet (nicht Gesamtleistung).
-            ⚠️ Nur relevant wenn Gleichverteilung = Aus und Schieberegler > 0,0.
-            Leer lassen → Instanz erhält nur SOC-Gewichtung.
-          default: {}
-          selector:
-            entity:
-              domain: sensor
-              device_class: power
 
         inst1_min_soc:
           name: 🔋 Instanz 1 — Min-SOC (Zone 3 Stopp)
@@ -199,15 +168,6 @@ blueprint:
               domain: sensor
               device_class: battery
 
-        inst2_pv_sensor:
-          name: ☀️ Instanz 2 — PV-Leistung (Optional)
-          description: Leer lassen → Instanz erhält nur SOC-Gewichtung.
-          default: {}
-          selector:
-            entity:
-              domain: sensor
-              device_class: power
-
         inst2_min_soc:
           name: 🔋 Instanz 2 — Min-SOC (Zone 3 Stopp)
           default: 20
@@ -259,14 +219,6 @@ blueprint:
             entity:
               domain: sensor
               device_class: battery
-
-        inst3_pv_sensor:
-          name: ☀️ Instanz 3 — PV-Leistung (Optional)
-          default: {}
-          selector:
-            entity:
-              domain: sensor
-              device_class: power
 
         inst3_min_soc:
           name: 🔋 Instanz 3 — Min-SOC (Zone 3 Stopp)
@@ -322,14 +274,6 @@ blueprint:
               domain: sensor
               device_class: battery
 
-        inst4_pv_sensor:
-          name: ☀️ Instanz 4 — PV-Leistung (Optional)
-          default: {}
-          selector:
-            entity:
-              domain: sensor
-              device_class: power
-
         inst4_min_soc:
           name: 🔋 Instanz 4 — Min-SOC (Zone 3 Stopp)
           default: 20
@@ -373,31 +317,26 @@ variables:
   global_max:    !input global_max_power
   interval_s:    !input interval_seconds
   equal_dist:    !input equal_distribution
-  balance:       !input soc_pv_balance
   i1_mode:       !input inst1_mode_select
   i1_soc:        !input inst1_soc_sensor
-  i1_pv:         !input inst1_pv_sensor
   i1_limit:      !input inst1_limit_number
   i1_share:      !input inst1_share_number
   i1_min_soc:    !input inst1_min_soc
   i1_cap:        !input inst1_capacity_sensor
   i2_mode:       !input inst2_mode_select
   i2_soc:        !input inst2_soc_sensor
-  i2_pv:         !input inst2_pv_sensor
   i2_limit:      !input inst2_limit_number
   i2_share:      !input inst2_share_number
   i2_min_soc:    !input inst2_min_soc
   i2_cap:        !input inst2_capacity_sensor
   i3_mode:       !input inst3_mode_select
   i3_soc:        !input inst3_soc_sensor
-  i3_pv:         !input inst3_pv_sensor
   i3_limit:      !input inst3_limit_number
   i3_share:      !input inst3_share_number
   i3_min_soc:    !input inst3_min_soc
   i3_cap:        !input inst3_capacity_sensor
   i4_mode:       !input inst4_mode_select
   i4_soc:        !input inst4_soc_sensor
-  i4_pv:         !input inst4_pv_sensor
   i4_limit:      !input inst4_limit_number
   i4_share:      !input inst4_share_number
   i4_min_soc:    !input inst4_min_soc
@@ -476,91 +415,46 @@ actions:
         {{ [i1_active, i2_active, i3_active, i4_active]
            | select('equalto', true) | list | count }}
 
-      # PV-Sensor vorhanden-Check pro Instanz
-      i1_pv_valid: "{{ i1_pv is string and i1_pv | length > 0 }}"
-      i2_pv_valid: "{{ i2_pv is string and i2_pv | length > 0 }}"
-      i3_pv_valid: "{{ i3_pv is string and i3_pv | length > 0 }}"
-      i4_pv_valid: "{{ i4_pv is string and i4_pv | length > 0 }}"
-
-      # Individuelle PV der aktiven Instanzen (0 wenn nicht konfiguriert oder inaktiv)
-      pv1: "{{ states(i1_pv) | float(0) if i1_active and i1_pv_valid else 0 }}"
-      pv2: "{{ states(i2_pv) | float(0) if i2_active and i2_pv_valid else 0 }}"
-      pv3: "{{ states(i3_pv) | float(0) if i3_active and i3_pv_valid else 0 }}"
-      pv4: "{{ states(i4_pv) | float(0) if i4_active and i4_pv_valid else 0 }}"
-
       # total_soc = Summe der nutzbaren Kapazitäten (SOC − Min-SOC, inaktive = 0).
       # Wird als Nenner für die Gewichtsberechnung genutzt (proportionaler Anteil).
-      total_soc:     "{{ soc1 + soc2 + soc3 + soc4 }}"
-      total_pv_dist: "{{ pv1 + pv2 + pv3 + pv4 }}"
+      total_soc: "{{ soc1 + soc2 + soc3 + soc4 }}"
 
       total_power: "{{ global_max | int }}"
-
-      # Anteile aus dem Schieberegler (SOC + PV = 1,0)
-      # Wenn kein PV-Sensor vorhanden (total_pv_dist = 0), wird der PV-Anteil
-      # automatisch auf SOC umgeleitet → reine SOC-Gewichtung als Fallback.
-      _pv_share:  "{{ balance | float(0.5) }}"
-      _soc_share: "{{ 1.0 - _pv_share }}"
 
       # Gewichte (w1–w4) bestimmen gleichzeitig:
       #   a) Leistungsverteilung: power_i = total_power × w_i
       #   b) Fehler-Anteil:       error_share_i = w_i → direkt in Instanz-PI-Regler
-      # Gleichverteilung:  1/n für alle aktiven
-      # Gewichtet (SOC):   nutzbare Kapazität (SOC − Min-SOC) / Σ nutzbare Kapazität
-      #                    → Instanz mit mehr nutzbarer Kapazität übernimmt mehr Last
-      #                    → SOC-Werte gleichen sich automatisch an
-      # Gewichtet (PV):    PV_i / ΣPV (nur wenn individuelle PV-Sensoren konfiguriert)
-      #   → fehlt ΣPV:     PV-Anteil fließt in SOC-Anteil (total_pv_dist = 0 Guard)
+      # Gleichverteilung:   1/n für alle aktiven
+      # SOC-gewichtet:      nutzbare Kapazität (SOC − Min-SOC) / Σ nutzbare Kapazität
+      #                     → Instanz mit mehr nutzbarer Kapazität übernimmt mehr Last
+      #                     → SOC-Werte gleichen sich automatisch an
       w1: >
         {% if not i1_active or active_count | int(0) == 0 %}{{ 0.0 }}
         {% elif equal_dist %}{{ 1.0 / active_count }}
         {% else %}
           {% set eq = 1.0 / active_count %}
-          {% set ss = soc1 / total_soc if total_soc > 0 else eq %}
-          {% if total_pv_dist > 0 %}
-            {% set ps = pv1 / total_pv_dist %}
-            {{ _soc_share * ss + _pv_share * ps }}
-          {% else %}
-            {{ ss }}
-          {% endif %}
+          {{ soc1 / total_soc if total_soc > 0 else eq }}
         {% endif %}
       w2: >
         {% if not i2_active or active_count | int(0) == 0 %}{{ 0.0 }}
         {% elif equal_dist %}{{ 1.0 / active_count }}
         {% else %}
           {% set eq = 1.0 / active_count %}
-          {% set ss = soc2 / total_soc if total_soc > 0 else eq %}
-          {% if total_pv_dist > 0 %}
-            {% set ps = pv2 / total_pv_dist %}
-            {{ _soc_share * ss + _pv_share * ps }}
-          {% else %}
-            {{ ss }}
-          {% endif %}
+          {{ soc2 / total_soc if total_soc > 0 else eq }}
         {% endif %}
       w3: >
         {% if not i3_active or active_count | int(0) == 0 %}{{ 0.0 }}
         {% elif equal_dist %}{{ 1.0 / active_count }}
         {% else %}
           {% set eq = 1.0 / active_count %}
-          {% set ss = soc3 / total_soc if total_soc > 0 else eq %}
-          {% if total_pv_dist > 0 %}
-            {% set ps = pv3 / total_pv_dist %}
-            {{ _soc_share * ss + _pv_share * ps }}
-          {% else %}
-            {{ ss }}
-          {% endif %}
+          {{ soc3 / total_soc if total_soc > 0 else eq }}
         {% endif %}
       w4: >
         {% if not i4_active or active_count | int(0) == 0 %}{{ 0.0 }}
         {% elif equal_dist %}{{ 1.0 / active_count }}
         {% else %}
           {% set eq = 1.0 / active_count %}
-          {% set ss = soc4 / total_soc if total_soc > 0 else eq %}
-          {% if total_pv_dist > 0 %}
-            {% set ps = pv4 / total_pv_dist %}
-            {{ _soc_share * ss + _pv_share * ps }}
-          {% else %}
-            {{ ss }}
-          {% endif %}
+          {{ soc4 / total_soc if total_soc > 0 else eq }}
         {% endif %}
 
       # Zugeteilte Leistung pro Instanz (auf ganze Watt gerundet)
