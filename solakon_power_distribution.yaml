@@ -70,30 +70,12 @@ blueprint:
           name: ⚖️ Enable Equal Distribution
           description: |
             On  → All active instances receive equal power.
-                   SOC/PV slider is ignored.
-            Off → Weighted distribution by SOC / PV slider.
+            Off → SOC-weighted distribution: instance with more usable
+                  capacity (SOC − Min-SOC) takes more load.
+                  SOC values equalise automatically.
           default: true
           selector:
             boolean:
-
-        soc_pv_balance:
-          name: 🎚️ SOC ←→ PV Balance
-          description: |
-            Only effective when Equal Distribution = Off.
-            0.0  → Distribution exclusively by SOC (higher SOC → more power).
-            1.0  → Distribution exclusively by individual PV output
-                   (higher PV → more power).
-            0.5  → 50 % SOC + 50 % PV.
-            SOC share + PV share always = 1.0.
-            ⚠️ If no per-instance PV sensor is configured, the PV share
-            is automatically redirected to SOC.
-          default: 0.5
-          selector:
-            number:
-              min: 0.0
-              max: 1.0
-              step: 0.05
-              mode: slider
 
     # ═══════════════════════════════════════════════════════════════════════
     # 🔋 INSTANCE 1 (REQUIRED)
@@ -119,19 +101,6 @@ blueprint:
             entity:
               domain: sensor
               device_class: battery
-
-        inst1_pv_sensor:
-          name: ☀️ Instance 1 — PV Power (Optional)
-          description: |
-            Individual PV sensor of this instance in watts.
-            Used only for distribution weighting (not total power cap).
-            ⚠️ Only relevant when Equal Distribution = Off and slider > 0.0.
-            Leave empty → instance receives SOC weighting only.
-          default: {}
-          selector:
-            entity:
-              domain: sensor
-              device_class: power
 
         inst1_min_soc:
           name: 🔋 Instance 1 — Min SOC (Zone 3 Stop)
@@ -199,15 +168,6 @@ blueprint:
               domain: sensor
               device_class: battery
 
-        inst2_pv_sensor:
-          name: ☀️ Instance 2 — PV Power (Optional)
-          description: Leave empty → instance receives SOC weighting only.
-          default: {}
-          selector:
-            entity:
-              domain: sensor
-              device_class: power
-
         inst2_min_soc:
           name: 🔋 Instance 2 — Min SOC (Zone 3 Stop)
           default: 20
@@ -259,14 +219,6 @@ blueprint:
             entity:
               domain: sensor
               device_class: battery
-
-        inst3_pv_sensor:
-          name: ☀️ Instance 3 — PV Power (Optional)
-          default: {}
-          selector:
-            entity:
-              domain: sensor
-              device_class: power
 
         inst3_min_soc:
           name: 🔋 Instance 3 — Min SOC (Zone 3 Stop)
@@ -322,14 +274,6 @@ blueprint:
               domain: sensor
               device_class: battery
 
-        inst4_pv_sensor:
-          name: ☀️ Instance 4 — PV Power (Optional)
-          default: {}
-          selector:
-            entity:
-              domain: sensor
-              device_class: power
-
         inst4_min_soc:
           name: 🔋 Instance 4 — Min SOC (Zone 3 Stop)
           default: 20
@@ -373,31 +317,26 @@ variables:
   global_max:    !input global_max_power
   interval_s:    !input interval_seconds
   equal_dist:    !input equal_distribution
-  balance:       !input soc_pv_balance
   i1_mode:       !input inst1_mode_select
   i1_soc:        !input inst1_soc_sensor
-  i1_pv:         !input inst1_pv_sensor
   i1_limit:      !input inst1_limit_number
   i1_share:      !input inst1_share_number
   i1_min_soc:    !input inst1_min_soc
   i1_cap:        !input inst1_capacity_sensor
   i2_mode:       !input inst2_mode_select
   i2_soc:        !input inst2_soc_sensor
-  i2_pv:         !input inst2_pv_sensor
   i2_limit:      !input inst2_limit_number
   i2_share:      !input inst2_share_number
   i2_min_soc:    !input inst2_min_soc
   i2_cap:        !input inst2_capacity_sensor
   i3_mode:       !input inst3_mode_select
   i3_soc:        !input inst3_soc_sensor
-  i3_pv:         !input inst3_pv_sensor
   i3_limit:      !input inst3_limit_number
   i3_share:      !input inst3_share_number
   i3_min_soc:    !input inst3_min_soc
   i3_cap:        !input inst3_capacity_sensor
   i4_mode:       !input inst4_mode_select
   i4_soc:        !input inst4_soc_sensor
-  i4_pv:         !input inst4_pv_sensor
   i4_limit:      !input inst4_limit_number
   i4_share:      !input inst4_share_number
   i4_min_soc:    !input inst4_min_soc
@@ -476,91 +415,46 @@ actions:
         {{ [i1_active, i2_active, i3_active, i4_active]
            | select('equalto', true) | list | count }}
 
-      # Per-instance PV sensor presence check
-      i1_pv_valid: "{{ i1_pv is string and i1_pv | length > 0 }}"
-      i2_pv_valid: "{{ i2_pv is string and i2_pv | length > 0 }}"
-      i3_pv_valid: "{{ i3_pv is string and i3_pv | length > 0 }}"
-      i4_pv_valid: "{{ i4_pv is string and i4_pv | length > 0 }}"
-
-      # Individual PV of active instances (0 if not configured or inactive)
-      pv1: "{{ states(i1_pv) | float(0) if i1_active and i1_pv_valid else 0 }}"
-      pv2: "{{ states(i2_pv) | float(0) if i2_active and i2_pv_valid else 0 }}"
-      pv3: "{{ states(i3_pv) | float(0) if i3_active and i3_pv_valid else 0 }}"
-      pv4: "{{ states(i4_pv) | float(0) if i4_active and i4_pv_valid else 0 }}"
-
       # total_soc = sum of usable capacities (SOC − Min-SOC, inactive = 0).
       # Used as denominator for weight calculation (proportional share).
-      total_soc:     "{{ soc1 + soc2 + soc3 + soc4 }}"
-      total_pv_dist: "{{ pv1 + pv2 + pv3 + pv4 }}"
+      total_soc: "{{ soc1 + soc2 + soc3 + soc4 }}"
 
       total_power: "{{ global_max | int }}"
-
-      # Shares from the slider (SOC + PV = 1.0)
-      # If no PV sensor present (total_pv_dist = 0), PV share is automatically
-      # redirected to SOC → pure SOC weighting as fallback.
-      _pv_share:  "{{ balance | float(0.5) }}"
-      _soc_share: "{{ 1.0 - _pv_share }}"
 
       # Weights (w1–w4) simultaneously determine:
       #   a) Power distribution: power_i = total_power × w_i
       #   b) Error share:        error_share_i = w_i → fed directly into instance PI controller
       # Equal:        1/n for all active instances
-      # Weighted SOC: usable capacity (SOC − Min-SOC) / Σ usable capacity
+      # SOC-weighted: usable capacity (SOC − Min-SOC) / Σ usable capacity
       #               → instance with more usable capacity takes more load
       #               → SOC values equalise automatically
-      # Weighted PV:  PV_i / ΣPV (only when per-instance PV sensors are configured)
-      #   → no ΣPV:  PV share flows into SOC share (total_pv_dist = 0 guard)
       w1: >
         {% if not i1_active or active_count | int(0) == 0 %}{{ 0.0 }}
         {% elif equal_dist %}{{ 1.0 / active_count }}
         {% else %}
           {% set eq = 1.0 / active_count %}
-          {% set ss = soc1 / total_soc if total_soc > 0 else eq %}
-          {% if total_pv_dist > 0 %}
-            {% set ps = pv1 / total_pv_dist %}
-            {{ _soc_share * ss + _pv_share * ps }}
-          {% else %}
-            {{ ss }}
-          {% endif %}
+          {{ soc1 / total_soc if total_soc > 0 else eq }}
         {% endif %}
       w2: >
         {% if not i2_active or active_count | int(0) == 0 %}{{ 0.0 }}
         {% elif equal_dist %}{{ 1.0 / active_count }}
         {% else %}
           {% set eq = 1.0 / active_count %}
-          {% set ss = soc2 / total_soc if total_soc > 0 else eq %}
-          {% if total_pv_dist > 0 %}
-            {% set ps = pv2 / total_pv_dist %}
-            {{ _soc_share * ss + _pv_share * ps }}
-          {% else %}
-            {{ ss }}
-          {% endif %}
+          {{ soc2 / total_soc if total_soc > 0 else eq }}
         {% endif %}
       w3: >
         {% if not i3_active or active_count | int(0) == 0 %}{{ 0.0 }}
         {% elif equal_dist %}{{ 1.0 / active_count }}
         {% else %}
           {% set eq = 1.0 / active_count %}
-          {% set ss = soc3 / total_soc if total_soc > 0 else eq %}
-          {% if total_pv_dist > 0 %}
-            {% set ps = pv3 / total_pv_dist %}
-            {{ _soc_share * ss + _pv_share * ps }}
-          {% else %}
-            {{ ss }}
-          {% endif %}
+          {{ soc3 / total_soc if total_soc > 0 else eq }}
         {% endif %}
       w4: >
         {% if not i4_active or active_count | int(0) == 0 %}{{ 0.0 }}
         {% elif equal_dist %}{{ 1.0 / active_count }}
         {% else %}
           {% set eq = 1.0 / active_count %}
-          {% set ss = soc4 / total_soc if total_soc > 0 else eq %}
-          {% if total_pv_dist > 0 %}
-            {% set ps = pv4 / total_pv_dist %}
-            {{ _soc_share * ss + _pv_share * ps }}
-          {% else %}
-            {{ ss }}
-          {% endif %}
+          {{ soc4 / total_soc if total_soc > 0 else eq }}
         {% endif %}
 
       # Allocated power per instance (rounded to whole watts)
