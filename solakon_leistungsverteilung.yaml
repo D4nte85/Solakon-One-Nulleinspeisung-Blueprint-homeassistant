@@ -118,7 +118,7 @@ blueprint:
         inst1_capacity_sensor:
           name: 🔋 Instanz 1 — Batteriekapazität in kWh (Optional)
           description: |
-            Kapazitätssensor der Solakon-ONE-Integration.
+            Kapazitätssensor der Solakon-ONE-Integration: sensor.solakon_one_batteriekapazitat
             Optional: verbessert die Gewichtung bei Batterien unterschiedlicher Kapazität.
             Ohne Angabe: Gewichtung rein nach SOC-Prozentpunkten (gleichwertige Kapazität angenommen).
             ⚠️ Entweder für alle Instanzen setzen oder für keine.
