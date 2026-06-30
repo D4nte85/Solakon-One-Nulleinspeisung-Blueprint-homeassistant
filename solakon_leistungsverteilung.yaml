@@ -3,7 +3,7 @@ blueprint:
   description: >-
     Verteilt Ausgangsleistung und Netzfehler-Anteil adaptiv auf 2-4 Solakon-Nulleinspeisung-Instanzen.
     Erkennung aktiver Instanzen via Modus '1' (INV Discharge PV Priority).
-    Verteilung per Umschalter Gleichverteilung oder SOC/PV-Schieberegler gewichtet.
+    Verteilung per Umschalter: Gleichverteilung oder SOC-gewichtet (nutzbare Kapazitaet).
     Gewichtung basiert auf nutzbarer Energie: (SOC - Min-SOC) / 100 x Kapazitaet_kWh pro Instanz.
     Ohne Kapazitaetssensor: Kapazitaet = 100 — Gewichtung nach SOC-Prozentpunkten.
     Jede Instanz erhaelt einen Anteil proportional zu ihrer nutzbaren Energie —
