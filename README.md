@@ -81,7 +81,32 @@ Persistent state storage for tariff charging sessions.
 3. Name: e.g. `Solakon Tariff Charging Active`
 4. Save (Entity ID: e.g. `input_boolean.solakon_tariff_charging_active`)
 
-### 7. Input Number Helper for Dynamic Offset (Optional)
+### 7. Input Number Helper (Power Limit Dynamic) — MULTI-INSTANCING ONLY
+
+Written by the power distribution automation and dynamically limits the instance's output power Hard Limit.
+
+1. Go to **Settings** → **Devices & Services** → **Helpers** → **Number**
+2. Name: e.g. `Solakon Instance 1 Limit`
+3. **Settings:** Min: `0`, Max: `≥ Global Max`, Step: `1`, Initial: `800`
+4. Save (Entity ID: e.g. `input_number.solakon_instance1_limit`)
+5. In the power distribution automation: enter as "Max. Power (input_number)"
+6. In this instance automation: enter as "Max. Output Power — Dynamic"
+7. Repeat for each additional instance
+
+### 8. Input Number Helper (Error Share) — MULTI-INSTANCING ONLY
+
+Contains the share of grid error (0.0–1.0) this instance handles via its PI controller.
+Calculated by the power distribution automation: `usable_i / Σ usable_j` with `usable_i = (SOC_i − Min-SOC_i) / 100 × Cap_i`. Without capacity sensor: `Cap_i = 100` — weighting by SOC percentage points.
+
+1. Go to **Settings** → **Devices & Services** → **Helpers** → **Number**
+2. Name: e.g. `Solakon Instance 1 Share`
+3. **Settings:** Min: `0`, Max: `1`, Step: `0.001`, Initial: `1`
+4. Save (Entity ID: e.g. `input_number.solakon_instance1_share`)
+5. Repeat for each additional instance
+6. In the power distribution automation: enter as "Error Share Helper"
+7. In this instance automation: enter as "Error Share Helper"
+
+### 9. Input Number Helper for Dynamic Offset (Optional)
 
 If you want to adjust the zero-point offset dynamically at runtime, the **Solakon ONE — Dynamic Offset Blueprint** is recommended. It creates and populates the required helpers automatically.
 
@@ -250,7 +275,8 @@ For operation of multiple Solakon ONE inverters in one household.
 
 * `max_power_entity`: `input_number` for per-instance power limit — overrides static Hard Limit
 * `error_share_entity`: `input_number` (0.0–1.0) for per-instance share of grid error
-  - `error_share = (SOC_i − Min-SOC_i) / Σ(SOC_j − Min-SOC_j)` — proportional to usable capacity
+  - `usable_i = (SOC_i − Min-SOC_i) / 100 × Cap_i`, `error_share_i = usable_i / Σ usable_j`
+  - Without capacity sensor: `Cap_i = 100` — weighting by SOC percentage points
   - Written by a parent power distribution automation; leave empty in single-instance operation
 * Single instance: always leave both empty (error_share = 1.0, Hard Limit applies)
 
@@ -634,6 +660,57 @@ TM Lock:
 ### kW → W Normalization
 
 All power sensor readings are automatically normalized to Watts. Sensors reporting in kW (unit_of_measurement = `kW`) are multiplied by 1000. This ensures correct operation with sensors from different integrations regardless of their unit.
+
+---
+
+## 🔀 Multi-Instancing (Multiple Batteries)
+
+### How It Works
+
+Each instance handles only its proportional share of the grid error (`error_share`).
+The power distribution automation calculates this share per instance from usable capacity —
+the SOC range above the configured Min-SOC (Zone 3 Stop):
+
+```
+usable_i      = (SOC_i − Min-SOC_i) / 100 × Cap_i
+error_share_i = usable_i / Σ usable_j
+```
+
+Without capacity sensor: `Cap_i = 100` — weighting by SOC percentage points (equal capacity assumed).
+
+Example with two instances (Min-SOC 20% each, capacities 10 kWh / 5 kWh):
+
+```
+Instance 1: SOC=60% → (40/100) × 10 = 4.0 kWh usable
+Instance 2: SOC=40% → (20/100) ×  5 = 1.0 kWh usable
+→ share1 = 4.0/5.0 = 0.80, share2 = 1.0/5.0 = 0.20
+```
+
+The calculated share is written by the power distribution automation into an `input_number` helper,
+which the PI controller of each instance reads as `error_share` and applies to `raw_error`.
+In single-instance operation (no helper configured): `error_share = 1.0`.
+
+Because weighting is based on usable capacity, the state of charge of multiple batteries
+equalises automatically: an instance with more usable capacity takes more load and
+discharges more strongly until both are at the same level again.
+
+### Required Helpers per Instance (in addition to single-instance)
+
+| Helper / Sensor | Type | Settings | Purpose |
+|:----------------|:-----|:---------|:--------|
+| `...instance_N_limit` | `input_number` | min:0, max:≥Global-Max, step:1 | Power limit from distribution → instance |
+| `...instance_N_share` | `input_number` | min:0, max:1, step:0.001 | Error share from distribution → PI controller |
+| Capacity sensor (optional) | `sensor` | kWh — from Solakon integration | Accurate kWh weighting for different battery capacities |
+
+### Configuration Steps
+
+1. Set up all instance blueprints as usual
+2. Create the two new helpers (`limit`, `share`) per instance
+3. In each instance automation enter: "Max. Output Power — Dynamic" and "Error Share Helper"
+4. Create the power distribution blueprint (`solakon_power_distribution.yaml`) as an automation:
+   - Enter Min-SOC per instance — identical to the "Zone 3 Stop" value of the respective instance
+   - Assign `limit` and `share` helpers per instance
+   - Optional: enter the capacity sensor from the Solakon ONE integration per instance — recommended for different battery capacities
 
 ---
 
