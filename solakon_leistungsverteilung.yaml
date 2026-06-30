@@ -3,7 +3,6 @@ blueprint:
   description: >-
     Verteilt Ausgangsleistung und Netzfehler-Anteil adaptiv auf 2-4 Solakon-Nulleinspeisung-Instanzen.
     Erkennung aktiver Instanzen via Modus '1' (INV Discharge PV Priority).
-    Gesamtleistung per PV-Einfluss-Parameter steuerbar (0=Global-Max, 1=PV-Cap).
     Verteilung per Umschalter Gleichverteilung oder SOC/PV-Schieberegler gewichtet.
     Gewichtung basiert auf nutzbarer Energie: (SOC - Min-SOC) / 100 x Kapazitaet_kWh pro Instanz.
     Ohne Kapazitaetssensor: Kapazitaet = 100 — Gewichtung nach SOC-Prozentpunkten.
@@ -30,8 +29,7 @@ blueprint:
           name: ⚡ Gesamte Max. Ausgangsleistung
           description: |
             Absolute Obergrenze aller Instanzen zusammen.
-            Wird nach PV-Einfluss und Gewichtung aufgeteilt.
-            Darf das physische Wechselrichter-Limit nicht überschreiten.
+            Wird nach Gewichtung aufgeteilt. Darf das physische Wechselrichter-Limit nicht überschreiten.
           default: 800
           selector:
             number:
@@ -59,33 +57,6 @@ blueprint:
                   value: "120"
                 - label: "300 Sekunden"
                   value: "300"
-
-        pv_sensor:
-          name: ☀️ Solarleistung-Sensor (gemeinsam, für Gesamtleistungs-Berechnung)
-          description: |
-            Aktueller PV-Gesamtertrag in Watt.
-            Wird für die Berechnung der verfügbaren Gesamtleistung verwendet (PV-Einfluss).
-            Kann derselbe Sensor sein den die Instanzen nutzen.
-          selector:
-            entity:
-              domain: sensor
-              device_class: power
-
-        pv_influence:
-          name: ☀️ PV-Einfluss auf Gesamtleistung
-          description: |
-            Wie stark PV die GESAMTE verteilte Leistung begrenzt.
-            0,0 → PV ohne Einfluss, immer Global-Max verteilt.
-            1,0 → Gesamtleistung = min(PV, Global-Max).
-            0,5 → Mittelweg: 50 % PV-limitiert, 50 % Global-Max.
-            Formel: total = Global-Max × (1 − Einfluss) + min(PV, Global-Max) × Einfluss
-          default: 0.5
-          selector:
-            number:
-              min: 0.0
-              max: 1.0
-              step: 0.05
-              mode: slider
 
     # ═══════════════════════════════════════════════════════════════════════
     # ⚖️ VERTEILUNGS-MODUS
@@ -401,8 +372,6 @@ max_exceeded: silent
 variables:
   global_max:    !input global_max_power
   interval_s:    !input interval_seconds
-  pv_infl:       !input pv_influence
-  pv_entity:     !input pv_sensor
   equal_dist:    !input equal_distribution
   balance:       !input soc_pv_balance
   i1_mode:       !input inst1_mode_select
@@ -453,8 +422,6 @@ actions:
 
   # ── Werte berechnen ───────────────────────────────────────────────────────
   - variables:
-      pv_power: "{{ states(pv_entity) | float(0) }}"
-
       # Optional-Instanzen: konfiguriert wenn mode, limit und share gesetzt sind
       i3_configured: >
         {{ i3_mode is string and i3_mode | length > 0
@@ -526,12 +493,7 @@ actions:
       total_soc:     "{{ soc1 + soc2 + soc3 + soc4 }}"
       total_pv_dist: "{{ pv1 + pv2 + pv3 + pv4 }}"
 
-      # Gesamtleistung nach PV-Einfluss auf Global-Max
-      pv_capped:   "{{ [pv_power, global_max | float(800)] | min }}"
-      total_power: >
-        {% set gmax = global_max | float(800) %}
-        {% set pi   = pv_infl | float(0.5) %}
-        {{ (gmax * (1.0 - pi) + pv_capped * pi) | round(0) | int }}
+      total_power: "{{ global_max | int }}"
 
       # Anteile aus dem Schieberegler (SOC + PV = 1,0)
       # Wenn kein PV-Sensor vorhanden (total_pv_dist = 0), wird der PV-Anteil
