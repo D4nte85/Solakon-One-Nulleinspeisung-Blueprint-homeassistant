@@ -118,7 +118,7 @@ blueprint:
         inst1_capacity_sensor:
           name: 🔋 Instance 1 — Battery Capacity in kWh (Optional)
           description: |
-            Capacity sensor from the Solakon ONE integration.
+            Capacity sensor from the Solakon ONE integration: sensor.solakon_one_battery_capacity
             Optional: improves weighting when instances have batteries of different capacity.
             Without entry: weighting purely by SOC percentage points (equal capacity assumed).
             ⚠️ Either set for all instances or for none.
