@@ -52,17 +52,17 @@ blueprint:
 
     **Control Cases (order is critical):**
     - **A** — Zone 1 Start: SOC > Zone 1 threshold AND Cycle = `off` AND no AC/Tariff charging AND no discharge lock → Integral = 0, Cycle = `on`, reset Surplus/AC booleans, Timer-Toggle, Mode → `'1'`
-    - **B** — Zone 3 Stop: SOC < Zone 3 threshold AND Cycle = `on` AND no AC/Tariff charging → Integral = 0, Cycle = `off`, reset Surplus/AC booleans, Output → 0W, Mode → `'0'`
-    - **C** — Zone 3 Guard: SOC < Zone 3 threshold AND Cycle = `off` AND Mode ≠ `'0'` AND no AC/Tariff charging → reset Surplus/AC booleans, Output → 0W, Mode → `'0'`
+    - **B** — Zone 3 Stop: SOC < Zone 3 threshold AND Cycle = `on` AND no AC/Tariff charging → Integral = 0, Cycle = `off`, reset Surplus/AC booleans, Output → 0W, Timer-Toggle, Mode → `'0'`
+    - **C** — Zone 3 Guard: SOC < Zone 3 threshold AND Cycle = `off` AND Mode ≠ `'0'` AND no AC/Tariff charging → reset Surplus/AC booleans, Output → 0W, Timer-Toggle, Mode → `'0'`
     - **D** — Recovery: Cycle = `on` AND Mode ∉ `{'1','3'}` AND SOC > Zone 3 threshold → Timer-Toggle, Mode → `'3'` if AC or Tariff-Charge-Bool = `on`, otherwise `'1'` (no integral reset, no zone change)
     - **GT** — Tariff Charging Start: Tariff arbitrage active AND price < cheap threshold AND SOC < tariff charge target AND Mode ≠ `'3'` AND no surplus AND **NOT PV-forecast-suppressed** → Tariff-Bool = `on`, Timer-Toggle, Output → charge power (direct), Mode → `'3'`
     - **HT** — Tariff Charging End: Mode = `'3'` AND Tariff-Bool = `on` AND (price ≥ cheap threshold OR SOC ≥ target) → Integral = 0, Tariff-Bool = `off`, Zone 1: Timer-Toggle + Mode `'1'` / Zone 2: Timer-Toggle + Mode `'0'` + 0W
-    - **TM** — Discharge Lock (mid-price): Tariff active AND cheap ≤ price < expensive AND no charging AND Mode = `'1'` AND **NOT PV-forecast-suppressed** → Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Mode → `'0'`
+    - **TM** — Discharge Lock (mid-price): Tariff active AND cheap ≤ price < expensive AND no charging AND Mode = `'1'` AND **NOT PV-forecast-suppressed** → Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Timer-Toggle, Mode → `'0'`
     - **G** — AC Charging Start: AC active AND SOC < charge target AND Mode ≠ `'3'` AND (Grid + Output) < −Hysteresis AND no Tariff charging AND no surplus → AC-Bool = `on`, Timer-Toggle, Output → 0W, Mode → `'3'`
     - **H** — AC Charging End: Mode = `'3'` AND (SOC ≥ charge target OR (Grid ≥ Offset + Hysteresis AND Output = 0W)) → Integral = 0, AC-Bool = `off`, Zone 1: Output → 0W, Timer-Toggle, Mode → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Mode → `'0'`
     - **I** — Safety: Mode = `'3'` without active AC or Tariff charging session → Integral = 0, Zone 1: Output → 0W, Timer-Toggle, Mode → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Mode → `'0'`
     - **E** — Zone 2 Start: Zone 3 < SOC ≤ Zone 1 AND Cycle = `off` AND Mode = `'0'` AND NOT night AND no discharge lock → Integral = 0, Timer-Toggle, Mode → `'1'`
-    - **F** — Night Shutdown: Night AND PV < PV charge reserve AND Cycle = `off` AND Mode active AND no AC/Tariff charging → Integral = 0, Output → 0W, Mode → `'0'`
+    - **F** — Night Shutdown: Night AND PV < PV charge reserve AND Cycle = `off` AND Mode active AND no AC/Tariff charging → Integral = 0, Output → 0W, Timer-Toggle, Mode → `'0'`
 
     **Timer-Toggle:** Instead of a fixed value, toggles between 3598 and 3599 — creates a state change so the Solakon reliably adopts the new mode. Performed at every mode change directly before setting the mode.
 
@@ -1299,7 +1299,24 @@ actions:
               entity_id: !input active_power_number
             data:
               value: 0
-          # 7. Mode → '0'
+          # 7. Timer-Toggle (3598↔3599)
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                sequence:
+                  - action: number.set_value
+                    target:
+                      entity_id: !input remote_timeout_set_number
+                    data:
+                      value: 3598
+            default:
+              - action: number.set_value
+                target:
+                  entity_id: !input remote_timeout_set_number
+                data:
+                  value: 3599
+          # 8. Mode → '0'
           - action: select.select_option
             target:
               entity_id: !input mode_select
@@ -1341,7 +1358,24 @@ actions:
               entity_id: !input active_power_number
             data:
               value: 0
-          # 4. Mode → '0'
+          # 4. Timer-Toggle (3598↔3599)
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                sequence:
+                  - action: number.set_value
+                    target:
+                      entity_id: !input remote_timeout_set_number
+                    data:
+                      value: 3598
+            default:
+              - action: number.set_value
+                target:
+                  entity_id: !input remote_timeout_set_number
+                data:
+                  value: 3599
+          # 5. Mode → '0'
           - action: select.select_option
             target:
               entity_id: !input mode_select
@@ -1622,7 +1656,24 @@ actions:
               entity_id: !input active_power_number
             data:
               value: 0
-          # 5. Mode → '0'
+          # 5. Timer-Toggle (3598↔3599)
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                sequence:
+                  - action: number.set_value
+                    target:
+                      entity_id: !input remote_timeout_set_number
+                    data:
+                      value: 3598
+            default:
+              - action: number.set_value
+                target:
+                  entity_id: !input remote_timeout_set_number
+                data:
+                  value: 3599
+          # 6. Mode → '0'
           - action: select.select_option
             target:
               entity_id: !input mode_select
@@ -1977,7 +2028,24 @@ actions:
               entity_id: !input active_power_number
             data:
               value: 0
-          # 4. Mode → '0'
+          # 4. Timer-Toggle (3598↔3599)
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                sequence:
+                  - action: number.set_value
+                    target:
+                      entity_id: !input remote_timeout_set_number
+                    data:
+                      value: 3598
+            default:
+              - action: number.set_value
+                target:
+                  entity_id: !input remote_timeout_set_number
+                data:
+                  value: 3599
+          # 5. Mode → '0'
           - action: select.select_option
             target:
               entity_id: !input mode_select
