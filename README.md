@@ -196,7 +196,7 @@ The restored mode depends on active charging state: if Tariff-Charge-Bool or AC-
 
 #### ⚠️ Safety Mechanism (Case I)
 
-Catches the condition where the inverter is in Mode `'3'` but no active charging session exists (AC Charging disabled/helper `off`, Tariff Charging `off`). This can occur via external mode manipulation. Action: reset integral, Zone 1 → Mode `'1'` (Timer-Toggle), Zone 2 → Mode `'0'` + Output 0W.
+Catches the condition where the inverter is in Mode `'3'` but no active charging session exists (AC Charging disabled/helper `off`, Tariff Charging `off`). This can occur via external mode manipulation. Action: reset integral, Zone 1 → Mode `'1'` (Timer-Toggle), Zone 2 → Mode `'0'` + Output 0W (Timer-Toggle).
 
 ---
 
@@ -232,7 +232,7 @@ Charges the battery when external grid feed-in is detected. Detection is based o
   - **Separate P/I Factors:** P small (~0.3–0.5) due to long hardware response (~25 s); I barely effective — leave at default 0
 * **Return:**
   - Zone 1 → Mode `'1'` (Timer-Toggle) + Integral Reset
-  - Zone 2 → Mode `'0'` + Output 0W + Integral Reset
+  - Zone 2 → Mode `'0'` (Timer-Toggle) + Output 0W + Integral Reset
 * **Priority:** Zone 3 (SOC protection) always takes priority. Tariff charging has priority over AC charging.
 
 ---
@@ -622,7 +622,7 @@ Condition: Mode = '3'
 
   → ac_charge_state_helper = off, integral = 0
   → Zone 1: Timer-Toggle + Mode '1'
-  → Zone 2: Mode '0' + Output 0W
+  → Zone 2: Timer-Toggle + Mode '0' + Output 0W
 ```
 
 ### Case GT/HT/TM — Tariff Logic

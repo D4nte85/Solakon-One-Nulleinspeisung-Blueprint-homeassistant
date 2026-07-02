@@ -59,8 +59,8 @@ blueprint:
     - **HT** — Tariff Charging End: Mode = `'3'` AND Tariff-Bool = `on` AND (price ≥ cheap threshold OR SOC ≥ target) → Integral = 0, Tariff-Bool = `off`, Zone 1: Timer-Toggle + Mode `'1'` / Zone 2: Mode `'0'` + 0W
     - **TM** — Discharge Lock (mid-price): Tariff active AND cheap ≤ price < expensive AND no charging AND Mode = `'1'` AND **NOT PV-forecast-suppressed** → Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Mode → `'0'`
     - **G** — AC Charging Start: AC active AND SOC < charge target AND Mode ≠ `'3'` AND (Grid + Output) < −Hysteresis AND no Tariff charging AND no surplus → AC-Bool = `on`, Timer-Toggle, Output → 0W, Mode → `'3'`
-    - **H** — AC Charging End: Mode = `'3'` AND (SOC ≥ charge target OR (Grid ≥ Offset + Hysteresis AND Output = 0W)) → Integral = 0, AC-Bool = `off`, Zone 1: Output → 0W, Timer-Toggle, Mode → `'1'` / Zone 2: Output → 0W, Mode → `'0'`
-    - **I** — Safety: Mode = `'3'` without active AC or Tariff charging session → Integral = 0, Zone 1: Output → 0W, Timer-Toggle, Mode → `'1'` / Zone 2: Output → 0W, Mode → `'0'`
+    - **H** — AC Charging End: Mode = `'3'` AND (SOC ≥ charge target OR (Grid ≥ Offset + Hysteresis AND Output = 0W)) → Integral = 0, AC-Bool = `off`, Zone 1: Output → 0W, Timer-Toggle, Mode → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Mode → `'0'`
+    - **I** — Safety: Mode = `'3'` without active AC or Tariff charging session → Integral = 0, Zone 1: Output → 0W, Timer-Toggle, Mode → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Mode → `'0'`
     - **E** — Zone 2 Start: Zone 3 < SOC ≤ Zone 1 AND Cycle = `off` AND Mode = `'0'` AND NOT night AND no discharge lock → Integral = 0, Timer-Toggle, Mode → `'1'`
     - **F** — Night Shutdown: Night AND PV < PV charge reserve AND Cycle = `off` AND Mode active AND no AC/Tariff charging → Integral = 0, Output → 0W, Mode → `'0'`
 
@@ -113,7 +113,7 @@ blueprint:
     - **Separate P/I Factors:** P small (~0.3–0.5) due to long hardware response (~25 s); I barely effective — leave at 0
     - **Return:**
       - Zone 1 → Integral = 0, AC-Bool = `off`, Output → 0 W, Timer-Toggle, Mode → `'1'`
-      - Zone 2 → Integral = 0, AC-Bool = `off`, Output → 0 W, Mode → `'0'`
+      - Zone 2 → Integral = 0, AC-Bool = `off`, Output → 0 W, Timer-Toggle, Mode → `'0'`
     - **Priority:** Zone 3 (SOC protection) always takes priority. Tariff charging takes priority over AC charging.
 
     </details>
@@ -1749,7 +1749,24 @@ actions:
                   entity_id: !input active_power_number
                 data:
                   value: 0
-              # 4b. Mode → '0'
+              # 4b. Timer-Toggle (3598↔3599)
+              - choose:
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                    sequence:
+                      - action: number.set_value
+                        target:
+                          entity_id: !input remote_timeout_set_number
+                        data:
+                          value: 3598
+                default:
+                  - action: number.set_value
+                    target:
+                      entity_id: !input remote_timeout_set_number
+                    data:
+                      value: 3599
+              # 4c. Mode → '0'
               - action: select.select_option
                 target:
                   entity_id: !input mode_select
@@ -1825,7 +1842,24 @@ actions:
                   entity_id: !input active_power_number
                 data:
                   value: 0
-              # 3b. Mode → '0'
+              # 3b. Timer-Toggle (3598↔3599)
+              - choose:
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                    sequence:
+                      - action: number.set_value
+                        target:
+                          entity_id: !input remote_timeout_set_number
+                        data:
+                          value: 3598
+                default:
+                  - action: number.set_value
+                    target:
+                      entity_id: !input remote_timeout_set_number
+                    data:
+                      value: 3599
+              # 3c. Mode → '0'
               - action: select.select_option
                 target:
                   entity_id: !input mode_select
