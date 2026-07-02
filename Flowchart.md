@@ -77,12 +77,12 @@ flowchart TD
         %% ── Fall H: AC Laden Beenden ─────────────────────────────────────
         AC_END{{"Integral = 0   AC-Lade-Bool → off   Aktuelle Zone?"}}
         AC_END_Z1["⚡ AC Laden beenden (Zone 1)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
-        AC_END_Z2["⚡ AC Laden beenden (Zone 2)   Modus → '0' (Disabled)   Output → 0 W"]
+        AC_END_Z2["⚡ AC Laden beenden (Zone 2)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
         %% ── Fall I: Safety — Modus '3' ohne aktive Lade-Session ─────────
         SAFETY_I{{"Integral = 0   Aktuelle Zone?"}}
         SAFETY_I_Z1["⚠️ Safety (Zone 1)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
-        SAFETY_I_Z2["⚠️ Safety (Zone 2)   Modus → '0' (Disabled)   Output → 0 W"]
+        SAFETY_I_Z2["⚠️ Safety (Zone 2)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
     end
     style SG_AC fill:none,stroke:#0066cc,stroke-width:5,stroke-dasharray:6,color:#000
