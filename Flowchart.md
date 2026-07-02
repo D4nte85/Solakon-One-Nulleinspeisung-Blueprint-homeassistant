@@ -34,10 +34,10 @@ flowchart TD
         Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
 
         %% ── Fall B: Zone 3 (Zyklus on) ──────────────────────────────────
-        Z3_A["🛑 Zone 3 aktivieren   Zyklus = off   Integral = 0   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Modus → '0' (Disabled)   Output → 0 W"]
+        Z3_A["🛑 Zone 3 aktivieren   Zyklus = off   Integral = 0   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
         %% ── Fall C: Zone 3 (Absicherung) ────────────────────────────────
-        Z3_B["🛑 Zone 3 Absicherung   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Modus → '0' (Disabled)   Output → 0 W"]
+        Z3_B["🛑 Zone 3 Absicherung   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
         %% ── Fall D: Recovery ─────────────────────────────────────────────
         RECOVERY["🔄 Recovery — Modus-Reaktivierung   Timer-Toggle (3598↔3599)   AC-Lade-Bool = on ODER Tarif-Lade-Bool = on → Modus '3'   sonst → Modus '1'   (kein Integral-Reset, kein Zonenwechsel)"]
@@ -46,7 +46,7 @@ flowchart TD
         Z2_START["🔋 Zone 2 aktivieren   Integral = 0   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
 
         %% ── Fall F: Nachtabschaltung ─────────────────────────────────────
-        NIGHT["🌙 Nachtabschaltung   Integral = 0   Modus → '0' (Disabled)   Output → 0 W"]
+        NIGHT["🌙 Nachtabschaltung   Integral = 0   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
     end
     style SG_SOC fill:none,stroke:#28a745,stroke-width:5,stroke-dasharray:6,color:#000
@@ -63,7 +63,7 @@ flowchart TD
         TARIFF_END_Z2["💹 Tarif-Laden beenden (Zone 2)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
         %% ── Fall TM: Discharge-Lock ──────────────────────────────────────
-        TARIFF_MID["🔒 Discharge-Lock   Integral = 0   Zyklus = off (nur wenn Zone 1)   Surplus-Bool → off (nur wenn aktiv)   Output → 0 W   Modus → '0' (Disabled)"]
+        TARIFF_MID["🔒 Discharge-Lock   Integral = 0   Zyklus = off (nur wenn Zone 1)   Surplus-Bool → off (nur wenn aktiv)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
     end
     style SG_TARIFF fill:none,stroke:#1a7f1a,stroke-width:5,stroke-dasharray:6,color:#000
