@@ -241,7 +241,7 @@ Charges the battery when external grid feed-in is detected. Detection is based o
 
 Charges the battery at cheap prices and locks discharge during neutral price phases.
 
-* **Case GT (price < cheap threshold):** Charges with `tariff_charge_power` directly (no PI) until SOC target. Returns to Zone 1 (Timer-Toggle) or Zone 2 (0W). **Skipped when PV-forecast-suppressed.**
+* **Case GT (price < cheap threshold):** Charges with `tariff_charge_power` directly (no PI) until SOC target. Returns to Zone 1 (Timer-Toggle) or Zone 2 (Timer-Toggle, 0W). **Skipped when PV-forecast-suppressed.**
 * **Case TM (cheap ≤ price < expensive):** Stops Zone 1 & 2 immediately (Mode `'0'`). Resets cycle helper. Preserves battery for expensive peaks. **Skipped when PV-forecast-suppressed.**
 * **Normal operation (price ≥ expensive):** Discharge lock lifted, standard zone logic (Cases A/E) takes over.
 * **Dynamic thresholds:** Both cheap and expensive thresholds can be overridden by `input_number` entities.
@@ -640,7 +640,7 @@ HT End:
   AND (price >= cheap_threshold OR soc >= tariff_soc_charge_target)
   → Integral = 0, Tariff-Bool = off
   → Zone 1: Output 0W, Timer-Toggle, Mode '1'
-  → Zone 2: Output 0W, Mode '0'
+  → Zone 2: Output 0W, Timer-Toggle, Mode '0'
 
 TM Lock:
   tariff_arbitrage_enabled AND price_discharge_locked AND NOT price_is_cheap

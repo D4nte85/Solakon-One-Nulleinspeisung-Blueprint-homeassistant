@@ -60,7 +60,7 @@ flowchart TD
         %% ── Case HT: Tariff Charging End ─────────────────────────────────
         TARIFF_END{{"Integral = 0   Tariff-Charge-Bool → off   Current Zone?"}}
         TARIFF_END_Z1["💹 Tariff Charging end (Zone 1)   Output → 0 W   Timer-Toggle (3598↔3599)   Mode → '1' (INV Discharge PV Priority)"]
-        TARIFF_END_Z2["💹 Tariff Charging end (Zone 2)   Output → 0 W   Mode → '0' (Disabled)"]
+        TARIFF_END_Z2["💹 Tariff Charging end (Zone 2)   Output → 0 W   Timer-Toggle (3598↔3599)   Mode → '0' (Disabled)"]
 
         %% ── Case TM: Discharge Lock ──────────────────────────────────────
         TARIFF_MID["🔒 Discharge Lock   Integral = 0   Cycle = off (only if Zone 1)   Surplus-Bool → off (only if active)   Output → 0 W   Mode → '0' (Disabled)"]
