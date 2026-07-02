@@ -56,7 +56,7 @@ blueprint:
     - **C** — Zone 3 Absicherung: SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` UND kein AC/Tarif-Laden → Surplus/AC-Bool zurücksetzen, Output → 0W, Modus → `'0'`
     - **D** — Recovery: Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle → Timer-Toggle, Modus → `'3'` wenn AC- **oder** Tarif-Lade-Bool = `on`, sonst `'1'` (kein Integral-Reset, kein Zonenwechsel)
     - **GT** — Tarif-Laden Start: Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel UND Modus ≠ `'3'` UND kein Überschuss UND **NICHT PV-Forecast-Suppressed** → Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'`
-    - **HT** — Tarif-Laden Ende: Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Ladeziel) → Integral = 0, Tarif-Bool = `off`, Zone 1: Timer-Toggle + Modus `'1'` / Zone 2: Modus `'0'` + 0W
+    - **HT** — Tarif-Laden Ende: Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Ladeziel) → Integral = 0, Tarif-Bool = `off`, Zone 1: Timer-Toggle + Modus `'1'` / Zone 2: Timer-Toggle + Modus `'0'` + 0W
     - **TM** — Entladesperre (Mittelpreis): Tarif aktiv UND Günstig ≤ Preis < Teuer UND kein Laden UND Modus = `'1'` UND **NICHT PV-Forecast-Suppressed** → Integral = 0, Zyklus = `off` (wenn Zone 1), Output → 0W, Modus → `'0'`
     - **G** — AC Laden Start: AC aktiv UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + Output) < −Hysterese UND kein Tarif-Laden UND kein Überschuss → AC-Bool = `on`, Timer-Toggle, Output → 0W, Modus → `'3'`
     - **H** — AC Laden Ende: Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND Output = 0W)) → Integral = 0, AC-Bool = `off`, Zone 1: Output → 0W, Timer-Toggle, Modus → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Modus → `'0'`
@@ -132,7 +132,7 @@ blueprint:
     | **Teuer** | **Entladesperre (Fall TM)** — Akku passiv | `input_number` |
 
     #### Logik-Details
-    - **Fall GT (Preis < Günstig):** Lädt mit `tariff_charge_power` bis SOC-Ziel. Priorität vor AC-Laden. Rückkehr zu Zone 1 (Timer-Toggle) oder Zone 2 (0W). **Wird übersprungen wenn PV-Forecast-Suppressed.**
+    - **Fall GT (Preis < Günstig):** Lädt mit `tariff_charge_power` bis SOC-Ziel. Priorität vor AC-Laden. Rückkehr zu Zone 1 (Timer-Toggle) oder Zone 2 (Timer-Toggle, 0W). **Wird übersprungen wenn PV-Forecast-Suppressed.**
     - **Fall TM (Günstig ≤ Preis < Teuer):** Stoppt Zone 1 & 2 sofort (Modus `'0'`). Setzt Zyklus-Helper zurück. Schont Akku für teure Spitzen. **Wird übersprungen wenn PV-Forecast-Suppressed.**
     - **Normalbetrieb (Preis ≥ Teuer):** Entladesperre aufgehoben, Standard-Zonenregelung (Fall A/E) übernimmt wieder.
 
@@ -1545,7 +1545,24 @@ actions:
                   entity_id: !input active_power_number
                 data:
                   value: 0
-              # 4b. Modus → '0'
+              # 4b. Timer-Toggle (3598↔3599)
+              - choose:
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                    sequence:
+                      - action: number.set_value
+                        target:
+                          entity_id: !input remote_timeout_set_number
+                        data:
+                          value: 3598
+                default:
+                  - action: number.set_value
+                    target:
+                      entity_id: !input remote_timeout_set_number
+                    data:
+                      value: 3599
+              # 4c. Modus → '0'
               - action: select.select_option
                 target:
                   entity_id: !input mode_select

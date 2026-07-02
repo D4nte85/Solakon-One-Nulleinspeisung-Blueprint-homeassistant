@@ -191,7 +191,7 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 | **C** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Modus → `'0'`, Output → 0W |
 | **D** | Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle | Recovery: Timer-Toggle, Modus → `'3'` wenn AC-Lade-Bool **oder** Tarif-Lade-Bool = `on`, sonst `'1'` |
 | **GT** | Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel UND **Modus ≠ `'3'`** UND **NICHT Surplus-Bool = `on`** UND **NICHT PV-Forecast-Suppressed** | Tarif-Laden Start: Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'` |
-| **HT** | Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Tarif-Ladeziel) | Tarif-Laden Ende: Tarif-Bool = `off`, Integral = 0, Zone 1 → `'1'` / Zone 2 → `'0'` |
+| **HT** | Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Tarif-Ladeziel) | Tarif-Laden Ende: Tarif-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
 | **TM** | Tarif aktiv UND Günstig ≤ Preis < Teuer-Schwelle UND kein AC/Tarif-Laden UND **Modus = `'1'`** UND **NICHT PV-Forecast-Suppressed** | Discharge-Lock: Integral = 0, Zyklus = `off` (wenn aktiv) + Surplus-Bool zurücksetzen, Output → 0W, Modus → `'0'` |
 | **G** | AC aktiv UND SOC < Ladeziel UND **Modus ≠ `'3'`** UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + Output) < −Hysterese | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
 | **H** | Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ `ac_charge_offset + Hysterese` UND Output = 0 W)) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
@@ -251,7 +251,7 @@ Du kannst für beide Schwellenwerte entweder feste Zahlenwerte nutzen oder **dyn
 * **Eintritts-Bedingung:** Tarif-Arbitrage aktiviert **UND** Preis < Günstig-Schwelle **UND** SOC < Ziel-SOC **UND** Modus ≠ `'3'` **UND** kein Überschuss-Laden aktiv.
 * **Verhalten:** Setzt die konfigurierte Ladeleistung (`tariff_charge_power`) — kein PI-Regler, kein Toleranz-Check.
 * **Abbruch:** Preis steigt über Günstig-Schwelle **ODER** SOC-Ladeziel erreicht.
-* **Rückkehr:** Zone 1 → Timer-Toggle + Modus `'1'` / Zone 2 → Modus `'0'` + Output 0W.
+* **Rückkehr:** Zone 1 → Timer-Toggle + Modus `'1'` / Zone 2 → Timer-Toggle + Modus `'0'` + Output 0W.
 * **Priorität:** Tarif-Laden (GT) liegt vor AC-Laden (G) im choose-Block.
 
 #### Entladesperre / Discharge-Lock (Fall TM)

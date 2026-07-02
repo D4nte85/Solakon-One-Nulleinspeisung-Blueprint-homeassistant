@@ -60,7 +60,7 @@ flowchart TD
         %% ── Fall HT: Tarif-Laden Beenden ─────────────────────────────────
         TARIFF_END{{"Integral = 0   Tarif-Lade-Bool → off   Aktuelle Zone?"}}
         TARIFF_END_Z1["💹 Tarif-Laden beenden (Zone 1)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
-        TARIFF_END_Z2["💹 Tarif-Laden beenden (Zone 2)   Output → 0 W   Modus → '0' (Disabled)"]
+        TARIFF_END_Z2["💹 Tarif-Laden beenden (Zone 2)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
         %% ── Fall TM: Discharge-Lock ──────────────────────────────────────
         TARIFF_MID["🔒 Discharge-Lock   Integral = 0   Zyklus = off (nur wenn Zone 1)   Surplus-Bool → off (nur wenn aktiv)   Output → 0 W   Modus → '0' (Disabled)"]
