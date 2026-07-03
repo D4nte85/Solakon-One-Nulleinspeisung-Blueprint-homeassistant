@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Zero Export (EN) - Dynamic & SOC-Controlled (V306)
+  name: Solakon ONE Zero Export (EN) - Dynamic & SOC-Controlled (V307)
   description: |
     Dynamic zero export for the Solakon ONE inverter with PI controller, SOC zone logic,
     optional surplus export (incl. surplus forecast entry), optional AC charging from external

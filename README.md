@@ -1,4 +1,4 @@
-# ⚡ Solakon ONE Zero Export Blueprint (EN) - V306
+# ⚡ Solakon ONE Zero Export Blueprint (EN) - V307
 
 This Home Assistant Blueprint implements **dynamic zero export** for the Solakon ONE inverter, based on a **PI controller (Proportional-Integral Controller)** with back-calculation anti-windup and an intelligent **SOC zone logic** with optional **surplus export** (incl. surplus forecast entry), optional **AC charging** from external feed-in, optional **tariff arbitrage** (incl. PV forecast suppression), and **multi-instancing** support.
 
