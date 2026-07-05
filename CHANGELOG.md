@@ -3,6 +3,11 @@
 Alle nennenswerten Änderungen am Solakon-ONE-Nulleinspeisung-Blueprint (DE).
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
+## [Unreleased]
+
+### Behoben
+- Surplus-Forecast-Forcierung an `solar > hard_limit` gekoppelt statt am rohen Vorhersagewert allein — verhindert, dass die Forcierung bei einer Tages-/Morgen-Prognose den ganzen Tag über aktiv bleibt. Exit-Sperre (Fall 0B) blockiert jetzt SOC- **und** PV-Austritt symmetrisch, aber nur solange PV real das Hard Limit übersteigt (aus der Integration portiert, dort behoben in `3ea1d7f`)
+
 ## [V307] – 2026-07-03
 
 ### Behoben
