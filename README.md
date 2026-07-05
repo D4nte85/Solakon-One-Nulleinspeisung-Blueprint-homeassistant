@@ -171,8 +171,8 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
 
 | Case | Condition | Action |
 |:-----|:----------|:-------|
-| **0A** | Surplus-Bool = `off` AND (SOC ≥ export threshold AND (PV > Output + Grid + PV-Hysteresis OR PV = 0)) OR (Surplus-Forecast-Forced AND PV > Hard Limit) | Zone 0 Start: Surplus-Bool → `on` |
-| **0B** | Surplus-Bool = `on` AND (PV ≤ Output + Grid − PV-Hysteresis OR (NOT Surplus-Forecast-Forced AND SOC < export threshold − SOC-Hysteresis)) | Zone 0 End: Surplus-Bool → `off`, Integral = 0 |
+| **0A** | Surplus-Bool = `off` AND ((SOC ≥ export threshold AND (PV > Output + Grid + PV-Hysteresis OR PV = 0)) OR Surplus-Forecast-Forced) | Zone 0 Start: Surplus-Bool → `on` |
+| **0B** | Surplus-Bool = `on` AND NOT Surplus-Forecast-Forced AND (PV ≤ Output + Grid − PV-Hysteresis OR SOC < export threshold − SOC-Hysteresis) | Zone 0 End: Surplus-Bool → `off`, Integral = 0 |
 | **A** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND NOT discharge lock AND SOC > Zone 1 threshold AND Cycle = `off` | Zone 1 Start: Cycle = `on`, Integral = 0, reset Surplus/AC-Bool, Timer-Toggle, Mode → `'1'` |
 | **B** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND SOC < Zone 3 threshold AND Cycle = `on` | Zone 3 Stop: Cycle = `off`, Integral = 0, reset Surplus/AC-Bool, Output → 0W, Timer-Toggle, Mode → `'0'` |
 | **C** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND SOC < Zone 3 threshold AND Cycle = `off` AND Mode ≠ `'0'` | Zone 3 Guard: reset Surplus/AC-Bool, Output → 0W, Timer-Toggle, Mode → `'0'` |
@@ -206,7 +206,7 @@ Enables active export of PV surplus when the battery is full. SOC and PV hystere
 
 * **Standard Entry:** SOC ≥ export threshold AND (PV > (Output + Grid + PV-Hysteresis) OR PV = 0)
 * **Forecast Entry (optional):** Surplus forecast sensor ≥ threshold AND PV > Hard Limit → Zone 0 entry **without SOC gate**
-* **Exit:** PV ≤ (Output + Grid − PV-Hysteresis) always applies; OR SOC < (export threshold − SOC-Hysteresis) only when **no** surplus forecast active
+* **Exit:** PV ≤ (Output + Grid − PV-Hysteresis) OR SOC < (export threshold − SOC-Hysteresis) — both terms are blocked while surplus forecast is forced (see section 7)
 * **Persistence:** State stored in `input_boolean` — survives multiple automation runs
 * **Behavior:** Output to Hard Limit, discharge current 2 A (stability buffer), integral frozen (no decay, no PI call)
 * **Disabled:** Classic zero export — no active export
@@ -263,8 +263,9 @@ Prevents tariff charging (GT) and discharge lock (TM) on sunny days.
 
 Forces early Zone 0 entry based on a PV surplus forecast.
 
-* Forecast sensor ≥ threshold AND PV > Hard Limit → Zone 0 entry without SOC gate
-* SOC exit lock while forecast active; PV exit still applies
+* **Forcing flag:** `surplus_forecast_forced` = (forecast ≥ threshold) AND (PV > Hard Limit) — tied to real clipping risk, not the raw forecast value alone
+* **Entry:** `surplus_forecast_forced` → Zone 0 entry without SOC gate
+* **Exit lock:** `surplus_forecast_forced` blocks SOC **and** PV exit symmetrically. Once PV drops below Hard Limit (including at night), the flag turns false immediately — normal exit logic resumes with no special case
 * Only active when Surplus Export is also enabled
 
 ---

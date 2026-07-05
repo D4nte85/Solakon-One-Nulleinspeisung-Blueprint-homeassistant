@@ -3,6 +3,11 @@
 All notable changes to the Solakon ONE Zero Export blueprint (EN).
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+- Surplus forecast forcing tied to `solar > hard_limit` instead of the raw forecast value alone — prevents forcing from staying active all day on a daily/morning forecast sensor. Exit lock (Case 0B) now blocks SOC **and** PV exit symmetrically, but only while PV actually exceeds the hard limit (ported from the integration, fixed there in `3ea1d7f`)
+
 ## [V307] – 2026-07-03
 
 ### Fixed
