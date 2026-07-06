@@ -256,9 +256,9 @@ Du kannst für beide Schwellenwerte entweder feste Zahlenwerte nutzen oder **dyn
 
 #### Entladesperre / Discharge-Lock (Fall TM)
 
-* **Bedingung:** Tarif aktiv **UND** Günstig ≤ Preis < Teuer **UND** kein AC/Tarif-Laden **UND** Modus = `'1'`.
+* **Bedingung:** Tarif aktiv **UND** Günstig ≤ Preis < Teuer **UND** kein AC/Tarif-Laden **UND** kein Überschuss (Zone 0 hat Vorrang) **UND** Modus = `'1'`.
 * **Wirkung:** Stoppt sofort jede Entladung in Zone 1 und Zone 2. Der Wechselrichter wird auf 0W (Modus `'0'`) gesetzt.
-* **Zone-1-Besonderheit:** Zyklus-Helper wird auf `off` zurückgesetzt und Surplus-Bool ggf. bereinigt. Fall D kann den Modus dadurch nicht sofort wiederherstellen.
+* **Zone-1-Besonderheit:** Zyklus-Helper wird auf `off` zurückgesetzt. Fall D kann den Modus dadurch nicht sofort wiederherstellen.
 * **Reaktivierung:** Wenn der Preis die Teuer-Schwelle überschreitet, können Falls A und E wieder feuern (Entladesperre aufgehoben).
 
 #### ⚠️ Wichtiger Hinweis zu Sensoren & Einheiten
@@ -280,7 +280,7 @@ Statt eines festen Werts wird ein **Toggle zwischen 3598 und 3599** gesendet. Di
 
 ### 9. 🌙 Nachtabschaltung (Optional)
 
-Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
+Betrifft **nur Zone 2** (Fall F). Zone 1, AC Laden und Überschuss-Einspeisung (Zone 0) laufen auch nachts weiter — Zone 0 hat Vorrang vor der Nachtabschaltung.
 
 * **Schwelle:** PV-Leistung unter dem Wert der **PV-Ladereserve** (kein separater Parameter)
 * **Verhalten:** Output 0 W, Timer-Toggle, Modus → `'0'`, Integral reset
@@ -531,8 +531,9 @@ Discharge-Lock (Fall TM):
                            UND price_sensor_valid
                            UND Preis < expensive_threshold
   Modus = '1' (Entladung läuft, egal ob Zone 1 oder Zone 2)
+  UND kein Überschuss (Zone 0 hat Vorrang)
   → Integral = 0
-  → Zone 1: cycle_active → off, Surplus-Bool → off
+  → Zone 1: cycle_active → off
   → Output = 0W, Modus = '0'
   (Reaktivierung über Fall A/E wenn Preis ≥ expensive_threshold)
 

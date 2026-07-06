@@ -888,7 +888,7 @@ blueprint:
             name: 🌙 Nachtabschaltung aktivieren
             description: |
               Deaktiviert Zone 2 nachts automatisch (bei PV < PV-Ladereserve).
-              ⚠️ Zone 1 und AC Laden laufen auch nachts weiter!
+              ⚠️ Zone 1, AC Laden und Überschuss-Einspeisung (Zone 0) laufen auch nachts weiter!
               ⚠️ Die PV-Schwelle für "Nacht" ist die PV-Ladereserve aus den Zone-2-Parametern.
             default: false
             selector:
