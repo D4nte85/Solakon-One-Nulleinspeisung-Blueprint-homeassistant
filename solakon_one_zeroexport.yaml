@@ -86,8 +86,9 @@ blueprint:
     Enables active export of PV surplus when the battery is full.
 
     - **Entry (standard):** SOC ≥ export threshold AND (PV > (Output + Grid + PV-Hysteresis) OR PV = 0)
-    - **Entry (forecast):** Surplus forecast sensor ≥ threshold AND PV > Hard Limit → forced entry **without SOC gate**
-    - **Exit:** NOT forecast-forced AND (PV ≤ (Output + Grid − PV-Hysteresis) OR SOC < (export threshold − SOC-Hysteresis)) — forecast forcing blocks **both** exit terms, but only while PV > Hard Limit (real clipping risk); once PV drops below, immediate release
+    - **Entry (forecast):** Surplus forecast sensor ≥ threshold AND PV > Hard Limit AND SOC > zone-3 limit → forced entry **without export threshold**
+    - **Exit:** NOT forecast-forced AND (PV ≤ (Output + Grid − PV-Hysteresis) OR SOC < (export threshold − SOC-Hysteresis)) — forecast forcing blocks **both** exit terms, but only while PV > Hard Limit (real clipping risk) AND SOC > zone-3 limit; once either drops away, immediate release
+    - **Configuration:** the export threshold must be above the zone-1 limit — otherwise the automation aborts with an error log
     - **Persistence:** State in `input_boolean` — survives multiple automation runs
     - **Behavior:** Output → Hard Limit, discharge current → 2 A (stability buffer), integral frozen
     - **Hysteresis:** Dual protection (SOC + PV) prevents unstable toggling
@@ -172,11 +173,11 @@ blueprint:
     Forces early Zone 0 entry based on a PV surplus forecast.
 
     - **Sensor:** PV surplus forecast in W (e.g. Solcast `power_now_1h`)
-    - **Forcing flag:** `surplus_forecast_forced = (forecast ≥ threshold) AND (PV > Hard Limit)` — tied to real clipping risk, not the raw sensor value alone
-    - **Entry (Case 0A, OR-branch):** `surplus_forecast_forced` → Zone 0 entry without SOC gate
-    - **Exit lock (Case 0B):** `surplus_forecast_forced` blocks SOC **and** PV exit symmetrically. Once PV drops below Hard Limit (including at night), the flag turns `false` immediately → normal exit logic applies with no special case
+    - **Forcing flag:** `surplus_forecast_forced = (forecast ≥ threshold) AND (PV > Hard Limit) AND (SOC > zone-3 limit)` — tied to real clipping risk, not the raw sensor value alone; the SOC floor keeps the forcing from fighting the zone-3 safety stop (0A ↔ C flapping)
+    - **Entry (Case 0A, OR-branch):** `surplus_forecast_forced` → Zone 0 entry without export threshold
+    - **Exit lock (Case 0B):** `surplus_forecast_forced` blocks SOC **and** PV exit symmetrically. Once PV drops below Hard Limit (including at night), the forecast drops below the threshold or the SOC drops below zone 3, the flag turns `false` immediately → normal exit logic applies with no special case
     - **Only active when:** Surplus export is also enabled
-    - **Fallback:** Sensor `unknown`/`unavailable` → forecast inactive, normal SOC gate applies
+    - **Fallback:** Sensor `unknown`/`unavailable` → forecast inactive, normal export threshold applies
 
     </details>
 
@@ -580,9 +581,10 @@ blueprint:
           surplus_forecast_enabled:
             name: 🌤️ Enable Surplus Forecast Entry (Optional)
             description: |
-              Forces Zone 0 entry when PV forecast ≥ threshold AND Solar > Hard Limit.
-              No SOC gate on entry. Exit (SOC and PV term) remains locked while
-              Solar > Hard Limit — once PV drops below, normal exit logic resumes immediately.
+              Forces Zone 0 entry when PV forecast ≥ threshold AND Solar > Hard Limit
+              AND SOC > zone-3 limit. No export threshold on entry. Exit (SOC and PV term)
+              remains locked while all three conditions hold — once one drops away, normal
+              exit logic resumes immediately.
               ⚠️ Only active when Surplus Export is also enabled.
             default: false
             selector:
@@ -1048,8 +1050,9 @@ variables:
     {% endif %}
 
   # Surplus forecast forced entry
-  # Forcing only holds while PV exceeds the hard limit (real clipping risk);
-  # once it drops below (including at night), normal SOC/PV exit logic resumes immediately.
+  # Forcing only holds while PV exceeds the hard limit (real clipping risk)
+  # and the SOC is above the zone-3 protection limit; once either drops away
+  # (including at night), normal SOC/PV exit logic resumes immediately.
   surplus_forecast_enabled_bool: !input surplus_forecast_enabled
   surplus_forecast_sensor_id: !input surplus_forecast_sensor
   surplus_forecast_threshold_float: !input surplus_forecast_threshold
@@ -1058,7 +1061,8 @@ variables:
        surplus_forecast_sensor_id is string and surplus_forecast_sensor_id | length > 0 and
        states(surplus_forecast_sensor_id) not in ['unknown', 'unavailable'] and
        states(surplus_forecast_sensor_id) | float(0) >= surplus_forecast_threshold_float | float(0) and
-       solar_power_float > hard_limit_int }}
+       solar_power_float > hard_limit_int and
+       states(soc) | float(0) > soc_conservation_limit_int | float(0) }}
 
   # PV forecast tariff suppression
   pv_forecast_enabled_bool: !input pv_forecast_enabled
@@ -1110,6 +1114,10 @@ actions:
                 value_template: "{{ soc_fast_limit_int | float(0) <= soc_conservation_limit_int | float(0) }}"
               - condition: template
                 value_template: >
+                  {{ surplus_export_enabled_bool | bool(false) and
+                     soc_export_limit_int | float(0) <= soc_fast_limit_int | float(0) }}
+              - condition: template
+                value_template: >
                   {{ is_state(soc, 'unknown') or is_state(soc, 'unavailable') or
                      is_state(timeout_countdown, 'unknown') or is_state(timeout_countdown, 'unavailable') }}
         sequence:
@@ -1117,7 +1125,7 @@ actions:
           - action: system_log.write
             data:
               level: error
-              message: "Solakon Error: SOC limits invalid or entities offline. Aborting."
+              message: "Solakon Error: SOC limits invalid (zone 1 > zone 3, export threshold > zone 1 required) or entities offline. Aborting."
           # 2. Stop automation
           - stop: "Critical error or invalid configuration."
 

@@ -6,6 +6,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Surplus forecast forcing additionally tied to `SOC > zone-3 limit` — prevents 0A ↔ C mode flapping when the forcing fights the zone-3 safety stop on a deeply discharged battery (ported from the integration)
+- New configuration check: with surplus export enabled, the export threshold must be above the zone-1 limit — otherwise the automation aborts with an error log, mirroring the existing zone-1/zone-3 check
 - Surplus forecast forcing tied to `solar > hard_limit` instead of the raw forecast value alone — prevents forcing from staying active all day on a daily/morning forecast sensor. Exit lock (Case 0B) now blocks SOC **and** PV exit symmetrically, but only while PV actually exceeds the hard limit (ported from the integration, fixed there in `3ea1d7f`)
 
 ## [V307] – 2026-07-03

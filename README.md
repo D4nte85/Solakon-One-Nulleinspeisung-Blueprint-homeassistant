@@ -205,7 +205,7 @@ Catches the condition where the inverter is in Mode `'3'` but no active charging
 Enables active export of PV surplus when the battery is full. SOC and PV hysteresis prevent unstable toggling.
 
 * **Standard Entry:** SOC ≥ export threshold AND (PV > (Output + Grid + PV-Hysteresis) OR PV = 0)
-* **Forecast Entry (optional):** Surplus forecast sensor ≥ threshold AND PV > Hard Limit → Zone 0 entry **without SOC gate**
+* **Forecast Entry (optional):** Surplus forecast sensor ≥ threshold AND PV > Hard Limit AND SOC > zone-3 limit → Zone 0 entry **without export threshold**
 * **Exit:** PV ≤ (Output + Grid − PV-Hysteresis) OR SOC < (export threshold − SOC-Hysteresis) — both terms are blocked while surplus forecast is forced (see section 7)
 * **Persistence:** State stored in `input_boolean` — survives multiple automation runs
 * **Behavior:** Output to Hard Limit, discharge current 2 A (stability buffer), integral frozen (no decay, no PI call)
@@ -263,9 +263,9 @@ Prevents tariff charging (GT) and discharge lock (TM) on sunny days.
 
 Forces early Zone 0 entry based on a PV surplus forecast.
 
-* **Forcing flag:** `surplus_forecast_forced` = (forecast ≥ threshold) AND (PV > Hard Limit) — tied to real clipping risk, not the raw forecast value alone
-* **Entry:** `surplus_forecast_forced` → Zone 0 entry without SOC gate
-* **Exit lock:** `surplus_forecast_forced` blocks SOC **and** PV exit symmetrically. Once PV drops below Hard Limit (including at night), the flag turns false immediately — normal exit logic resumes with no special case
+* **Forcing flag:** `surplus_forecast_forced` = (forecast ≥ threshold) AND (PV > Hard Limit) AND (SOC > zone-3 limit) — tied to real clipping risk, not the raw forecast value alone; the SOC floor keeps the forcing from fighting the zone-3 safety stop (0A ↔ C flapping)
+* **Entry:** `surplus_forecast_forced` → Zone 0 entry without export threshold (SOC only needs to be above the zone-3 limit)
+* **Exit lock:** `surplus_forecast_forced` blocks SOC **and** PV exit symmetrically. Once PV drops below Hard Limit (including at night), the forecast drops below the threshold or the SOC drops below zone 3, the flag turns false immediately — normal exit logic resumes with no special case
 * Only active when Surplus Export is also enabled
 
 ---
@@ -388,7 +388,7 @@ Applies to **Zone 2 only** (Case F). Zone 1 and AC Charging continue at night.
 | **SOC Threshold Surplus** | 90 % | 50 % | 99 % | From this SOC with PV surplus → Zone 0. |
 | **Hysteresis Surplus Exit (SOC)** | 5 % | 1 % | 20 % | SOC must fall by this amount below entry threshold before Zone 0 is exited. |
 | **PV Surplus Hysteresis** | 50 W | 10 W | 200 W | Deadband around house consumption for entry and exit. |
-| **Enable Surplus Forecast Entry** | false | — | — | Forces Zone 0 entry on high forecast without SOC gate. |
+| **Enable Surplus Forecast Entry** | false | — | — | Forces Zone 0 entry on high forecast without export threshold (SOC must stay above zone 3). |
 | **Surplus Forecast Sensor** | *(empty)* | — | — | PV surplus forecast in W (e.g. Solcast). |
 | **Surplus Forecast Threshold** | 5000 W | 0 | 20000 W | Minimum forecast value for forced Zone 0 entry. |
 
