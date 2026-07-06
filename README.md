@@ -179,12 +179,12 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
 | **D** | Cycle = `on` AND Mode ∉ `{'1','3'}` AND SOC > Zone 3 threshold | Recovery: Timer-Toggle, Mode → `'3'` if AC-Bool or Tariff-Bool = `on`, otherwise `'1'` (no integral reset, no zone change) |
 | **GT** | Tariff enabled AND price < cheap threshold AND NOT PV-forecast-suppressed AND SOC < tariff target AND Mode ≠ `'3'` AND NOT Surplus-Bool = `on` | Tariff Charging Start: Tariff-Bool = `on`, Timer-Toggle, Output → charge power (direct), Mode → `'3'` |
 | **HT** | Mode = `'3'` AND Tariff-Bool = `on` AND (price ≥ cheap threshold OR SOC ≥ target) | Tariff Charging End: Integral = 0, Tariff-Bool = `off`, Zone 1 → Timer-Toggle + `'1'` / Zone 2 → `'0'` + 0W |
-| **TM** | Tariff active AND cheap ≤ price < expensive AND NOT PV-forecast-suppressed AND no charging AND Mode = `'1'` | Discharge Lock: Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Timer-Toggle, Mode → `'0'` |
+| **TM** | Tariff active AND cheap ≤ price < expensive AND NOT PV-forecast-suppressed AND no charging AND NOT Surplus-Bool = `on` AND Mode = `'1'` | Discharge Lock: Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Timer-Toggle, Mode → `'0'` |
 | **G** | AC active AND SOC < charge target AND **Mode ≠ `'3'`** AND NOT Tariff-Bool = `on` AND NOT Surplus-Bool = `on` AND (Grid + Output) < −Hysteresis | AC Charging Start: AC-Bool = `on`, Timer-Toggle, Mode → `'3'`, Output → 0W |
 | **H** | Mode = `'3'` AND NOT Tariff-Bool = `on` AND (SOC ≥ charge target OR (Grid ≥ `ac_charge_offset + Hysteresis` AND Output = 0 W)) | AC Charging End: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
 | **I** | Mode = `'3'` AND NOT AC-Bool = `on` AND NOT Tariff-Bool = `on` | Safety correction: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
 | **E** | NOT AC-Bool = `on` AND NOT Tariff-Bool = `on` AND NOT discharge lock AND Zone 3 < SOC ≤ Zone 1 AND Cycle = `off` AND Mode = `'0'` AND NOT night | Zone 2 Start: Integral = 0, Timer-Toggle, Mode → `'1'` |
-| **F** | NOT AC-Bool = `on` AND NOT Tariff-Bool = `on` AND Night Shutdown active AND PV < PV Charge Reserve AND Cycle = `off` AND Mode active | Night Shutdown: Integral = 0, Output → 0W, Timer-Toggle, Mode → `'0'` |
+| **F** | NOT AC-Bool = `on` AND NOT Tariff-Bool = `on` AND NOT Surplus-Bool = `on` AND Night Shutdown active AND PV < PV Charge Reserve AND Cycle = `off` AND Mode active | Night Shutdown: Integral = 0, Output → 0W, Timer-Toggle, Mode → `'0'` |
 
 > **Order is critical:** Case D comes before Cases GT/G. This means Recovery only checks Mode ∉ `{'1','3'}` — AC/Tariff charging mode `'3'` is **not** overwritten by Recovery. Case I comes after H and catches every Mode `'3'` state not legitimized by an active charging session.
 

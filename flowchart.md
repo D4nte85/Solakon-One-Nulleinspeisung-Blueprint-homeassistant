@@ -94,12 +94,12 @@ flowchart TD
     ZONE_CHECK -- "CASE D   Cycle = on   AND Mode ∉ {'1','3'} ← '3' explicitly excluded!   AND SOC > Zone 3 threshold" --> RECOVERY
     ZONE_CHECK -- "CASE GT   Tariff Arbitrage enabled   AND price < cheap threshold   AND SOC < tariff charge target   AND Mode ≠ '3' ← Guard!   AND NOT Surplus-Bool = on   AND NOT PV-Forecast-Suppressed" --> TARIFF_START
     ZONE_CHECK -- "CASE HT   Mode = '3'   AND Tariff-Charge-Bool = on   AND (price ≥ cheap threshold OR SOC ≥ tariff charge target)" --> TARIFF_END
-    ZONE_CHECK -- "CASE TM   Tariff active   AND cheap ≤ price < expensive   AND no AC/Tariff charging   AND Mode = '1'   AND NOT PV-Forecast-Suppressed" --> TARIFF_MID
+    ZONE_CHECK -- "CASE TM   Tariff active   AND cheap ≤ price < expensive   AND no AC/Tariff charging   AND NOT Surplus-Bool = on   AND Mode = '1'   AND NOT PV-Forecast-Suppressed" --> TARIFF_MID
     ZONE_CHECK -- "CASE G   AC Charging enabled   AND SOC < charge target   AND Mode ≠ '3' ← Guard!   AND NOT Tariff-Charge-Bool = on   AND NOT Surplus-Bool = on   AND (Grid + Output) < −Hysteresis" --> AC_START
     ZONE_CHECK -- "CASE H   Mode = '3'   AND (SOC ≥ charge target OR (Grid ≥ AC-Offset + Hysteresis AND Output = 0 W))" --> AC_END
     ZONE_CHECK -- "CASE I   Mode = '3'   AND NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on" --> SAFETY_I
     ZONE_CHECK -- "CASE E   NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on   AND NOT Discharge Lock (price < expensive)   AND Zone 3 < SOC ≤ Zone 1 AND Cycle = off AND Mode = '0' AND NOT night" --> Z2_START
-    ZONE_CHECK -- "CASE F   NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on   AND Night Shutdown active AND PV < PV Charge Reserve AND Cycle = off AND Mode active" --> NIGHT
+    ZONE_CHECK -- "CASE F   NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on   AND NOT Surplus-Bool = on   AND Night Shutdown active AND PV < PV Charge Reserve AND Cycle = off AND Mode active" --> NIGHT
     ZONE_CHECK -- "No zone change" --> PI_GATE
 
     TARIFF_END -- "Cycle = on (Zone 1)" --> TARIFF_END_Z1
