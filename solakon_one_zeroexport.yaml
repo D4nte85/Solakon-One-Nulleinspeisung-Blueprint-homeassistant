@@ -536,6 +536,7 @@ blueprint:
             description: |
               From this SOC (e.g. 90%), excess PV is exported to the grid.
               ⚠️ MUST be genuinely less than the max SOC set in the Solakon!
+              ⚠️ MUST be above the zone-1 threshold — otherwise the automation aborts with an error log.
             default: 90
             selector:
               number:
@@ -885,7 +886,7 @@ blueprint:
             name: 🌙 Enable Night Shutdown
             description: |
               Automatically disables Zone 2 at night (when PV < PV Charge Reserve).
-              ⚠️ Zone 1 and AC Charging continue to run at night!
+              ⚠️ Zone 1, AC Charging and Surplus Export (Zone 0) continue to run at night!
               ⚠️ The PV threshold for 'Night' is the PV Charge Reserve from the Zone 2 parameters.
             default: false
             selector:

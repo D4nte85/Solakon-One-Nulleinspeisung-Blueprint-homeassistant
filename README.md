@@ -242,7 +242,7 @@ Charges the battery when external grid feed-in is detected. Detection is based o
 Charges the battery at cheap prices and locks discharge during neutral price phases.
 
 * **Case GT (price < cheap threshold):** Charges with `tariff_charge_power` directly (no PI) until SOC target. Returns to Zone 1 (Timer-Toggle) or Zone 2 (Timer-Toggle, 0W). **Skipped when PV-forecast-suppressed.**
-* **Case TM (cheap ≤ price < expensive):** Stops Zone 1 & 2 immediately (Mode `'0'`). Resets cycle helper. Preserves battery for expensive peaks. **Skipped when PV-forecast-suppressed.**
+* **Case TM (cheap ≤ price < expensive):** Stops Zone 1 & 2 immediately (Mode `'0'`). Resets cycle helper. Preserves battery for expensive peaks. **Skipped when PV-forecast-suppressed and while surplus export (Zone 0) is active.**
 * **Normal operation (price ≥ expensive):** Discharge lock lifted, standard zone logic (Cases A/E) takes over.
 * **Dynamic thresholds:** Both cheap and expensive thresholds can be overridden by `input_number` entities.
 * **⚠️ Sensor unit must match thresholds** — no conversion in blueprint (e.g. all in EUR/kWh).
@@ -298,7 +298,7 @@ This creates a state change that causes the inverter to reliably adopt the new m
 
 ### 10. 🌙 Night Shutdown (Optional)
 
-Applies to **Zone 2 only** (Case F). Zone 1 and AC Charging continue at night.
+Applies to **Zone 2 only** (Case F). Zone 1, AC Charging and Surplus Export (Zone 0) continue at night — Zone 0 takes priority over Night Shutdown.
 
 * **Threshold:** PV power below the **PV Charge Reserve** value (no separate parameter)
 * **Behavior at night:** Output 0W, Timer-Toggle, Mode → `'0'`, integral reset
@@ -519,6 +519,7 @@ Typical working range: **0.03–0.08**. For AC Charging, tune separately — kee
 | Message | Cause | Solution |
 |:--------|:------|:---------|
 | **SOC limits invalid** | Zone 1 threshold ≤ Zone 3 threshold | Zone 1 (e.g. 50%) > Zone 3 (e.g. 20%) |
+| **SOC limits invalid** | Surplus export enabled AND export threshold ≤ zone-1 threshold | Export threshold (e.g. 90%) > Zone 1 (e.g. 50%) |
 | **SOC sensor UNKNOWN/UNAVAILABLE** | Solakon integration offline | Check connection |
 | **Timeout Countdown UNKNOWN/UNAVAILABLE** | Sensor unavailable | Check Solakon integration |
 
@@ -646,6 +647,7 @@ HT End:
 TM Lock:
   tariff_arbitrage_enabled AND price_discharge_locked AND NOT price_is_cheap
   AND NOT pv_forecast_suppressed
+  AND NOT surplus_active
   AND Mode = '1' AND NOT charging active
   → Integral = 0, Cycle = off (if Zone 1), Output 0W, Mode '0'
 ```
