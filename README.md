@@ -302,11 +302,11 @@ Verhindert Tarif-Laden und Discharge-Lock an Tagen, an denen die PV-Prognose aus
 Erzwingt frühzeitigen Zone-0-Eintritt auf Basis einer PV-Überschuss-Prognose.
 
 * **Voraussetzung:** Überschuss-Einspeisung muss ebenfalls aktiviert sein.
-* **Forcierungs-Flag:** `surplus_forecast_forced = (Forecast ≥ Schwelle) UND (Solar > Hard Limit)` — an ein echtes Abregel-Risiko gekoppelt, nicht am rohen Vorhersagewert allein. So bleibt die Forcierung nur so lange aktiv, wie tatsächlich mehr PV anliegt als das Hard Limit zulässt.
-* **Eintritt (Fall 0A, OR-Branch):** Wenn `surplus_forecast_forced` → Zone-0-Eintritt **ohne SOC-Gate** (SOC-Schwelle wird ignoriert).
-* **Exit-Sperre (Fall 0B):** Solange `surplus_forecast_forced = true` werden **SOC-** und **PV-basierter** Austritt gleichermaßen blockiert. Fällt Solar unter das Hard Limit (auch nachts, PV = 0), wird das Flag sofort `false` — normale Austrittslogik (SOC- oder PV-Term) greift ohne Sonderfall.
+* **Forcierungs-Flag:** `surplus_forecast_forced = (Forecast ≥ Schwelle) UND (Solar > Hard Limit) UND (SOC > Zone-3-Schwelle)` — an ein echtes Abregel-Risiko gekoppelt, nicht am rohen Vorhersagewert allein. So bleibt die Forcierung nur so lange aktiv, wie tatsächlich mehr PV anliegt als das Hard Limit zulässt. Die SOC-Untergrenze verhindert, dass die Forcierung bei tiefentladener Batterie gegen den Zone-3-Sicherheitsstopp ankämpft (Flattern 0A ↔ C).
+* **Eintritt (Fall 0A, OR-Branch):** Wenn `surplus_forecast_forced` → Zone-0-Eintritt **ohne Export-Schwelle** (die Export-SOC-Schwelle wird ignoriert; der SOC muss nur über der Zone-3-Schwelle liegen).
+* **Exit-Sperre (Fall 0B):** Solange `surplus_forecast_forced = true` werden **SOC-** und **PV-basierter** Austritt gleichermaßen blockiert. Fällt Solar unter das Hard Limit (auch nachts, PV = 0), die Vorhersage unter die Schwelle oder der SOC unter die Zone-3-Schwelle, wird das Flag sofort `false` — normale Austrittslogik (SOC- oder PV-Term) greift ohne Sonderfall.
 * **Sensor:** Z.B. Solcast `power_now_1h` oder stündlicher Überschuss-Forecast in W.
-* **Fallback:** Sensor unavailable/unknown → Forecast inaktiv, normales SOC-Gate gilt.
+* **Fallback:** Sensor unavailable/unknown → Forecast inaktiv, normale Export-Schwelle gilt.
 
 ---
 
@@ -488,6 +488,7 @@ Typischer Arbeitsbereich: **0.03–0.08**. Für AC Laden separat tunen — P bes
 | Meldung | Ursache | Lösung |
 |:--------|:--------|:-------|
 | **SOC-Limits ungültig** | Zone-1-Schwelle ≤ Zone-3-Schwelle | Zone-1 (z.B. 50%) > Zone-3 (z.B. 20%) |
+| **SOC-Limits ungültig** | Überschuss aktiviert UND Export-Schwelle ≤ Zone-1-Schwelle | Export-Schwelle (z.B. 90%) > Zone-1 (z.B. 50%) |
 | **SOC-Sensor UNKNOWN/UNAVAILABLE** | Solakon Integration offline | Verbindung prüfen |
 | **Timeout Countdown UNKNOWN/UNAVAILABLE** | Sensor nicht verfügbar | Solakon Integration prüfen |
 

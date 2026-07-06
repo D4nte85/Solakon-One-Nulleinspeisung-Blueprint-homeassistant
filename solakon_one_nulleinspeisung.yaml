@@ -86,8 +86,9 @@ blueprint:
     Ermöglicht aktives Einspeisen von PV-Überschuss wenn der Akku voll ist.
 
     - **Eintritt (Standard):** SOC ≥ Export-Schwelle UND (PV > (Output + Grid + PV-Hysterese) ODER PV = 0)
-    - **Eintritt (Forecast):** Surplus-Forecast-Sensor ≥ Schwelle UND PV > Hard Limit → erzwungener Eintritt **ohne SOC-Gate**
-    - **Austritt:** NICHT Forecast-forciert UND (PV ≤ (Output + Grid − PV-Hysterese) ODER SOC < (Export-Schwelle − SOC-Hysterese)) — Forecast-Forcierung blockiert **beide** Austrittsbedingungen, aber nur solange PV > Hard Limit (echtes Abregel-Risiko); fällt PV darunter, sofortige Freigabe
+    - **Eintritt (Forecast):** Surplus-Forecast-Sensor ≥ Schwelle UND PV > Hard Limit UND SOC > Zone-3-Schwelle → erzwungener Eintritt **ohne Export-Schwelle**
+    - **Austritt:** NICHT Forecast-forciert UND (PV ≤ (Output + Grid − PV-Hysterese) ODER SOC < (Export-Schwelle − SOC-Hysterese)) — Forecast-Forcierung blockiert **beide** Austrittsbedingungen, aber nur solange PV > Hard Limit (echtes Abregel-Risiko) UND SOC > Zone-3-Schwelle; fällt eine Bedingung weg, sofortige Freigabe
+    - **Konfiguration:** Export-Schwelle muss über der Zone-1-Schwelle liegen — sonst bricht die Automation mit Fehler-Log ab
     - **Persistenz:** Zustand in `input_boolean` — überlebt mehrere Automation-Läufe
     - **Verhalten:** Output → Hard Limit, Entladestrom → 2 A (Stabilitätspuffer), Integral eingefroren
     - **Hysterese:** Doppelte Absicherung (SOC + PV) verhindert instabiles Hin- und Herschalten
@@ -172,9 +173,9 @@ blueprint:
     Erzwingt frühzeitigen Zone-0-Eintritt auf Basis einer PV-Überschuss-Prognose.
 
     - **Sensor:** PV-Überschuss-Prognose in W (z.B. Solcast `power_now_1h`)
-    - **Forcierungs-Flag:** `surplus_forecast_forced = (Forecast ≥ Schwelle) UND (PV > Hard Limit)` — an echtes Abregel-Risiko gekoppelt, nicht am rohen Sensorwert allein
-    - **Eintritt (Fall 0A, OR-Branch):** `surplus_forecast_forced` → Zone-0-Eintritt ohne SOC-Gate
-    - **Exit-Sperre (Fall 0B):** `surplus_forecast_forced` blockiert SOC- **und** PV-Austritt symmetrisch. Fällt PV unter Hard Limit (auch nachts), wird das Flag sofort `false` → normale Austrittslogik greift ohne Sonderfall
+    - **Forcierungs-Flag:** `surplus_forecast_forced = (Forecast ≥ Schwelle) UND (PV > Hard Limit) UND (SOC > Zone-3-Schwelle)` — an echtes Abregel-Risiko gekoppelt, nicht am rohen Sensorwert allein; die SOC-Untergrenze verhindert, dass die Forcierung gegen den Zone-3-Sicherheitsstopp ankämpft (Flattern 0A ↔ C)
+    - **Eintritt (Fall 0A, OR-Branch):** `surplus_forecast_forced` → Zone-0-Eintritt ohne Export-Schwelle
+    - **Exit-Sperre (Fall 0B):** `surplus_forecast_forced` blockiert SOC- **und** PV-Austritt symmetrisch. Fällt PV unter Hard Limit (auch nachts), die Vorhersage unter die Schwelle oder der SOC unter Zone 3, wird das Flag sofort `false` → normale Austrittslogik greift ohne Sonderfall
     - **Nur wirksam wenn:** Überschuss-Einspeisung ebenfalls aktiviert ist
     - **Fallback:** Sensor `unknown`/`unavailable` → Forecast inaktiv, normales SOC-Gate gilt
 
@@ -536,6 +537,7 @@ blueprint:
             description: |
               Ab diesem SOC (z.B. 90 %) wird bei PV-Überschuss ins Netz eingespeist.
               ⚠️ MUSS echt kleiner sein als das in der Solakon eingestellte max SOC!
+              ⚠️ MUSS über der Zone-1-Schwelle liegen — sonst bricht die Automation mit Fehler-Log ab.
             default: 90
             selector:
               number:
@@ -580,9 +582,10 @@ blueprint:
           surplus_forecast_enabled:
             name: 🌤️ Surplus-Forecast Eintritt aktivieren (Optional)
             description: |
-              Erzwingt Zone-0-Eintritt wenn PV-Forecast ≥ Schwelle UND Solar > Hard Limit.
-              Kein SOC-Gate beim Eintritt. Exit (SOC- und PV-Term) bleibt gesperrt solange
-              Solar > Hard Limit — fällt PV darunter, sofort normale Austrittslogik.
+              Erzwingt Zone-0-Eintritt wenn PV-Forecast ≥ Schwelle UND Solar > Hard Limit
+              UND SOC > Zone-3-Schwelle. Keine Export-Schwelle beim Eintritt. Exit (SOC- und
+              PV-Term) bleibt gesperrt solange alle drei Bedingungen gelten — fällt eine weg,
+              sofort normale Austrittslogik.
               ⚠️ Nur wirksam wenn Überschuss-Einspeisung aktiviert ist.
             default: false
             selector:
@@ -1050,8 +1053,9 @@ variables:
     {% endif %}
 
   # Surplus-Forecast erzwungener Eintritt
-  # Forcierung nur solange PV das Hard Limit übersteigt (echtes Abregel-Risiko);
-  # fällt PV darunter (auch nachts), greift sofort wieder die normale SOC-/PV-Austrittslogik.
+  # Forcierung nur solange PV das Hard Limit übersteigt (echtes Abregel-Risiko)
+  # und der SOC über der Zone-3-Schutzgrenze liegt; fällt PV darunter (auch nachts)
+  # oder der SOC unter Zone 3, greift sofort wieder die normale SOC-/PV-Austrittslogik.
   surplus_forecast_enabled_bool: !input surplus_forecast_enabled
   surplus_forecast_sensor_id: !input surplus_forecast_sensor
   surplus_forecast_threshold_float: !input surplus_forecast_threshold
@@ -1060,7 +1064,8 @@ variables:
        surplus_forecast_sensor_id is string and surplus_forecast_sensor_id | length > 0 and
        states(surplus_forecast_sensor_id) not in ['unknown', 'unavailable'] and
        states(surplus_forecast_sensor_id) | float(0) >= surplus_forecast_threshold_float | float(0) and
-       solar_power_float > hard_limit_int }}
+       solar_power_float > hard_limit_int and
+       states(soc) | float(0) > soc_conservation_limit_int | float(0) }}
 
   # PV-Forecast Tarif-Unterdrückung
   pv_forecast_enabled_bool: !input pv_forecast_enabled
@@ -1112,6 +1117,10 @@ actions:
                 value_template: "{{ soc_fast_limit_int | float(0) <= soc_conservation_limit_int | float(0) }}"
               - condition: template
                 value_template: >
+                  {{ surplus_export_enabled_bool | bool(false) and
+                     soc_export_limit_int | float(0) <= soc_fast_limit_int | float(0) }}
+              - condition: template
+                value_template: >
                   {{ is_state(soc, 'unknown') or is_state(soc, 'unavailable') or
                      is_state(timeout_countdown, 'unknown') or is_state(timeout_countdown, 'unavailable') }}
         sequence:
@@ -1119,7 +1128,7 @@ actions:
           - action: system_log.write
             data:
               level: error
-              message: "Solakon Fehler: SOC-Limits ungültig oder Entitäten offline. Abbruch."
+              message: "Solakon Fehler: SOC-Limits ungültig (Zone1 > Zone3, Export-Schwelle > Zone1 nötig) oder Entitäten offline. Abbruch."
           # 2. Automation abbrechen
           - stop: "Kritischer Fehler oder ungültige Konfiguration."
 

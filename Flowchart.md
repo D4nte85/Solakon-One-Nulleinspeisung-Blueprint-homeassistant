@@ -19,7 +19,7 @@ flowchart TD
     end
     style SG_ZONE0 fill:none,stroke:#f0ad4e,stroke-width:5,stroke-dasharray:6,color:#000
 
-    SURPLUS_UPDATE -- "FALL 0A   Surplus-Bool = off   UND (SOC ≥ Export-Schwelle UND (PV > Output+Grid+PV-Hysterese ODER PV=0)   ODER Surplus-Forecast-Forced)" --> S0A
+    SURPLUS_UPDATE -- "FALL 0A   Surplus-Bool = off   UND (SOC ≥ Export-Schwelle UND (PV > Output+Grid+PV-Hysterese ODER PV=0)   ODER Surplus-Forecast-Forced: Forecast ≥ Schwelle UND PV > Hard Limit UND SOC > Zone-3)" --> S0A
     SURPLUS_UPDATE -- "FALL 0B   Surplus-Bool = on   UND NICHT Surplus-Forecast-Forced   UND (PV ≤ Output + Grid − PV-Hysterese ODER SOC < Export-Schwelle − SOC-Hysterese)" --> S0B
     SURPLUS_UPDATE -- "Kein Surplus-Update" --> ZONE_CHECK
     S0A --> ZONE_CHECK

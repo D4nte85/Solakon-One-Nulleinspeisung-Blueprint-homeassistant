@@ -6,6 +6,8 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 ## [Unreleased]
 
 ### Behoben
+- Surplus-Forecast-Forcierung zusätzlich an `SOC > Zone-3-Schwelle` gekoppelt — verhindert Modus-Flattern 0A ↔ C, wenn die Forcierung bei tiefentladener Batterie gegen den Zone-3-Sicherheitsstopp ankämpft (aus der Integration portiert)
+- Neue Konfigurationsprüfung: bei aktivierter Überschuss-Einspeisung muss die Export-Schwelle über der Zone-1-Schwelle liegen — sonst Abbruch mit Fehler-Log, analog zur bestehenden Zone1-/Zone3-Prüfung
 - Surplus-Forecast-Forcierung an `solar > hard_limit` gekoppelt statt am rohen Vorhersagewert allein — verhindert, dass die Forcierung bei einer Tages-/Morgen-Prognose den ganzen Tag über aktiv bleibt. Exit-Sperre (Fall 0B) blockiert jetzt SOC- **und** PV-Austritt symmetrisch, aber nur solange PV real das Hard Limit übersteigt (aus der Integration portiert, dort behoben in `3ea1d7f`)
 
 ## [V307] – 2026-07-03
