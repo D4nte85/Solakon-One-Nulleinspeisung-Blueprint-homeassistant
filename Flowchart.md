@@ -94,12 +94,12 @@ flowchart TD
     ZONE_CHECK -- "FALL D   Zyklus = on   UND Modus ∉ {'1','3'} ← '3' explizit ausgenommen!   UND SOC > Zone-3-Schwelle" --> RECOVERY
     ZONE_CHECK -- "FALL GT   Tarif-Arbitrage aktiviert   UND Preis < Günstig-Schwelle   UND SOC < Tarif-Ladeziel   UND Modus ≠ '3' ← Guard!   UND NICHT Surplus-Bool = on   UND NICHT PV-Forecast-Suppressed" --> TARIFF_START
     ZONE_CHECK -- "FALL HT   Modus = '3'   UND Tarif-Lade-Bool = on   UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Tarif-Ladeziel)" --> TARIFF_END
-    ZONE_CHECK -- "FALL TM   Tarif aktiv   UND Günstig ≤ Preis < Teuer   UND kein AC/Tarif-Laden   UND Modus = '1'   UND NICHT PV-Forecast-Suppressed" --> TARIFF_MID
+    ZONE_CHECK -- "FALL TM   Tarif aktiv   UND Günstig ≤ Preis < Teuer   UND kein AC/Tarif-Laden   UND NICHT Surplus-Bool = on   UND Modus = '1'   UND NICHT PV-Forecast-Suppressed" --> TARIFF_MID
     ZONE_CHECK -- "FALL G   AC Laden aktiviert   UND SOC < Ladeziel   UND Modus ≠ '3' ← Guard!   UND NICHT Tarif-Lade-Bool = on   UND NICHT Surplus-Bool = on   UND (Grid + Output) < −Hysterese" --> AC_START
     ZONE_CHECK -- "FALL H   Modus = '3'   UND (SOC ≥ Ladeziel ODER (Grid ≥ AC-Offset + Hysterese UND Output = 0 W))" --> AC_END
     ZONE_CHECK -- "FALL I   Modus = '3'   UND NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on" --> SAFETY_I
     ZONE_CHECK -- "FALL E   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND NICHT Entladesperre (Preis < teuer)   UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = '0' UND NICHT Nacht" --> Z2_START
-    ZONE_CHECK -- "FALL F   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = off UND Modus aktiv" --> NIGHT
+    ZONE_CHECK -- "FALL F   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND NICHT Surplus-Bool = on   UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = off UND Modus aktiv" --> NIGHT
     ZONE_CHECK -- "Kein Zonenwechsel" --> PI_GATE
 
     TARIFF_END -- "Zyklus = on (Zone 1)" --> TARIFF_END_Z1

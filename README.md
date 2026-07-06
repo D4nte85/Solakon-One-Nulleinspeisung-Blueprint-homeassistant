@@ -168,9 +168,9 @@ Zone 3 (Sicherheit, absolut) > Zone 0 (Überschuss) > Tarif-Laden > AC-Laden > S
 
 **Zone 3** hat absoluten Vorrang — greift unabhängig von allen anderen Modi.
 
-**Zone 0 (Überschuss)** blockiert den Eintritt in Tarif-Laden (Fall GT) und AC-Laden (Fall G) solange aktiv. Zone 0 kann nur starten wenn kein Ladevorgang aktiv ist.
+**Zone 0 (Überschuss)** blockiert Tarif-Laden (Fall GT), den Discharge-Lock (Fall TM), AC-Laden (Fall G) und die Nachtabschaltung (Fall F) solange aktiv. Zone 0 kann nur starten wenn kein Ladevorgang aktiv ist.
 
-**Tarif-Laden (Fall GT)** startet nur wenn Zone 0 NICHT aktiv ist. Sperrt Zone 1 **und** Zone 2: Für die mittlere Preiszone (günstig ≤ Preis < teuer) wird laufende Entladung sowohl aus Zone 1 als auch Zone 2 gestoppt (Fall TM). Der Zyklus-Helper wird dabei zurückgesetzt; beim nächsten teuren Tarif starten Falls A/E neu. Für günstige Preise gilt zusätzlich aktives Laden (Fall GT).
+**Tarif-Laden (Fall GT)** startet nur wenn Zone 0 NICHT aktiv ist. Sperrt Zone 1 **und** Zone 2: Für die mittlere Preiszone (günstig ≤ Preis < teuer) wird laufende Entladung sowohl aus Zone 1 als auch Zone 2 gestoppt (Fall TM) — außer Zone 0 ist aktiv, dann läuft die Überschuss-Einspeisung ungestört weiter. Der Zyklus-Helper wird dabei zurückgesetzt; beim nächsten teuren Tarif starten Falls A/E neu. Für günstige Preise gilt zusätzlich aktives Laden (Fall GT).
 
 **AC-Laden (Fall G)** startet nur wenn weder Zone 0 noch Tarif-Laden aktiv ist.
 
@@ -192,12 +192,12 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 | **D** | Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle | Recovery: Timer-Toggle, Modus → `'3'` wenn AC-Lade-Bool **oder** Tarif-Lade-Bool = `on`, sonst `'1'` |
 | **GT** | Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel UND **Modus ≠ `'3'`** UND **NICHT Surplus-Bool = `on`** UND **NICHT PV-Forecast-Suppressed** | Tarif-Laden Start: Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'` |
 | **HT** | Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Tarif-Ladeziel) | Tarif-Laden Ende: Tarif-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
-| **TM** | Tarif aktiv UND Günstig ≤ Preis < Teuer-Schwelle UND kein AC/Tarif-Laden UND **Modus = `'1'`** UND **NICHT PV-Forecast-Suppressed** | Discharge-Lock: Integral = 0, Zyklus = `off` (wenn aktiv) + Surplus-Bool zurücksetzen, Output → 0W, Timer-Toggle, Modus → `'0'` |
+| **TM** | Tarif aktiv UND Günstig ≤ Preis < Teuer-Schwelle UND kein AC/Tarif-Laden UND **NICHT Surplus-Bool = `on`** UND **Modus = `'1'`** UND **NICHT PV-Forecast-Suppressed** | Discharge-Lock: Integral = 0, Zyklus = `off` (wenn aktiv), Output → 0W, Timer-Toggle, Modus → `'0'` |
 | **G** | AC aktiv UND SOC < Ladeziel UND **Modus ≠ `'3'`** UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + Output) < −Hysterese | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
 | **H** | Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ `ac_charge_offset + Hysterese` UND Output = 0 W)) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
 | **I** | Modus = `'3'` UND NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` | Safety-Korrektur: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W (Timer-Toggle) |
 | **E** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Timer-Toggle, Modus → `'1'` |
-| **F** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Output → 0W, Timer-Toggle, Modus → `'0'` |
+| **F** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Surplus-Bool = `on` UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Output → 0W, Timer-Toggle, Modus → `'0'` |
 
 ---
 

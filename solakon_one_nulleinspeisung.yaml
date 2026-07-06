@@ -57,12 +57,12 @@ blueprint:
     - **D** — Recovery: Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle → Timer-Toggle, Modus → `'3'` wenn AC- **oder** Tarif-Lade-Bool = `on`, sonst `'1'` (kein Integral-Reset, kein Zonenwechsel)
     - **GT** — Tarif-Laden Start: Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel UND Modus ≠ `'3'` UND kein Überschuss UND **NICHT PV-Forecast-Suppressed** → Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'`
     - **HT** — Tarif-Laden Ende: Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Ladeziel) → Integral = 0, Tarif-Bool = `off`, Zone 1: Timer-Toggle + Modus `'1'` / Zone 2: Timer-Toggle + Modus `'0'` + 0W
-    - **TM** — Entladesperre (Mittelpreis): Tarif aktiv UND Günstig ≤ Preis < Teuer UND kein Laden UND Modus = `'1'` UND **NICHT PV-Forecast-Suppressed** → Integral = 0, Zyklus = `off` (wenn Zone 1), Output → 0W, Timer-Toggle, Modus → `'0'`
+    - **TM** — Entladesperre (Mittelpreis): Tarif aktiv UND Günstig ≤ Preis < Teuer UND kein Laden UND kein Überschuss UND Modus = `'1'` UND **NICHT PV-Forecast-Suppressed** → Integral = 0, Zyklus = `off` (wenn Zone 1), Output → 0W, Timer-Toggle, Modus → `'0'`
     - **G** — AC Laden Start: AC aktiv UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + Output) < −Hysterese UND kein Tarif-Laden UND kein Überschuss → AC-Bool = `on`, Timer-Toggle, Output → 0W, Modus → `'3'`
     - **H** — AC Laden Ende: Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND Output = 0W)) → Integral = 0, AC-Bool = `off`, Zone 1: Output → 0W, Timer-Toggle, Modus → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Modus → `'0'`
     - **I** — Safety: Modus = `'3'` ohne aktive AC- oder Tarif-Lade-Session → Integral = 0, Zone 1: Output → 0W, Timer-Toggle, Modus → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Modus → `'0'`
     - **E** — Zone 2 Start: Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht UND keine Entladesperre → Integral = 0, Timer-Toggle, Modus → `'1'`
-    - **F** — Nachtabschaltung: Nacht UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv UND kein AC/Tarif-Laden → Integral = 0, Output → 0W, Timer-Toggle, Modus → `'0'`
+    - **F** — Nachtabschaltung: Nacht UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv UND kein AC/Tarif-Laden UND kein Überschuss → Integral = 0, Output → 0W, Timer-Toggle, Modus → `'0'`
 
     **Timer-Toggle:** Statt eines festen Werts wird zwischen 3598 und 3599 gewechselt — erzeugt eine Zustandsänderung damit der Solakon den neuen Modus sicher übernimmt. Wird bei jedem Moduswechsel direkt vor dem Modus-Setzen durchgeführt.
 
@@ -1622,7 +1622,10 @@ actions:
       # Guard: kein AC/Tarif-Laden aktiv, Modus = '1' (Entladung läuft)
       # Guard: pv_forecast_suppressed — sonnige Tage überspringen Discharge-Lock
       # Guard: not price_is_cheap — explizit nur mittlere Zone (günstig ≤ Preis < teuer)
+      # Guard: kein aktiver Überschuss — Zone 0 hat Vorrang vor dem Discharge-Lock
       - conditions:
+          - condition: template
+            value_template: "{{ not (surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on')) }}"
           - condition: template
             value_template: "{{ tariff_arbitrage_enabled_bool }}"
           - condition: template
@@ -1661,13 +1664,6 @@ actions:
                   - action: input_boolean.turn_off
                     target:
                       entity_id: !input cycle_active_boolean_helper
-                  # Surplus-Zustand zurücksetzen (nur wenn aktiv)
-                  - choose:
-                      - conditions: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
-                        sequence:
-                          - action: input_boolean.turn_off
-                            target:
-                              entity_id: !input surplus_state_helper
           # 4. Output → 0 W
           - action: number.set_value
             target:
@@ -2013,7 +2009,10 @@ actions:
 
       # FALL F: Nachtabschaltung (Zone 2 bei PV < PV-Ladereserve)
       # Guard: kein AC/Tarif-Laden aktiv (Laden auch nachts erlaubt)
+      # Guard: kein aktiver Überschuss — Zone 0 hat Vorrang vor der Nachtabschaltung
       - conditions:
+          - condition: template
+            value_template: "{{ not (surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on')) }}"
           - condition: template
             value_template: "{{ not (ac_charge_mode_active | bool(false)) }}"
           - condition: template
@@ -2034,6 +2033,13 @@ actions:
               name: Solakon Nachtmodus
               message: "🌙 Nachtabschaltung aktiviert (Zone 2) - PV: {{ states(solar_power) }}W"
               entity_id: !input solar_power_sensor
+          # Surplus-Zustand zurücksetzen (nur wenn aktiv)
+          - choose:
+              - conditions: "{{ (surplus_entity_valid | bool(false)) and is_state(surplus_state_entity, 'on') }}"
+                sequence:
+                  - action: input_boolean.turn_off
+                    target:
+                      entity_id: !input surplus_state_helper
           # 2. Integral zurücksetzen
           - action: input_number.set_value
             target:
