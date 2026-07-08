@@ -110,6 +110,7 @@ Wird von der Leistungsverteilungs-Automation beschrieben und begrenzt den Ausgan
 
 Enthält den Anteil des Netzfehlers (0.0–1.0), den diese Instanz über ihren PI-Regler übernimmt.
 Wird von der Leistungsverteilungs-Automation berechnet: `usable_i / Σ usable_j` mit `usable_i = (SOC_i − Min-SOC_i) / 100 × Kap_i`. Ohne Kapazitätssensor gilt `Kap_i = 100` — reine SOC-%-Gewichtung.
+Gilt nur für Zone 1/Zone 2 (Nulleinspeisung, Modus '1'). Für AC-Laden siehe Punkt 8b.
 
 1. Gehen Sie zu **Einstellungen** → **Geräte & Dienste** → **Helfer** → **Number**
 2. Name: z.B. `Solakon Instanz 1 Share`
@@ -118,6 +119,23 @@ Wird von der Leistungsverteilungs-Automation berechnet: `usable_i / Σ usable_j`
 5. Wiederholen für jede weitere Instanz
 6. In der Leistungsverteilung als „Fehler-Anteil Helfer" eintragen
 7. In der Instanz-Automation als „Fehler-Anteil Helfer" eintragen
+
+### 8b. Input Number Helper (AC-Lade Fehler-Anteil) — NUR für Multi-Instancing MIT AC Laden
+
+Eigener Fehler-Anteil-Pool für AC-Laden (Modus '3'), getrennt vom Helper aus Punkt 8. Notwendig,
+weil eine ladende Instanz nicht in Modus '1' steht und im Nulleinspeisungs-Pool sonst
+`error_share = 0` bekäme — das würde den AC-Lade-PI auf 0 W einfrieren, obwohl aktiv Ladebedarf
+besteht. Die Leistungsverteilungs-Automation berechnet den Anteil nur unter den gerade
+gleichzeitig AC-ladenden Instanzen (eigener Pool, unabhängig von Punkt 8).
+
+1. Gehen Sie zu **Einstellungen** → **Geräte & Dienste** → **Helfer** → **Number**
+2. Name: z.B. `Solakon Instanz 1 AC Share`
+3. **Einstellungen:** Min: `0`, Max: `1`, Step: `0.001`, Initialwert: `1`
+4. Speichern (Entity ID: z.B. `input_number.solakon_instanz1_ac_share`)
+5. Wiederholen für jede weitere Instanz mit AC-Laden
+6. In der Leistungsverteilung als „AC-Lade Fehler-Anteil Helfer" eintragen (zusammen mit dem
+   AC-Lade-Zustand-Helfer aus Punkt 5)
+7. In der Instanz-Automation als „AC-Lade Fehler-Anteil Helfer" eintragen
 
 ### 9. Input Number Helper für Dynamischen Offset (Optional)
 
@@ -141,7 +159,7 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
 
 * **P-Anteil:** Reagiert sofort auf aktuelle Abweichungen. Konfigurierbare Aggressivität über den P-Faktor.
 * **I-Anteil:** Summiert Abweichungen über die Zeit auf, eliminiert bleibende Regelabweichungen. Anti-Windup via Back-Calculation: Integral wird nach jedem Eingriff auf den Wert korrigiert, der den tatsächlichen (ggf. geklemmten) Ausgang produziert — Clamp auf ±effective_max. Automatischer Reset bei Zonenwechsel. Toleranz-Decay 5%/Zyklus wenn Fehler ≤ Toleranz und |Integral| > 10. Zone-0-Einfrieren bei aktivem Überschuss.
-* **Fehlerberechnung:** Normal (`ac_charge_mode=false`): `raw_error = (grid − target_offset) × error_share`. AC Laden (`ac_charge_mode=true`): `raw_error = (target_offset − grid) × error_share` (invertiert). `error_share` skaliert den Fehler auf den Anteil dieser Instanz (Standard 1.0 = voller Fehler).
+* **Fehlerberechnung:** Normal (`ac_charge_mode=false`): `raw_error = (grid − target_offset) × error_share`. AC Laden (`ac_charge_mode=true`): `raw_error = (target_offset − grid) × error_share` (invertiert). `error_share` skaliert den Fehler auf den Anteil dieser Instanz (Standard 1.0 = voller Fehler). Zwei unabhängige Pools im Multi-Instanz-Betrieb: Nulleinspeisung (`error_share_entity`) und AC-Laden (`ac_error_share_entity`) — siehe Multi-Instancing-Abschnitt.
 * **Dynamisches Power-Limit:** Zone 1 → Hard Limit. Zone 2 → `Min(Hard Limit, Max(0, PV − Reserve))`. AC Laden → konfigurierbares Lade-Limit. Tarif-Laden → kein PI (direkter Wert).
 * **PI-Aufruf-Guard:** Zone 0 aktiv → PI nicht aufgerufen, Integral eingefroren. Tarif-Laden aktiv → direkt setzen. AC Laden aktiv → PI mit `ac_charge_mode=true`. Normal → PI nur wenn `|Fehler| > Toleranz` UND kein At-Limit. `at_max_limit` = false wenn `current > dynamic_max` (PV-Einbruch) → PI kann nach unten korrigieren.
 
@@ -604,23 +622,48 @@ Da die Gewichtung auf der nutzbaren Kapazität basiert, gleichen sich die Ladezu
 mehrerer Batterien automatisch an: eine Instanz mit mehr nutzbarer Kapazität übernimmt
 mehr Last und entlädt sich entsprechend stärker, bis beide wieder auf gleichem Stand sind.
 
+### Zwei getrennte Pools: Nulleinspeisung und AC-Laden
+
+Die Verteilung läuft über **zwei unabhängige Pools**, nicht einen gemeinsamen:
+
+- **Pool 1 (Nulleinspeisung):** nur Instanzen in Modus `'1'` (Zone 1/Zone 2). Bestimmt sowohl
+  Leistungslimit als auch `error_share_entity`.
+- **Pool 2 (AC-Laden):** nur Instanzen mit aktivem AC-Lade-Zustand-Helfer (Modus `'3'`). Bestimmt
+  nur `ac_error_share_entity` — kein eigenes Leistungslimit, das AC-Ladelimit bleibt unabhängig.
+
+Grund für die Trennung: Eine Instanz, die gerade per AC lädt, steht in Modus `'3'` und zählt damit
+nicht zu Pool 1. Gäbe es nur einen gemeinsamen Fehler-Anteil, bekäme sie dort `error_share = 0`
+zugewiesen — und genau dieser Wert würde auch ihrem AC-Lade-PI übergeben, der dadurch bei aktivem
+Ladebedarf auf 0 W einfriert. Mit zwei getrennten Pools bekommt jede Instanz für jeden Modus einen
+eigenen, korrekt berechneten Anteil. Beide Pools verwenden dieselbe Gewichtungslogik
+(Gleichverteilung oder SOC-gewichtet, je nach globalem Umschalter).
+
+Die beiden Pools überschneiden sich nie — eine Instanz ist zu jedem Zeitpunkt entweder in Pool 1,
+in Pool 2 oder in keinem von beiden (z. B. Zone 3 gestoppt, Tarif-Laden).
+
 ### Erforderliche Helper pro Instanz (zusätzlich zu Einzelinstanz)
 
 | Helper / Sensor | Typ | Einstellungen | Verwendung |
 |:----------------|:----|:--------------|:-----------|
-| `...instanz_N_limit` | `input_number` | min:0, max:≥Global-Max, step:1 | Leistungslimit von Leistungsverteilung → Instanz |
-| `...instanz_N_share` | `input_number` | min:0, max:1, step:0.001 | Fehler-Anteil von Leistungsverteilung → PI-Regler |
+| `...instanz_N_limit` | `input_number` | min:0, max:≥Global-Max, step:1 | Leistungslimit von Leistungsverteilung → Instanz (Pool 1) |
+| `...instanz_N_share` | `input_number` | min:0, max:1, step:0.001 | Fehler-Anteil Nulleinspeisung von Leistungsverteilung → PI-Regler (Pool 1) |
 | Kapazitätssensor (optional) | `sensor` | kWh — von Solakon-Integration bereitgestellt | kWh-genaue Gewichtung bei unterschiedlichen Batteriekapazitäten |
+| `...instanz_N_ac_share` (nur bei AC-Laden) | `input_number` | min:0, max:1, step:0.001 | Fehler-Anteil AC-Laden von Leistungsverteilung → PI-Regler (Pool 2) |
+
+Für Pool 2 wird zusätzlich derselbe AC-Lade-Zustand-Helfer (`input_boolean`, siehe Punkt 5 der
+Helper-Liste) in der Leistungsverteilung eingetragen — er zeigt an, welche Instanzen gerade
+gleichzeitig laden.
 
 ### Konfigurationsschritte
 
 1. Alle Instanz-Blueprints wie gewohnt einrichten
-2. Pro Instanz die zwei neuen Helper (`limit`, `share`) erstellen
-3. In jeder Instanz-Automation eintragen: „Max. Ausgangsleistung — Dynamisch" und „Fehler-Anteil Helfer"
+2. Pro Instanz die zwei neuen Helper (`limit`, `share`) erstellen — bei AC-Laden zusätzlich `ac_share`
+3. In jeder Instanz-Automation eintragen: „Max. Ausgangsleistung — Dynamisch", „Fehler-Anteil Helfer" und (bei AC-Laden) „AC-Lade Fehler-Anteil Helfer"
 4. Leistungsverteilungs-Blueprint (`solakon_leistungsverteilung.yaml`) als Automation anlegen:
    - Min-SOC pro Instanz eintragen — identisch mit dem Wert „Zone 3 Stopp" der jeweiligen Instanz
    - `limit`- und `share`-Helper pro Instanz zuordnen
    - Optional: Kapazitätssensor der Solakon-ONE-Integration pro Instanz eintragen — empfohlen bei unterschiedlichen Batteriekapazitäten
+   - Bei AC-Laden zusätzlich: AC-Lade-Zustand-Helfer und `ac_share`-Helfer pro ladender Instanz zuordnen
 
 ---
 

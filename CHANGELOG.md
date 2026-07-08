@@ -3,9 +3,18 @@
 Alle nennenswerten Änderungen am Solakon-ONE-Nulleinspeisung-Blueprint (DE).
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
-## [Unreleased]
+## [V308] – 2026-07-08
 
 ### Behoben
+- AC-Lade-Fehler-Anteil von der Nulleinspeisungs-Verteilung entkoppelt: Leistungsverteilungs-Blueprint
+  berechnet jetzt zwei getrennte Pools — Pool 1 (Nulleinspeisung, nur Instanzen in Modus '1', unverändert)
+  und der neue Pool 2 (`_compute_ac_distribution`-Äquivalent: `aw1`–`aw4`, nur unter gleichzeitig
+  AC-ladenden Instanzen). Vorher fror der AC-Lade-PI einer ladenden Instanz auf 0 W ein, weil sie
+  im gemeinsamen Pool als "inaktiv" (Modus ≠ '1') galt und `error_share = 0` bekam. Neue optionale
+  Inputs pro Instanz: AC-Lade-Zustand-Helfer (`inst{N}_ac_charge_helper`) und AC-Lade Fehler-Anteil
+  Helfer (`inst{N}_ac_share_number`); neuer Input `ac_error_share_entity` im Hauptblueprint, in
+  Zweig B (AC-Laden-PI) statt des bisherigen gemeinsamen `error_share_entity` verwendet (aus der
+  Integration v2.1.2 portiert)
 - Fall TM (Discharge-Lock) verschont aktiven Überschuss: neuer Guard `NICHT Surplus-Bool = on` — vorher stoppte die mittlere Preiszone die Zone-0-Einspeisung bei vollem Speicher (PV wurde abgeregelt statt eingespeist), entgegen der dokumentierten Priorität Zone 0 > Tarif; der damit tote Surplus-Reset im TM-Body wurde entfernt (Parität mit der Integration)
 - Fall F (Nachtabschaltung) verschont aktiven Überschuss: neuer Guard `NICHT Surplus-Bool = on` plus Surplus-Reset als Absicherung — vorher konnte F bei tarifgesperrtem Fall A den Modus deaktivieren und das Surplus-Bool hängen lassen
 - Surplus-Forecast-Forcierung zusätzlich an `SOC > Zone-3-Schwelle` gekoppelt — verhindert Modus-Flattern 0A ↔ C, wenn die Forcierung bei tiefentladener Batterie gegen den Zone-3-Sicherheitsstopp ankämpft (aus der Integration portiert)

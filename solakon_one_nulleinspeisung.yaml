@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V307)
+  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V308)
   description: |
     Dynamische Nulleinspeisung für den Solakon ONE Wechselrichter mit PI-Regler, SOC-Zonenlogik,
     optionaler Überschuss-Einspeisung (inkl. Surplus-Forecast-Eintritt), optionalem AC Laden,
@@ -25,6 +25,9 @@ blueprint:
       - `error_share` = Anteil des Netzfehlers, den diese Instanz übernimmt (0–1, Standard 1.0).
         Im Einzelbetrieb immer 1.0. Im Multi-Instanz-Betrieb von der Leistungsverteilungs-Automation
         gesetzt: `(SOC − Min-SOC) / Σ(SOC_i − Min-SOC_i)` — proportional zur nutzbaren Kapazität.
+        Zwei unabhängige Pools: Nulleinspeisung (`error_share_entity`, Modus '1') und AC-Laden
+        (`ac_error_share_entity`, Modus '3') — eine ladende Instanz zählt nie zum Nulleinspeisungs-Pool
+        und bekommt dort keinen Anteil eingefroren.
     - **Kapazitäts-Clamping:** Fehler wird auf tatsächlich verfügbare Kapazität begrenzt.
     - **Dynamisches Power-Limit (`max_power` ans Script):**
       - Zone 1: Hard Limit
@@ -506,11 +509,30 @@ blueprint:
             name: ⚖️ Fehler-Anteil Helfer (input_number, Optional — Multi-Instancing)
             description: |
               ⚠️ NUR für Multi-Instancing erforderlich — im Einzelbetrieb leer lassen.
+              Gilt nur für Zone 1/Zone 2 (Nulleinspeisung, Modus '1') — für AC-Laden
+              siehe „AC-Lade Fehler-Anteil Helfer" unten. Beide Pools sind unabhängig.
               input_number-Entität (0.0–1.0), die den Anteil des Netzfehlers enthält,
               den diese Instanz regeln soll.
               Die Leistungsverteilungs-Automation berechnet den Anteil proportional zur
               nutzbaren Kapazität (SOC − Min-SOC) und schreibt ihn in diesen Helfer.
               ⚠️ Wenn leer gelassen, übernimmt die Instanz den vollen Netzfehler (= 1.0).
+            default: {}
+            selector:
+              entity:
+                domain: input_number
+
+      ac_error_share_entity:
+            name: ⚖️ AC-Lade Fehler-Anteil Helfer (input_number, Optional — Multi-Instancing)
+            description: |
+              ⚠️ NUR für Multi-Instancing MIT AC Laden erforderlich — sonst leer lassen.
+              Eigener Fehler-Anteil-Pool für AC-Laden (Modus '3'), getrennt vom
+              Nulleinspeisungs-Fehler-Anteil oben. Notwendig, weil eine ladende Instanz
+              nicht in Modus '1' steht und dort sonst error_share=0 bekäme — das würde
+              den AC-Lade-PI auf 0 W einfrieren, obwohl aktiv Ladebedarf besteht.
+              Die Leistungsverteilungs-Automation berechnet den Anteil nur unter den
+              gerade gleichzeitig AC-ladenden Instanzen und schreibt ihn in diesen Helfer.
+              ⚠️ Wenn leer gelassen, übernimmt die Instanz beim AC-Laden den vollen
+              Netzfehler (= 1.0), auch im Multi-Instanz-Betrieb.
             default: {}
             selector:
               entity:
@@ -979,12 +1001,22 @@ variables:
       {{ ac_charge_offset_static }}
     {% endif %}
 
-  # Fehler-Anteil (Multi-Instancing)
+  # Fehler-Anteil (Multi-Instancing) — Pool 1: Nulleinspeisung (Zone 1/Zone 2)
   error_share_entity_id: !input error_share_entity
   error_share_value: >
     {% if error_share_entity_id is string and error_share_entity_id | length > 0
        and states(error_share_entity_id) not in ['unknown', 'unavailable'] %}
       {{ states(error_share_entity_id) | float(1.0) }}
+    {% else %}
+      1.0
+    {% endif %}
+
+  # Fehler-Anteil (Multi-Instancing) — Pool 2: AC-Laden, unabhängig von Pool 1
+  ac_error_share_entity_id: !input ac_error_share_entity
+  ac_error_share_value: >
+    {% if ac_error_share_entity_id is string and ac_error_share_entity_id | length > 0
+       and states(ac_error_share_entity_id) not in ['unknown', 'unavailable'] %}
+      {{ states(ac_error_share_entity_id) | float(1.0) }}
     {% else %}
       1.0
     {% endif %}
@@ -2308,7 +2340,7 @@ actions:
               integral_entity: !input integral_helper
               output_entity: !input active_power_number
               ac_charge_mode: true
-              error_share: "{{ error_share_value }}"
+              error_share: "{{ ac_error_share_value }}"
           # Wartezeit — adaptiv bis Ist-Leistung ≈ Sollwert oder Timeout
           - wait_template: >
               {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
