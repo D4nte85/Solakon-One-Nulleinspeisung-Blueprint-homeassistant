@@ -142,6 +142,7 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
   - **AC Charging (`ac_charge_mode=true`):** `raw_error = (target_offset − grid) × error_share` (inverted)
   - In both cases: capacity clamping to actually available capacity
   - `error_share` = share of grid error this instance handles (0–1, default 1.0)
+  - Two independent multi-instance pools: Zero-Export (`error_share_entity`) and AC charging (`ac_error_share_entity`) — see Multi-Instancing section
 
 * **Power Limit (zone-dependent, `max_power` to script):**
   - **Zone 0:** Hard Limit (PI not called)
@@ -275,11 +276,14 @@ Forces early Zone 0 entry based on a PV surplus forecast.
 For operation of multiple Solakon ONE inverters in one household.
 
 * `max_power_entity`: `input_number` for per-instance power limit — overrides static Hard Limit
-* `error_share_entity`: `input_number` (0.0–1.0) for per-instance share of grid error
+* `error_share_entity`: `input_number` (0.0–1.0) for per-instance share of grid error — Pool 1 (Zero-Export, mode '1') only
   - `usable_i = (SOC_i − Min-SOC_i) / 100 × Cap_i`, `error_share_i = usable_i / Σ usable_j`
   - Without capacity sensor: `Cap_i = 100` — weighting by SOC percentage points
   - Written by a parent power distribution automation; leave empty in single-instance operation
-* Single instance: always leave both empty (error_share = 1.0, Hard Limit applies)
+* `ac_error_share_entity`: `input_number` (0.0–1.0) for per-instance share of grid error while AC charging — Pool 2 (mode '3'), independent from Pool 1
+  - Prevents the AC-charge PI from freezing at 0 W: a charging instance isn't in mode '1' and would get `error_share = 0` from Pool 1 if both pools were shared
+  - Leave empty in single-instance operation, or when not using AC charging with multi-instancing
+* Single instance: always leave all three empty (error_share = 1.0, Hard Limit applies)
 
 ---
 
@@ -376,7 +380,8 @@ Applies to **Zone 2 only** (Case F). Zone 1, AC Charging and Surplus Export (Zon
 |:----------|:--------|:----|:----|:------------|
 | **Max. Output Power (Hard Limit)** | 800 W | 0 | 1200 W | Hard Limit in Zone 0 and Zone 1. Overridable by `max_power_entity` for multi-instancing. |
 | **Max. Output Power — Dynamic** | *(empty)* | — | — | Optional `input_number` entity for multi-instancing. Overrides static Hard Limit when set. |
-| **Error Share Helper** | *(empty)* | — | — | Optional `input_number` (0.0–1.0) for multi-instancing. Leave empty in single-instance operation. |
+| **Error Share Helper** | *(empty)* | — | — | Optional `input_number` (0.0–1.0) for multi-instancing, Pool 1 (Zero-Export). Leave empty in single-instance operation. |
+| **AC Charge Error Share Helper** | *(empty)* | — | — | Optional `input_number` (0.0–1.0) for multi-instancing, Pool 2 (AC charging) — independent from the helper above. Leave empty unless using AC charging with multi-instancing. |
 
 ---
 
@@ -697,23 +702,49 @@ Because weighting is based on usable capacity, the state of charge of multiple b
 equalises automatically: an instance with more usable capacity takes more load and
 discharges more strongly until both are at the same level again.
 
+### Two Separate Pools: Zero-Export and AC Charging
+
+Distribution runs across **two independent pools**, not one shared pool:
+
+- **Pool 1 (Zero-Export):** only instances in mode `'1'` (Zone 1/Zone 2). Determines both the
+  power limit and `error_share_entity`.
+- **Pool 2 (AC Charging):** only instances with an active AC charge state helper (mode `'3'`).
+  Determines only `ac_error_share_entity` — no power limit of its own, the AC charge limit
+  stays independent.
+
+Reason for the split: an instance currently AC charging is in mode `'3'` and therefore does
+not count toward Pool 1. With a single shared error share, it would be assigned
+`error_share = 0` there — and that same value would be handed to its AC-charge PI, freezing
+it at 0 W despite active charging demand. With two separate pools, every instance gets a
+correctly calculated share for whichever mode it's in. Both pools use the same weighting
+logic (equal split or SOC-weighted, per the global toggle).
+
+The two pools never overlap — an instance is at any time either in Pool 1, in Pool 2, or in
+neither (e.g. Zone 3 stopped, tariff charging).
+
 ### Required Helpers per Instance (in addition to single-instance)
 
 | Helper / Sensor | Type | Settings | Purpose |
 |:----------------|:-----|:---------|:--------|
-| `...instance_N_limit` | `input_number` | min:0, max:≥Global-Max, step:1 | Power limit from distribution → instance |
-| `...instance_N_share` | `input_number` | min:0, max:1, step:0.001 | Error share from distribution → PI controller |
+| `...instance_N_limit` | `input_number` | min:0, max:≥Global-Max, step:1 | Power limit from distribution → instance (Pool 1) |
+| `...instance_N_share` | `input_number` | min:0, max:1, step:0.001 | Zero-Export error share from distribution → PI controller (Pool 1) |
 | Capacity sensor (optional) | `sensor` | kWh — from Solakon integration | Accurate kWh weighting for different battery capacities |
+| `...instance_N_ac_share` (AC charging only) | `input_number` | min:0, max:1, step:0.001 | AC-charging error share from distribution → PI controller (Pool 2) |
+
+For Pool 2, the same AC charge state helper (`input_boolean`, see helper list item 5) is also
+entered in the power distribution automation — it identifies which instances are currently
+charging at the same time.
 
 ### Configuration Steps
 
 1. Set up all instance blueprints as usual
-2. Create the two new helpers (`limit`, `share`) per instance
-3. In each instance automation enter: "Max. Output Power — Dynamic" and "Error Share Helper"
+2. Create the two new helpers (`limit`, `share`) per instance — plus `ac_share` for AC charging
+3. In each instance automation enter: "Max. Output Power — Dynamic", "Error Share Helper" and (for AC charging) "AC Charge Error Share Helper"
 4. Create the power distribution blueprint (`solakon_power_distribution.yaml`) as an automation:
    - Enter Min-SOC per instance — identical to the "Zone 3 Stop" value of the respective instance
    - Assign `limit` and `share` helpers per instance
    - Optional: enter the capacity sensor from the Solakon ONE integration per instance — recommended for different battery capacities
+   - For AC charging: additionally assign the AC charge state helper and `ac_share` helper per charging instance
 
 ---
 

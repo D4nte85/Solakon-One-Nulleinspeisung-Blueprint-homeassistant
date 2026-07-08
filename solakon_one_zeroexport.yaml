@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Zero Export (EN) - Dynamic & SOC-Controlled (V307)
+  name: Solakon ONE Zero Export (EN) - Dynamic & SOC-Controlled (V308)
   description: |
     Dynamic zero export for the Solakon ONE inverter with PI controller, SOC zone logic,
     optional surplus export (incl. surplus forecast entry), optional AC charging from external
@@ -25,6 +25,9 @@ blueprint:
       - `error_share` = share of grid error this instance handles (0–1, default 1.0).
         Single instance always 1.0. In multi-instance operation set by power distribution automation:
         `(SOC − Min-SOC) / Σ(SOC_i − Min-SOC_i)` — proportional to usable capacity.
+        Two independent pools: Zero-Export (`error_share_entity`, mode '1') and AC charging
+        (`ac_error_share_entity`, mode '3') — a charging instance never counts toward the
+        Zero-Export pool and never gets its share frozen there.
     - **Capacity Clamping:** Error is limited to actually available capacity.
     - **Dynamic Power Limit (`max_power` to script):**
       - Zone 1: Hard Limit
@@ -506,10 +509,29 @@ blueprint:
             name: ⚖️ Error Share Helper (input_number, Optional — Multi-Instancing)
             description: |
               ⚠️ Only required for multi-instancing — leave empty in single-instance operation.
+              Applies only to Zone 1/Zone 2 (Zero-Export, mode '1') — for AC charging see
+              "AC Charge Error Share Helper" below. Both pools are independent.
               input_number entity (0.0–1.0) containing the share of grid error this instance handles.
               The power distribution automation calculates the share proportional to usable
               capacity (SOC − Min-SOC) and writes it into this helper.
               ⚠️ If left empty, the instance handles the full grid error (= 1.0).
+            default: {}
+            selector:
+              entity:
+                domain: input_number
+
+      ac_error_share_entity:
+            name: ⚖️ AC Charge Error Share Helper (input_number, Optional — Multi-Instancing)
+            description: |
+              ⚠️ Only required for multi-instancing WITH AC charging — otherwise leave empty.
+              Separate error-share pool for AC charging (mode '3'), independent from the
+              Zero-Export error share above. Needed because a charging instance is not in
+              mode '1' and would otherwise get error_share=0 there — freezing its AC-charge
+              PI at 0 W despite active charging demand.
+              The power distribution automation calculates the share only among instances
+              currently AC charging at the same time and writes it into this helper.
+              ⚠️ If left empty, the instance handles the full grid error while AC charging
+              (= 1.0), even in multi-instance operation.
             default: {}
             selector:
               entity:
@@ -977,12 +999,22 @@ variables:
       {{ ac_charge_offset_static }}
     {% endif %}
 
-  # Error share (Multi-Instancing)
+  # Error share (Multi-Instancing) — Pool 1: Zero-Export (Zone 1/Zone 2)
   error_share_entity_id: !input error_share_entity
   error_share_value: >
     {% if error_share_entity_id is string and error_share_entity_id | length > 0
        and states(error_share_entity_id) not in ['unknown', 'unavailable'] %}
       {{ states(error_share_entity_id) | float(1.0) }}
+    {% else %}
+      1.0
+    {% endif %}
+
+  # Error share (Multi-Instancing) — Pool 2: AC charging, independent from Pool 1
+  ac_error_share_entity_id: !input ac_error_share_entity
+  ac_error_share_value: >
+    {% if ac_error_share_entity_id is string and ac_error_share_entity_id | length > 0
+       and states(ac_error_share_entity_id) not in ['unknown', 'unavailable'] %}
+      {{ states(ac_error_share_entity_id) | float(1.0) }}
     {% else %}
       1.0
     {% endif %}
@@ -2304,7 +2336,7 @@ actions:
               integral_entity: !input integral_helper
               output_entity: !input active_power_number
               ac_charge_mode: true
-              error_share: "{{ error_share_value }}"
+              error_share: "{{ ac_error_share_value }}"
           # Wait time — adaptive until actual power ≈ setpoint or timeout
           - wait_template: >
               {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}

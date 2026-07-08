@@ -166,14 +166,14 @@ flowchart TD
         AC_GATE -- Yes --> CALC_AC
         AC_GATE -- No --> NORMAL_GATE
 
-        CALC_AC["⚡ AC Charging — PI Script (ac_charge_mode=true)   raw_error = (ac_charge_offset − grid) × error_share   error_share: usable_i / Σ(usable_j) — set by power distribution (default 1.0)   usable_i = (SOC_i−Min-SOC_i)/100 × Cap_i   (Cap_i = Cap sensor kWh or 100 if not set)   max_power = ac_charge_power_limit   Capacity clamping   correction = P·error + I·integral_candidate   (separate ac_charge_p/i_factor)   new_power = current + correction   clamp(0, charge limit) → Output → inverter   Anti-windup: integral = (final − current − P·error) / I → clamp(±effective_max)   Wait time   (at_max / at_min guards NOT applied)"]
+        CALC_AC["⚡ AC Charging — PI Script (ac_charge_mode=true)   raw_error = (ac_charge_offset − grid) × error_share   error_share (Pool 2, AC charging): usable_i / Σ(usable_j) — only among instances currently AC charging at the same time, set by power distribution (default 1.0)   independent of Pool 1 (Zero-Export) — prevents error_share=0 freeze when instance isn't in mode '1'   usable_i = (SOC_i−Min-SOC_i)/100 × Cap_i   (Cap_i = Cap sensor kWh or 100 if not set)   max_power = ac_charge_power_limit   Capacity clamping   correction = P·error + I·integral_candidate   (separate ac_charge_p/i_factor)   new_power = current + correction   clamp(0, charge limit) → Output → inverter   Anti-windup: integral = (final − current − P·error) / I → clamp(±effective_max)   Wait time   (at_max / at_min guards NOT applied)"]
 
         %% ── Normal PI Path ─────────────────────────────────────────
         NORMAL_GATE{{"Error > tolerance?   AND no at_max / at_min limit?   (at_max = false if current > dynamic_max — PI corrects downward)"}}
         NORMAL_GATE -- Yes --> CALC_NORMAL
         NORMAL_GATE -- No --> INTEGRAL_DECAY
 
-        CALC_NORMAL["🧠 PI Script (ac_charge_mode=false)   raw_error = (grid − target_offset) × error_share   error_share: usable_i / Σ(usable_j) — set by power distribution (default 1.0)   usable_i = (SOC_i−Min-SOC_i)/100 × Cap_i   (Cap_i = Cap sensor kWh or 100 if not set)   dynamic_max:      Zone 1 → Hard Limit      Zone 2 → Min(Hard Limit, Max(0, PV − Reserve))   Capacity clamping   correction = P·error + I·integral_candidate   new_power = current + correction   clamp(0, dynamic_max) → Output → inverter   Anti-windup: integral = (final − current − P·error) / I → clamp(±effective_max)   Wait time"]
+        CALC_NORMAL["🧠 PI Script (ac_charge_mode=false)   raw_error = (grid − target_offset) × error_share   error_share (Pool 1, Zero-Export): usable_i / Σ(usable_j) — only among instances in mode '1', set by power distribution (default 1.0)   usable_i = (SOC_i−Min-SOC_i)/100 × Cap_i   (Cap_i = Cap sensor kWh or 100 if not set)   dynamic_max:      Zone 1 → Hard Limit      Zone 2 → Min(Hard Limit, Max(0, PV − Reserve))   Capacity clamping   correction = P·error + I·integral_candidate   new_power = current + correction   clamp(0, dynamic_max) → Output → inverter   Anti-windup: integral = (final − current − P·error) / I → clamp(±effective_max)   Wait time"]
 
         INTEGRAL_DECAY["📉 Integral Decay   |Integral| > 10 → Integral × 0.95   otherwise → no update"]
 

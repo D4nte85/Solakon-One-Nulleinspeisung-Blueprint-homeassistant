@@ -3,9 +3,18 @@
 All notable changes to the Solakon ONE Zero Export blueprint (EN).
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [V308] – 2026-07-08
 
 ### Fixed
+- AC-charging error share decoupled from the Zero-Export distribution: the power distribution
+  blueprint now computes two separate pools — Pool 1 (Zero-Export, only instances in mode '1',
+  unchanged) and new Pool 2 (`aw1`–`aw4`, only among instances currently AC charging at the same
+  time). Previously, an AC-charging instance's PI froze at 0 W because it was counted as
+  "inactive" (mode ≠ '1') in the shared pool and got `error_share = 0`. New optional inputs per
+  instance: AC charge state helper (`inst{N}_ac_charge_helper`) and AC charge error share helper
+  (`inst{N}_ac_share_number`); new input `ac_error_share_entity` in the main blueprint, used in
+  Branch B (AC-charging PI) instead of the previously shared `error_share_entity` (ported from
+  integration v2.1.2)
 - Case TM (discharge lock) now spares active surplus: new guard `NOT Surplus-Bool = on` — previously the mid-price zone stopped Zone 0 export on a full battery (PV was curtailed instead of exported), contradicting the documented priority Zone 0 > tariff; the now-dead surplus reset inside the TM body was removed (parity with the integration)
 - Case F (night shutdown) now spares active surplus: new guard `NOT Surplus-Bool = on` plus a surplus reset as a safety net — previously F could disable the mode while Case A was tariff-locked, leaving the surplus bool stuck
 - Surplus forecast forcing additionally tied to `SOC > zone-3 limit` — prevents 0A ↔ C mode flapping when the forcing fights the zone-3 safety stop on a deeply discharged battery (ported from the integration)

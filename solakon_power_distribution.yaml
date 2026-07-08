@@ -2,15 +2,22 @@ blueprint:
   name: "Solakon Power Distribution (Multi-Instancing)"
   description: >-
     Distributes output power and grid-error share adaptively across 2-4 Solakon Zero-Export instances.
-    Active instances detected via mode '1' (INV Discharge PV Priority).
-    Distribution via toggle: equal split or SOC-weighted (usable capacity).
+    Two independent pools: Pool 1 (Zero-Export) detects active instances via mode '1'
+    (INV Discharge PV Priority) and writes power limit + error share. Pool 2 (AC Charging)
+    detects instances currently charging via the AC charge state helper and writes only
+    its own error share (no power limit — the AC charge limit stays independent).
+    The pools never overlap: a charging instance (mode '3') no longer counts toward Pool 1
+    and no longer gets its share frozen there — previously its AC-charge PI froze at 0 W
+    because it was considered "inactive" in Pool 1.
+    Distribution via toggle: equal split or SOC-weighted (usable capacity) — applies to both pools.
     Weighting based on usable energy: (SOC - Min-SOC) / 100 x capacity_kWh per instance.
     Without capacity sensor: capacity = 100 — weighting by SOC percentage points.
     Each instance receives a share proportional to its usable energy —
-    both for the power limit and for the grid-error share (error_share).
+    both for the power limit (Pool 1) and for the grid-error share (error_share, both pools).
     Execution interval: trigger every 10 s, interval controlled via last_updated of share entity (instance 1).
     Prerequisite per instance: one input_number each for max. output power and error share
     (0.0-1.0), plus the configured min-SOC (Zone 3 stop) of the respective instance.
+    AC-charging pool optional: only if AC charge state helper and AC error share helper are set.
     Unconfigured optional instances (3/4) are safely skipped —
     states() call only for active instances with a valid sensor string.
   domain: automation
@@ -142,7 +149,33 @@ blueprint:
           description: |
             input_number entity the calculated error share (0.0–1.0) is written to.
             ⚠️ Must be entered in the instance automation as "Error Share Helper".
+            Pool 1 only (Zero-Export, mode '1') — for AC charging see below.
             Settings: min: 0, max: 1, step: 0.01.
+          selector:
+            entity:
+              domain: input_number
+
+        inst1_ac_charge_helper:
+          name: ⚡ Instance 1 — AC Charge State Helper (Optional)
+          description: |
+            The same input_boolean helper entered in the instance automation as
+            "AC Charge State Storage". Detects Pool 2 membership
+            (state = 'on' → instance is currently AC charging).
+            Only needed if AC charging is enabled for this instance and multi-instancing is used.
+          default: {}
+          selector:
+            entity:
+              domain: input_boolean
+
+        inst1_ac_share_number:
+          name: ⚖️ Instance 1 — AC Charge Error Share Helper (Optional)
+          description: |
+            Separate input_number entity (0.0–1.0) for the error share while AC charging (Pool 2).
+            ⚠️ Must be entered in the instance automation as "AC Charge Error Share Helper" —
+            separate from the error share helper above, otherwise the AC-charge PI freezes
+            as soon as this instance leaves mode '1'.
+            Settings: min: 0, max: 1, step: 0.01.
+          default: {}
           selector:
             entity:
               domain: input_number
@@ -197,6 +230,22 @@ blueprint:
             entity:
               domain: input_number
 
+        inst2_ac_charge_helper:
+          name: ⚡ Instance 2 — AC Charge State Helper (Optional)
+          description: See Instance 1 — AC Charge State Helper.
+          default: {}
+          selector:
+            entity:
+              domain: input_boolean
+
+        inst2_ac_share_number:
+          name: ⚖️ Instance 2 — AC Charge Error Share Helper (Optional)
+          description: See Instance 1 — AC Charge Error Share Helper.
+          default: {}
+          selector:
+            entity:
+              domain: input_number
+
     # ═══════════════════════════════════════════════════════════════════════
     # 🔋 INSTANCE 3 (Optional)
     # ═══════════════════════════════════════════════════════════════════════
@@ -246,6 +295,22 @@ blueprint:
 
         inst3_share_number:
           name: ⚖️ Instance 3 — Error Share Helper (input_number)
+          default: {}
+          selector:
+            entity:
+              domain: input_number
+
+        inst3_ac_charge_helper:
+          name: ⚡ Instance 3 — AC Charge State Helper (Optional)
+          description: See Instance 1 — AC Charge State Helper.
+          default: {}
+          selector:
+            entity:
+              domain: input_boolean
+
+        inst3_ac_share_number:
+          name: ⚖️ Instance 3 — AC Charge Error Share Helper (Optional)
+          description: See Instance 1 — AC Charge Error Share Helper.
           default: {}
           selector:
             entity:
@@ -305,6 +370,22 @@ blueprint:
             entity:
               domain: input_number
 
+        inst4_ac_charge_helper:
+          name: ⚡ Instance 4 — AC Charge State Helper (Optional)
+          description: See Instance 1 — AC Charge State Helper.
+          default: {}
+          selector:
+            entity:
+              domain: input_boolean
+
+        inst4_ac_share_number:
+          name: ⚖️ Instance 4 — AC Charge Error Share Helper (Optional)
+          description: See Instance 1 — AC Charge Error Share Helper.
+          default: {}
+          selector:
+            entity:
+              domain: input_number
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # AUTOMATION
@@ -323,24 +404,32 @@ variables:
   i1_share:      !input inst1_share_number
   i1_min_soc:    !input inst1_min_soc
   i1_cap:        !input inst1_capacity_sensor
+  i1_ac_helper:  !input inst1_ac_charge_helper
+  i1_ac_share:   !input inst1_ac_share_number
   i2_mode:       !input inst2_mode_select
   i2_soc:        !input inst2_soc_sensor
   i2_limit:      !input inst2_limit_number
   i2_share:      !input inst2_share_number
   i2_min_soc:    !input inst2_min_soc
   i2_cap:        !input inst2_capacity_sensor
+  i2_ac_helper:  !input inst2_ac_charge_helper
+  i2_ac_share:   !input inst2_ac_share_number
   i3_mode:       !input inst3_mode_select
   i3_soc:        !input inst3_soc_sensor
   i3_limit:      !input inst3_limit_number
   i3_share:      !input inst3_share_number
   i3_min_soc:    !input inst3_min_soc
   i3_cap:        !input inst3_capacity_sensor
+  i3_ac_helper:  !input inst3_ac_charge_helper
+  i3_ac_share:   !input inst3_ac_share_number
   i4_mode:       !input inst4_mode_select
   i4_soc:        !input inst4_soc_sensor
   i4_limit:      !input inst4_limit_number
   i4_share:      !input inst4_share_number
   i4_min_soc:    !input inst4_min_soc
   i4_cap:        !input inst4_capacity_sensor
+  i4_ac_helper:  !input inst4_ac_charge_helper
+  i4_ac_share:   !input inst4_ac_share_number
 
 triggers:
   # Trigger every 10 seconds — last_updated comparison in the first condition
@@ -471,6 +560,89 @@ actions:
       limit3: "{{ power3 if i3_active else global_max | int }}"
       limit4: "{{ power4 if i4_active else global_max | int }}"
 
+      # ── Pool 2: AC Charging ───────────────────────────────────────────────
+      # Independent error-share pool for instances currently AC charging (mode '3'),
+      # separate from Pool 1. Prevents a charging instance from being considered
+      # "inactive" in Pool 1 and getting error_share=0 there — previously this froze
+      # its AC-charge PI at 0 W. No power limit: the AC charge limit stays independent
+      # from the global hard-limit pool.
+      ac1_configured: "{{ i1_ac_helper is string and i1_ac_helper | length > 0 and i1_ac_share is string and i1_ac_share | length > 0 }}"
+      ac2_configured: "{{ i2_ac_helper is string and i2_ac_helper | length > 0 and i2_ac_share is string and i2_ac_share | length > 0 }}"
+      ac3_configured: "{{ i3_ac_helper is string and i3_ac_helper | length > 0 and i3_ac_share is string and i3_ac_share | length > 0 }}"
+      ac4_configured: "{{ i4_ac_helper is string and i4_ac_helper | length > 0 and i4_ac_share is string and i4_ac_share | length > 0 }}"
+
+      ac1_active: "{{ ac1_configured and is_state(i1_ac_helper, 'on') }}"
+      ac2_active: "{{ ac2_configured and is_state(i2_ac_helper, 'on') }}"
+      ac3_active: "{{ ac3_configured and is_state(i3_ac_helper, 'on') }}"
+      ac4_active: "{{ ac4_configured and is_state(i4_ac_helper, 'on') }}"
+
+      # Usable energy — identical formula to soc1–4, but gated on AC-active instances.
+      ac_soc1: >
+        {% if ac1_active %}
+          {% set usable = [states(i1_soc) | float(0) - i1_min_soc | float(0), 0] | max %}
+          {{ usable / 100 * cap1 }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+      ac_soc2: >
+        {% if ac2_active %}
+          {% set usable = [states(i2_soc) | float(0) - i2_min_soc | float(0), 0] | max %}
+          {{ usable / 100 * cap2 }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+      ac_soc3: >
+        {% if ac3_active and i3_soc is string and i3_soc | length > 0 %}
+          {% set usable = [states(i3_soc) | float(0) - i3_min_soc | float(0), 0] | max %}
+          {{ usable / 100 * cap3 }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+      ac_soc4: >
+        {% if ac4_active and i4_soc is string and i4_soc | length > 0 %}
+          {% set usable = [states(i4_soc) | float(0) - i4_min_soc | float(0), 0] | max %}
+          {{ usable / 100 * cap4 }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+
+      ac_active_count: >
+        {{ [ac1_active, ac2_active, ac3_active, ac4_active]
+           | select('equalto', true) | list | count }}
+
+      ac_total_soc: "{{ ac_soc1 + ac_soc2 + ac_soc3 + ac_soc4 }}"
+
+      # Weights (aw1–aw4) — same equal/SOC-weighted logic as w1–w4,
+      # but relative to the AC pool instead of Pool 1.
+      aw1: >
+        {% if not ac1_active or ac_active_count | int(0) == 0 %}{{ 0.0 }}
+        {% elif equal_dist %}{{ 1.0 / ac_active_count }}
+        {% else %}
+          {% set eq = 1.0 / ac_active_count %}
+          {{ ac_soc1 / ac_total_soc if ac_total_soc > 0 else eq }}
+        {% endif %}
+      aw2: >
+        {% if not ac2_active or ac_active_count | int(0) == 0 %}{{ 0.0 }}
+        {% elif equal_dist %}{{ 1.0 / ac_active_count }}
+        {% else %}
+          {% set eq = 1.0 / ac_active_count %}
+          {{ ac_soc2 / ac_total_soc if ac_total_soc > 0 else eq }}
+        {% endif %}
+      aw3: >
+        {% if not ac3_active or ac_active_count | int(0) == 0 %}{{ 0.0 }}
+        {% elif equal_dist %}{{ 1.0 / ac_active_count }}
+        {% else %}
+          {% set eq = 1.0 / ac_active_count %}
+          {{ ac_soc3 / ac_total_soc if ac_total_soc > 0 else eq }}
+        {% endif %}
+      aw4: >
+        {% if not ac4_active or ac_active_count | int(0) == 0 %}{{ 0.0 }}
+        {% elif equal_dist %}{{ 1.0 / ac_active_count }}
+        {% else %}
+          {% set eq = 1.0 / ac_active_count %}
+          {{ ac_soc4 / ac_total_soc if ac_total_soc > 0 else eq }}
+        {% endif %}
+
   # ── Write ─────────────────────────────────────────────────────────────────
 
   # Instance 1 (always present) — power limit and error share
@@ -528,3 +700,45 @@ actions:
           entity_id: "{{ i4_share }}"
         data:
           value: "{{ w4 | round(3) }}"
+
+  # ── Pool 2: AC Charging — error share (only when configured per instance) ──
+
+  - if:
+      - condition: template
+        value_template: "{{ ac1_configured }}"
+    then:
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ i1_ac_share }}"
+        data:
+          value: "{{ aw1 | round(3) }}"
+
+  - if:
+      - condition: template
+        value_template: "{{ ac2_configured }}"
+    then:
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ i2_ac_share }}"
+        data:
+          value: "{{ aw2 | round(3) }}"
+
+  - if:
+      - condition: template
+        value_template: "{{ ac3_configured }}"
+    then:
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ i3_ac_share }}"
+        data:
+          value: "{{ aw3 | round(3) }}"
+
+  - if:
+      - condition: template
+        value_template: "{{ ac4_configured }}"
+    then:
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ i4_ac_share }}"
+        data:
+          value: "{{ aw4 | round(3) }}"
