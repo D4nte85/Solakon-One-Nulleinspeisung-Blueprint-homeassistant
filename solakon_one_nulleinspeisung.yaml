@@ -90,8 +90,9 @@ blueprint:
 
     - **Eintritt (Standard):** SOC ≥ Export-Schwelle UND (PV > (Output + Grid + PV-Hysterese) ODER PV = 0)
     - **Eintritt (Forecast):** Surplus-Forecast-Sensor ≥ Schwelle UND PV > Hard Limit UND SOC > Zone-3-Schwelle → erzwungener Eintritt **ohne Export-Schwelle**
-    - **Austritt:** NICHT Forecast-forciert UND (PV ≤ (Output + Grid − PV-Hysterese) ODER SOC < (Export-Schwelle − SOC-Hysterese)) — Forecast-Forcierung blockiert **beide** Austrittsbedingungen, aber nur solange PV > Hard Limit (echtes Abregel-Risiko) UND SOC > Zone-3-Schwelle; fällt eine Bedingung weg, sofortige Freigabe
-    - **Konfiguration:** Export-Schwelle muss über der Zone-1-Schwelle liegen — sonst bricht die Automation mit Fehler-Log ab
+    - **Austritt:** NICHT Forecast-forciert UND ((PV ≤ (Output + Grid − PV-Hysterese) UND NICHT Austritts-Sperre) ODER SOC < (Export-Schwelle − SOC-Hysterese)) — Forecast-Forcierung blockiert **beide** Austrittsbedingungen, aber nur solange PV > Hard Limit (echtes Abregel-Risiko) UND SOC > Zone-3-Schwelle; fällt eine Bedingung weg, sofortige Freigabe
+    - **Austritts-Sperre (Optional):** Solange Leistungs-Vorhersage ≥ Sperr-Faktor × Hard Limit UND SOC > Zone-3-Schwelle ist nur der PV-Austritt gesperrt — kurze PV-Einbrüche (Wolken) werden durchgeritten. Der SOC-Austritt bleibt immer aktiv
+    - **Konfiguration:** Export-Schwelle muss über der Zone-1-Schwelle liegen — sonst bricht die Automation mit Fehler-Log ab. Empfehlung: ~5 % unter der App-Ladeobergrenze — der Eintritt ist nur messbar solange der Akku noch lädt (am Vollladepunkt drosselt der WR die PV auf den Eigenbedarf)
     - **Persistenz:** Zustand in `input_boolean` — überlebt mehrere Automation-Läufe
     - **Verhalten:** Output → Hard Limit, Entladestrom → 2 A (Stabilitätspuffer), Integral eingefroren
     - **Hysterese:** Doppelte Absicherung (SOC + PV) verhindert instabiles Hin- und Herschalten
@@ -181,6 +182,20 @@ blueprint:
     - **Exit-Sperre (Fall 0B):** `surplus_forecast_forced` blockiert SOC- **und** PV-Austritt symmetrisch. Fällt PV unter Hard Limit (auch nachts), die Vorhersage unter die Schwelle oder der SOC unter Zone 3, wird das Flag sofort `false` → normale Austrittslogik greift ohne Sonderfall
     - **Nur wirksam wenn:** Überschuss-Einspeisung ebenfalls aktiviert ist
     - **Fallback:** Sensor `unknown`/`unavailable` → Forecast inaktiv, normales SOC-Gate gilt
+
+    </details>
+
+    <details>
+    <summary><b>⛅ Surplus Austritts-Sperre (Optional)</b> 👈</summary>
+
+    Hält Zone 0 bei kurzen PV-Einbrüchen (Wolken), statt auszutreten.
+
+    - **Sensor:** Aktuell prognostizierte PV-Leistung in W (z.B. Solcast `power_now`)
+    - **Sperr-Flag:** `surplus_exit_locked = (Vorhersage ≥ Sperr-Faktor × Hard Limit) UND (SOC > Zone-3-Schwelle)` — der Faktor (Standard 1,5) ist die Sicherheitsmarge gegen Vorhersagefehler
+    - **Wirkung (Fall 0B):** Sperrt **nur** den PV-Austritt. Der SOC-Austritt bleibt ungesperrt und beendet Surplus immer; Zone 3 (Fall C) greift zusätzlich jederzeit
+    - **Hintergrund:** Der Austritt bei vollem Akku führt in einen Zustand, in dem die Hardware die PV auf den Eigenbedarf drosselt — der Überschuss ist nicht mehr messbar und der Wiedereintritt hängt an zufälligen Verbrauchsschwankungen (minutenlange Verzögerung). Die Sperre vermeidet diesen Zustand, indem transiente Einbrüche gar nicht erst zum Austritt führen
+    - **Nur wirksam wenn:** Überschuss-Einspeisung ebenfalls aktiviert ist
+    - **Fallback:** Sensor `unknown`/`unavailable` → Sperre inaktiv, normale Austrittslogik gilt
 
     </details>
 
@@ -558,6 +573,9 @@ blueprint:
             name: 🔋 SOC-Schwelle für Überschuss-Einspeisung
             description: |
               Ab diesem SOC (z.B. 90 %) wird bei PV-Überschuss ins Netz eingespeist.
+              Empfehlung: ~5 % unter der App-Ladeobergrenze — der Eintritt (PV > Verbrauch)
+              ist nur messbar solange der Akku noch lädt; am Vollladepunkt drosselt der
+              WR die PV auf den Eigenbedarf und der Überschuss wird unsichtbar.
               ⚠️ MUSS echt kleiner sein als das in der Solakon eingestellte max SOC!
               ⚠️ MUSS über der Zone-1-Schwelle liegen — sonst bricht die Automation mit Fehler-Log ab.
             default: 90
@@ -634,6 +652,43 @@ blueprint:
                 max: 20000
                 step: 100
                 unit_of_measurement: W
+
+          surplus_lock_enabled:
+            name: ⛅ Surplus Austritts-Sperre aktivieren (Optional)
+            description: |
+              Sperrt den PV-Austritt aus Zone 0 solange die Leistungs-Vorhersage
+              ≥ Sperr-Faktor × Hard Limit UND SOC > Zone-3-Schwelle — kurze PV-Einbrüche
+              (Wolken) werden in Zone 0 durchgeritten statt auszutreten. Der SOC-Austritt
+              bleibt immer aktiv. Hintergrund: Der Austritt bei vollem Akku führt in einen
+              Zustand, in dem die Hardware die PV auf den Eigenbedarf drosselt und der
+              Überschuss nicht mehr messbar ist — der Wiedereintritt verzögert sich um Minuten.
+              ⚠️ Nur wirksam wenn Überschuss-Einspeisung aktiviert ist.
+            default: false
+            selector:
+              boolean:
+
+          surplus_lock_sensor:
+            name: ⛅ Surplus Austritts-Sperre Vorhersage-Sensor (Optional)
+            description: |
+              Aktuell prognostizierte PV-Leistung in W (z.B. Solcast power_now).
+              Sensor nicht verfügbar → Sperre inaktiv.
+              ⚠️ Leer lassen wenn die Austritts-Sperre nicht genutzt wird.
+            default: {}
+            selector:
+              entity:
+                domain: sensor
+
+          surplus_lock_factor:
+            name: ⛅ Surplus Austritts-Sperre Faktor
+            description: |
+              Sperre aktiv solange Vorhersage ≥ Faktor × Hard Limit.
+              Höherer Faktor = mehr Sicherheitsmarge gegen Vorhersagefehler.
+            default: 1.5
+            selector:
+              number:
+                min: 1.0
+                max: 3.0
+                step: 0.1
 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # ⚡ AC LADEN (Optional)
@@ -1099,6 +1154,20 @@ variables:
        solar_power_float > hard_limit_int and
        states(soc) | float(0) > soc_conservation_limit_int | float(0) }}
 
+  # Surplus Austritts-Sperre: Vorhersage deutlich über dem Ausgabelimit → gemessener
+  # PV-Einbruch ist transient (Wolke), Zone 0 wird gehalten. Sperrt nur den PV-Austritt;
+  # der SOC-Austritt bleibt ungesperrt, die Zone-3-Grenze verhindert ein Ankämpfen
+  # gegen den Sicherheitsstopp.
+  surplus_lock_enabled_bool: !input surplus_lock_enabled
+  surplus_lock_sensor_id: !input surplus_lock_sensor
+  surplus_lock_factor_float: !input surplus_lock_factor
+  surplus_exit_locked: >
+    {{ surplus_lock_enabled_bool | bool(false) and
+       surplus_lock_sensor_id is string and surplus_lock_sensor_id | length > 0 and
+       states(surplus_lock_sensor_id) not in ['unknown', 'unavailable'] and
+       states(surplus_lock_sensor_id) | float(0) >= (surplus_lock_factor_float | float(1.5)) * hard_limit_int and
+       states(soc) | float(0) > soc_conservation_limit_int | float(0) }}
+
   # PV-Forecast Tarif-Unterdrückung
   pv_forecast_enabled_bool: !input pv_forecast_enabled
   pv_forecast_sensor_id: !input pv_forecast_sensor
@@ -1193,6 +1262,7 @@ actions:
               entity_id: !input surplus_state_helper
 
       # FALL 0B: ÜBERSCHUSS BEENDEN
+      # PV-Term durch Austritts-Sperre blockierbar (surplus_exit_locked), SOC-Term nie
       - conditions:
           - condition: template
             value_template: "{{ surplus_entity_valid | bool(false) }}"
@@ -1202,7 +1272,8 @@ actions:
           - condition: template
             value_template: >
               {{ not (surplus_forecast_forced | bool(false)) and
-                 ((solar_power_float <= (actual_power_float + grid_power_float - surplus_pv_hysteresis_int)) or
+                 (((solar_power_float <= (actual_power_float + grid_power_float - surplus_pv_hysteresis_int)) and
+                   not (surplus_exit_locked | bool(false))) or
                   (states(soc) | float(0) < (soc_export_limit_int - surplus_exit_hysteresis_int))) }}
         sequence:
           # 1. Logbuch-Eintrag

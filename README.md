@@ -203,7 +203,7 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 | Fall | Bedingung | Aktion |
 |:-----|:----------|:-------|
 | **0A** | Surplus-Bool = `off` UND (SOC ≥ Export-Schwelle UND (PV > Output + Grid + PV-Hysterese ODER PV = 0) **ODER** Surplus-Forecast-Forced) | Zone 0 Start: Surplus-Bool → `on` |
-| **0B** | Surplus-Bool = `on` UND **NICHT Surplus-Forecast-Forced** UND (SOC < Export-Schwelle − SOC-Hysterese ODER PV ≤ Output + Grid − PV-Hysterese) | Zone 0 Ende: Surplus-Bool → `off`, Integral = 0 |
+| **0B** | Surplus-Bool = `on` UND **NICHT Surplus-Forecast-Forced** UND (SOC < Export-Schwelle − SOC-Hysterese ODER (PV ≤ Output + Grid − PV-Hysterese UND **NICHT Austritts-Sperre**)) | Zone 0 Ende: Surplus-Bool → `off`, Integral = 0 |
 | **A** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'` |
 | **B** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC < Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Output → 0W, Timer-Toggle, Modus → `'0'` |
 | **C** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Output → 0W, Timer-Toggle, Modus → `'0'` |
@@ -225,10 +225,12 @@ Ermöglicht aktives Einspeisen von PV-Überschuss wenn der Akku voll ist. SOC- u
 
 * **Aktivierung:** Über den Parameter "Überschuss-Einspeisung aktivieren"
 * **Eintritts-Bedingung:** SOC ≥ Export-Schwelle UND (PV > (Output + Grid + PV-Hysterese) ODER PV = 0)
-* **Austritts-Bedingung:** PV ≤ (Output + Grid − PV-Hysterese) ODER SOC < (Export-Schwelle − SOC-Hysterese) — beide Terme werden blockiert solange Surplus-Forecast forciert (siehe Abschnitt 11)
+* **Austritts-Bedingung:** (PV ≤ (Output + Grid − PV-Hysterese) UND NICHT Austritts-Sperre) ODER SOC < (Export-Schwelle − SOC-Hysterese) — beide Terme werden blockiert solange Surplus-Forecast forciert (siehe Abschnitt 11); die optionale Austritts-Sperre (siehe Abschnitt 12) blockiert nur den PV-Term
 * **Blockiert:** Tarif-Laden (Fall GT) und AC-Laden (Fall G) können nicht starten solange Zone 0 aktiv ist.
 * **Verhalten:** Output auf Hard Limit, Entladestrom 2 A (Stabilitätspuffer), Integral eingefroren.
 * **Deaktiviert:** Klassische Nulleinspeisung — kein aktives Einspeisen.
+
+**Warum die Export-Schwelle unter dem Vollladepunkt liegen muss:** Der Eintritt prüft `PV > Verbrauch + Hysterese`. Das ist nur messbar, solange der Akku noch lädt — dann läuft die PV ungedrosselt und zeigt `Verbrauch + Ladeleistung`. Am Vollladepunkt (App-Ladeobergrenze) drosselt der Wechselrichter die PV exakt auf den Eigenbedarf herunter; der Überschuss ist dann unsichtbar und der Eintritt hängt von zufälligen Verbrauchsschwankungen ab — minutenlange Verzögerung möglich. Eine Schwelle ~5 % unter der App-Ladeobergrenze (z.B. 90–95 % bei Max 100 %) legt den Eintritt sicher in die Ladephase, wo der Überschuss zuverlässig messbar ist. Aus demselben Grund kann der Wiedereintritt nach einer Wolke verzögert sein, wenn der SOC bereits am Maximum gepinnt ist — während der Wolke wird die Batterie nicht entladen (solange Solar existiert, bleibt sie unangetastet), der SOC bewegt sich nicht. Dagegen hilft die Austritts-Sperre (Abschnitt 12).
 
 ---
 
@@ -328,6 +330,19 @@ Erzwingt frühzeitigen Zone-0-Eintritt auf Basis einer PV-Überschuss-Prognose.
 
 ---
 
+### 12. ⛅ Surplus Austritts-Sperre (Optional)
+
+Hält Zone 0 bei kurzen PV-Einbrüchen (Wolken), statt auszutreten.
+
+* **Voraussetzung:** Überschuss-Einspeisung muss ebenfalls aktiviert sein.
+* **Sperr-Flag:** `surplus_exit_locked = (Vorhersage ≥ Sperr-Faktor × Hard Limit) UND (SOC > Zone-3-Schwelle)` — der Faktor (Standard 1,5) ist die Sicherheitsmarge gegen Vorhersagefehler: Selbst wenn die Vorhersage deutlich daneben liegt, liegt das reale PV-Potenzial noch über dem Ausgabelimit, der gemessene Einbruch muss also transient sein.
+* **Wirkung (Fall 0B):** Sperrt **nur** den PV-Austritt. Der SOC-Austritt bleibt ungesperrt und beendet Surplus immer — fällt der SOC real unter die Austrittsschwelle, greift der Exit trotz Sperre. Zone 3 (Fall C) beendet Surplus zusätzlich jederzeit.
+* **Hintergrund:** Der Austritt bei vollem Akku führt in einen Zustand, in dem der Wechselrichter die PV auf den Eigenbedarf drosselt — der Überschuss ist danach nicht mehr messbar, und der Wiedereintritt hängt an zufälligen Verbrauchsschwankungen (minutenlange Verzögerung). Da die Batterie während einer Wolke nicht entladen wird (solange Solar existiert, bleibt sie unangetastet), bleibt der SOC am Maximum gepinnt und der Zustand löst sich nicht von selbst. Die Sperre vermeidet ihn, indem transiente Einbrüche gar nicht erst zum Austritt führen.
+* **Sensor:** Aktuell prognostizierte PV-Leistung in W, z.B. Solcast `power_now`.
+* **Fallback:** Sensor unavailable/unknown → Sperre inaktiv, normale Austrittslogik gilt.
+
+---
+
 ## 📊 Input-Variablen und Konfiguration
 
 ### 🔌 Erforderliche Entitäten
@@ -395,7 +410,7 @@ Erzwingt frühzeitigen Zone-0-Eintritt auf Basis einer PV-Überschuss-Prognose.
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
 | **Überschuss-Einspeisung aktivieren** | false | — | — | Schalter für Zone 0. |
-| **SOC-Schwelle Überschuss** | 90 % | 50 % | 99 % | Ab diesem SOC bei PV-Überschuss → Zone 0. |
+| **SOC-Schwelle Überschuss** | 90 % | 50 % | 99 % | Ab diesem SOC bei PV-Überschuss → Zone 0. Empfehlung: ~5 % unter der App-Ladeobergrenze (Begründung siehe Abschnitt 5). |
 | **Hysterese Überschuss-Austritt (SOC)** | 5 % | 1 % | 20 % | SOC muss um diesen Wert unter die Eintritts-Schwelle fallen bevor Zone 0 verlassen wird. |
 | **Hysterese PV-Überschuss** | 50 W | 10 W | 200 W | Totband um Hausverbrauch für Ein- und Austritt. |
 
@@ -455,6 +470,16 @@ Erzwingt frühzeitigen Zone-0-Eintritt auf Basis einer PV-Überschuss-Prognose.
 | **Surplus-Forecast aktivieren** | false | — | — | Schalter für die Funktion. Nur wirksam wenn Überschuss-Einspeisung aktiv. |
 | **Surplus-Forecast Sensor** | *(leer)* | — | — | PV-Überschuss-Prognose in W (z.B. Solcast). Leer lassen wenn nicht genutzt. |
 | **Surplus-Forecast Schwelle** | 5000 W | 0 | 20000 W | Forecast muss diesen Wert erreichen um erzwungenen Zone-0-Eintritt auszulösen. |
+
+---
+
+### ⛅ Surplus Austritts-Sperre (Optional)
+
+| Parameter | Standard | Min | Max | Beschreibung |
+|:----------|:---------|:----|:----|:-------------|
+| **Austritts-Sperre aktivieren** | false | — | — | Schalter für die Funktion. Nur wirksam wenn Überschuss-Einspeisung aktiv. |
+| **Austritts-Sperre Vorhersage-Sensor** | *(leer)* | — | — | Aktuell prognostizierte PV-Leistung in W (z.B. Solcast `power_now`). Leer lassen wenn nicht genutzt. |
+| **Austritts-Sperre Faktor** | 1.5 | 1.0 | 3.0 | Sperre aktiv solange Vorhersage ≥ Faktor × Hard Limit. Höher = mehr Sicherheitsmarge gegen Vorhersagefehler. |
 
 ---
 

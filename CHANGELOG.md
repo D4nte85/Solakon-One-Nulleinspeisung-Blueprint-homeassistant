@@ -3,6 +3,14 @@
 Alle nennenswerten Änderungen am Solakon-ONE-Nulleinspeisung-Blueprint (DE).
 Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
+## [Unreleased]
+
+### Hinzugefügt
+- Surplus-Austritts-Sperre (optional, Issue #11 im Integration-Repo): Neue Inputs `surplus_lock_enabled`, `surplus_lock_sensor`, `surplus_lock_factor`. Solange die aktuell prognostizierte PV-Leistung ≥ Sperr-Faktor × Hard Limit (Standard 1,5) UND SOC > Zone-3-Schwelle, ist in Fall 0B nur der PV-Austritt gesperrt — kurze PV-Einbrüche (Wolken) werden in Zone 0 durchgeritten statt auszutreten. Hintergrund: Der Austritt bei vollem Akku führt in einen Zustand, in dem die Hardware die PV auf den Eigenbedarf drosselt und der Überschuss nicht mehr messbar ist; da die Batterie während einer Wolke nicht entladen wird, bleibt der SOC am Maximum gepinnt und der Wiedereintritt verzögert sich um Minuten. Der SOC-Austritt bleibt ungesperrt, Sensor nicht verfügbar → Sperre inaktiv (Parität mit der Integration)
+
+### Geändert
+- Empfehlung für die Export-SOC-Schwelle präzisiert (README, Input-Beschreibung, Header): ~5 % unter der App-Ladeobergrenze, mit Begründung — der Eintritt (PV > Verbrauch + Hysterese) ist nur messbar solange der Akku noch lädt; am Vollladepunkt drosselt der WR die PV auf den Eigenbedarf und der Überschuss wird unsichtbar
+
 ## [V308] – 2026-07-08
 
 ### Behoben
