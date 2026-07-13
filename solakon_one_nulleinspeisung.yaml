@@ -194,6 +194,7 @@ blueprint:
     - **Sperr-Flag:** `surplus_exit_locked = (Vorhersage ≥ Sperr-Faktor × Hard Limit) UND (SOC > Zone-3-Schwelle)` — der Faktor (Standard 1,5) ist die Sicherheitsmarge gegen Vorhersagefehler
     - **Wirkung (Fall 0B):** Sperrt **nur** den PV-Austritt. Der SOC-Austritt bleibt ungesperrt und beendet Surplus immer; Zone 3 (Fall C) greift zusätzlich jederzeit
     - **Hintergrund:** Der Austritt bei vollem Akku führt in einen Zustand, in dem die Hardware die PV auf den Eigenbedarf drosselt — der Überschuss ist nicht mehr messbar und der Wiedereintritt hängt an zufälligen Verbrauchsschwankungen (minutenlange Verzögerung). Die Sperre vermeidet diesen Zustand, indem transiente Einbrüche gar nicht erst zum Austritt führen
+    - **Risiko:** Meldet der Sensor dauerhaft einen zu hohen Wert, bleibt Zone 0 entsprechend lange aktiv — bis der SOC-Austritt eingreift
     - **Nur wirksam wenn:** Überschuss-Einspeisung ebenfalls aktiviert ist
     - **Fallback:** Sensor `unknown`/`unavailable` → Sperre inaktiv, normale Austrittslogik gilt
 
@@ -662,6 +663,8 @@ blueprint:
               bleibt immer aktiv. Hintergrund: Der Austritt bei vollem Akku führt in einen
               Zustand, in dem die Hardware die PV auf den Eigenbedarf drosselt und der
               Überschuss nicht mehr messbar ist — der Wiedereintritt verzögert sich um Minuten.
+              Risiko: Meldet der Sensor dauerhaft einen zu hohen Wert, bleibt Zone 0
+              entsprechend lange aktiv — bis der SOC-Austritt eingreift.
               ⚠️ Nur wirksam wenn Überschuss-Einspeisung aktiviert ist.
             default: false
             selector:

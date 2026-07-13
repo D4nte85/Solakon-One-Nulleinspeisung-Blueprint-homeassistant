@@ -338,6 +338,7 @@ Hält Zone 0 bei kurzen PV-Einbrüchen (Wolken), statt auszutreten.
 * **Sperr-Flag:** `surplus_exit_locked = (Vorhersage ≥ Sperr-Faktor × Hard Limit) UND (SOC > Zone-3-Schwelle)` — der Faktor (Standard 1,5) ist die Sicherheitsmarge gegen Vorhersagefehler: Selbst wenn die Vorhersage deutlich daneben liegt, liegt das reale PV-Potenzial noch über dem Ausgabelimit, der gemessene Einbruch muss also transient sein.
 * **Wirkung (Fall 0B):** Sperrt **nur** den PV-Austritt. Der SOC-Austritt bleibt ungesperrt und beendet Surplus immer — fällt der SOC real unter die Austrittsschwelle, greift der Exit trotz Sperre. Zone 3 (Fall C) beendet Surplus zusätzlich jederzeit.
 * **Hintergrund:** Der Austritt bei vollem Akku führt in einen Zustand, in dem der Wechselrichter die PV auf den Eigenbedarf drosselt — der Überschuss ist danach nicht mehr messbar, und der Wiedereintritt hängt an zufälligen Verbrauchsschwankungen (minutenlange Verzögerung). Da die Batterie während einer Wolke nicht entladen wird (solange Solar existiert, bleibt sie unangetastet), bleibt der SOC am Maximum gepinnt und der Zustand löst sich nicht von selbst. Die Sperre vermeidet ihn, indem transiente Einbrüche gar nicht erst zum Austritt führen.
+* **Risiko:** Meldet der Sensor dauerhaft einen zu hohen Wert, bleibt Zone 0 entsprechend lange aktiv — bis der SOC-Austritt eingreift.
 * **Sensor:** Aktuell prognostizierte PV-Leistung in W, z.B. Solcast `power_now`.
 * **Fallback:** Sensor unavailable/unknown → Sperre inaktiv, normale Austrittslogik gilt.
 
