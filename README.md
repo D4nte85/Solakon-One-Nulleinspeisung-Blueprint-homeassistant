@@ -173,7 +173,7 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
 | Case | Condition | Action |
 |:-----|:----------|:-------|
 | **0A** | Surplus-Bool = `off` AND ((SOC ≥ export threshold AND (PV > Output + Grid + PV-Hysteresis OR PV = 0)) OR Surplus-Forecast-Forced) | Zone 0 Start: Surplus-Bool → `on` |
-| **0B** | Surplus-Bool = `on` AND NOT Surplus-Forecast-Forced AND (PV ≤ Output + Grid − PV-Hysteresis OR SOC < export threshold − SOC-Hysteresis) | Zone 0 End: Surplus-Bool → `off`, Integral = 0 |
+| **0B** | Surplus-Bool = `on` AND NOT Surplus-Forecast-Forced AND ((PV ≤ Output + Grid − PV-Hysteresis AND **NOT exit lock**) OR SOC < export threshold − SOC-Hysteresis) | Zone 0 End: Surplus-Bool → `off`, Integral = 0 |
 | **A** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND NOT discharge lock AND SOC > Zone 1 threshold AND Cycle = `off` | Zone 1 Start: Cycle = `on`, Integral = 0, reset Surplus/AC-Bool, Timer-Toggle, Mode → `'1'` |
 | **B** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND SOC < Zone 3 threshold AND Cycle = `on` | Zone 3 Stop: Cycle = `off`, Integral = 0, reset Surplus/AC-Bool, Output → 0W, Timer-Toggle, Mode → `'0'` |
 | **C** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND SOC < Zone 3 threshold AND Cycle = `off` AND Mode ≠ `'0'` | Zone 3 Guard: reset Surplus/AC-Bool, Output → 0W, Timer-Toggle, Mode → `'0'` |
@@ -207,10 +207,12 @@ Enables active export of PV surplus when the battery is full. SOC and PV hystere
 
 * **Standard Entry:** SOC ≥ export threshold AND (PV > (Output + Grid + PV-Hysteresis) OR PV = 0)
 * **Forecast Entry (optional):** Surplus forecast sensor ≥ threshold AND PV > Hard Limit AND SOC > zone-3 limit → Zone 0 entry **without export threshold**
-* **Exit:** PV ≤ (Output + Grid − PV-Hysteresis) OR SOC < (export threshold − SOC-Hysteresis) — both terms are blocked while surplus forecast is forced (see section 7)
+* **Exit:** (PV ≤ (Output + Grid − PV-Hysteresis) AND NOT exit lock) OR SOC < (export threshold − SOC-Hysteresis) — both terms are blocked while surplus forecast is forced (see section 7); the optional exit lock (see section 11) blocks only the PV term
 * **Persistence:** State stored in `input_boolean` — survives multiple automation runs
 * **Behavior:** Output to Hard Limit, discharge current 2 A (stability buffer), integral frozen (no decay, no PI call)
 * **Disabled:** Classic zero export — no active export
+
+**Why the export threshold must sit below the full-charge point:** Entry checks `PV > consumption + hysteresis`. That is only measurable while the battery is still charging — the PV then runs unthrottled and shows `consumption + charge power`. At the full-charge point (app charge limit) the inverter throttles PV down to exactly the consumption; the surplus becomes invisible and entry depends on random consumption transients — delays of minutes are possible. A threshold ~5% below the app charge limit (e.g. 90–95% with max 100%) places entry safely inside the charging phase where the surplus is reliably measurable. For the same reason, re-entry after a cloud can be delayed when the SOC is already pinned at the maximum — the battery is not discharged during the cloud (as long as solar exists it stays untouched), so the SOC does not move. The exit lock (section 11) addresses exactly this.
 
 ---
 
@@ -311,6 +313,19 @@ Applies to **Zone 2 only** (Case F). Zone 1, AC Charging and Surplus Export (Zon
 
 ---
 
+### 11. ⛅ Surplus Exit Lock (Optional)
+
+Keeps Zone 0 alive through short PV dips (clouds) instead of exiting.
+
+* **Prerequisite:** Surplus Export must also be enabled.
+* **Lock flag:** `surplus_exit_locked = (forecast ≥ lock factor × Hard Limit) AND (SOC > zone-3 limit)` — the factor (default 1.5) is the safety margin against forecast errors: even a substantially wrong forecast still leaves real PV potential above the output limit, so a measured dip must be transient.
+* **Effect (Case 0B):** Blocks **only** the PV exit. The SOC exit stays unblocked and always ends surplus — if the SOC genuinely falls below the exit threshold, the exit applies despite the lock. Zone 3 (Case C) ends surplus at any time as well.
+* **Background:** Exiting with a full battery enters a state where the inverter throttles PV down to consumption — the surplus becomes unmeasurable afterwards, and re-entry depends on random consumption transients (delays of minutes). Since the battery is not discharged during a cloud (as long as solar exists it stays untouched), the SOC stays pinned at the maximum and the state does not resolve itself. The lock avoids it by not letting transient dips trigger the exit in the first place.
+* **Sensor:** Currently forecast PV power in W, e.g. Solcast `power_now`.
+* **Fallback:** Sensor unavailable/unknown → lock inactive, normal exit logic applies.
+
+---
+
 ## 📊 Input Variables and Configuration
 
 ### 🔌 Required Entities
@@ -390,12 +405,15 @@ Applies to **Zone 2 only** (Case F). Zone 1, AC Charging and Surplus Export (Zon
 | Parameter | Default | Min | Max | Description |
 |:----------|:--------|:----|:----|:------------|
 | **Enable Surplus Export** | false | — | — | Toggle for Zone 0. |
-| **SOC Threshold Surplus** | 90 % | 50 % | 99 % | From this SOC with PV surplus → Zone 0. |
+| **SOC Threshold Surplus** | 90 % | 50 % | 99 % | From this SOC with PV surplus → Zone 0. Recommendation: ~5% below the app charge limit (rationale in section 3). |
 | **Hysteresis Surplus Exit (SOC)** | 5 % | 1 % | 20 % | SOC must fall by this amount below entry threshold before Zone 0 is exited. |
 | **PV Surplus Hysteresis** | 50 W | 10 W | 200 W | Deadband around house consumption for entry and exit. |
 | **Enable Surplus Forecast Entry** | false | — | — | Forces Zone 0 entry on high forecast without export threshold (SOC must stay above zone 3). |
 | **Surplus Forecast Sensor** | *(empty)* | — | — | PV surplus forecast in W (e.g. Solcast). |
 | **Surplus Forecast Threshold** | 5000 W | 0 | 20000 W | Minimum forecast value for forced Zone 0 entry. |
+| **Enable Surplus Exit Lock** | false | — | — | Blocks the PV exit while forecast ≥ factor × Hard Limit (rides out clouds). |
+| **Surplus Exit Lock Forecast Sensor** | *(empty)* | — | — | Currently forecast PV power in W (e.g. Solcast `power_now`). |
+| **Surplus Exit Lock Factor** | 1.5 | 1.0 | 3.0 | Lock active while forecast ≥ factor × Hard Limit. Higher = more safety margin. |
 
 ---
 
