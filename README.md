@@ -321,6 +321,7 @@ Keeps Zone 0 alive through short PV dips (clouds) instead of exiting.
 * **Lock flag:** `surplus_exit_locked = (forecast ≥ lock factor × Hard Limit) AND (SOC > zone-3 limit)` — the factor (default 1.5) is the safety margin against forecast errors: even a substantially wrong forecast still leaves real PV potential above the output limit, so a measured dip must be transient.
 * **Effect (Case 0B):** Blocks **only** the PV exit. The SOC exit stays unblocked and always ends surplus — if the SOC genuinely falls below the exit threshold, the exit applies despite the lock. Zone 3 (Case C) ends surplus at any time as well.
 * **Background:** Exiting with a full battery enters a state where the inverter throttles PV down to consumption — the surplus becomes unmeasurable afterwards, and re-entry depends on random consumption transients (delays of minutes). Since the battery is not discharged during a cloud (as long as solar exists it stays untouched), the SOC stays pinned at the maximum and the state does not resolve itself. The lock avoids it by not letting transient dips trigger the exit in the first place.
+* **Risk:** If the sensor reports a stuck, too-high value, Zone 0 stays active for just as long — until the SOC exit kicks in.
 * **Sensor:** Currently forecast PV power in W, e.g. Solcast `power_now`.
 * **Fallback:** Sensor unavailable/unknown → lock inactive, normal exit logic applies.
 
