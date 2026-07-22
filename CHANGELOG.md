@@ -5,6 +5,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 ## [Unreleased]
 
+### Behoben
+- Fall E (Zone-2-Eintritt) setzt jetzt explizit `active_power_number` auf 0 W zurück, analog zu Fall B/C/F (Issue #79). Vorher konnte die Ausgangsleistung beim Zonenwechsel zufällig innerhalb der PI-Toleranz liegen bleiben — dann wurde der PI-Regler nie mehr getriggert und die Leistung fror auf dem alten Zone-1-Niveau ein, statt gemäß `dynamic_max_power` (Zone 2) herunterzuregeln
+
 ### Hinzugefügt
 - Surplus-Austritts-Sperre (optional, Issue #11 im Integration-Repo): Neue Inputs `surplus_lock_enabled`, `surplus_lock_sensor`, `surplus_lock_factor`. Solange die aktuell prognostizierte PV-Leistung ≥ Sperr-Faktor × Hard Limit (Standard 1,5) UND SOC > Zone-3-Schwelle, ist in Fall 0B nur der PV-Austritt gesperrt — kurze PV-Einbrüche (Wolken) werden in Zone 0 durchgeritten statt auszutreten. Hintergrund: Der Austritt bei vollem Akku führt in einen Zustand, in dem die Hardware die PV auf den Eigenbedarf drosselt und der Überschuss nicht mehr messbar ist; da die Batterie während einer Wolke nicht entladen wird, bleibt der SOC am Maximum gepinnt und der Wiedereintritt verzögert sich um Minuten. Der SOC-Austritt bleibt ungesperrt, Sensor nicht verfügbar → Sperre inaktiv (Parität mit der Integration)
 

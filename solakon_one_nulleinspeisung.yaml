@@ -2087,7 +2087,13 @@ actions:
               entity_id: !input integral_helper
             data:
               value: 0
-          # 3. Modus → '1' (Timer-Toggle 3598↔3599)
+          # 3. Output → 0 W
+          - action: number.set_value
+            target:
+              entity_id: !input active_power_number
+            data:
+              value: 0
+          # 4. Modus → '1' (Timer-Toggle 3598↔3599)
           - choose:
               - conditions: "{{ states(solakon_mode) != '1' }}"
                 sequence:

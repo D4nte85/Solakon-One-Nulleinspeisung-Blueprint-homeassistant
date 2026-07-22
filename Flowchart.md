@@ -43,7 +43,7 @@ flowchart TD
         RECOVERY["🔄 Recovery — Modus-Reaktivierung   Timer-Toggle (3598↔3599)   AC-Lade-Bool = on ODER Tarif-Lade-Bool = on → Modus '3'   sonst → Modus '1'   (kein Integral-Reset, kein Zonenwechsel)"]
 
         %% ── Fall E: Zone 2 ───────────────────────────────────────────────
-        Z2_START["🔋 Zone 2 aktivieren   Integral = 0   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
+        Z2_START["🔋 Zone 2 aktivieren   Integral = 0   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
 
         %% ── Fall F: Nachtabschaltung ─────────────────────────────────────
         NIGHT["🌙 Nachtabschaltung   Integral = 0   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
