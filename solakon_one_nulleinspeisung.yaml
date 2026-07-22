@@ -15,7 +15,7 @@ blueprint:
     - **Stellgröße:** AC-Ausgangsleistung des Wechselrichters.
     - **P-Anteil:** Reagiert sofort auf die aktuelle Abweichung vom Sollwert.
     - **I-Anteil:** Summiert Abweichungen über die Zeit auf — eliminiert bleibende Regelabweichungen.
-    - **Anti-Windup:** Back-Calculation im Script — Integral wird nach jedem Stelleingriff auf den Wert zurückgesetzt, der den tatsächlichen (ggf. geklemmten) Ausgang produziert. Clamp auf ±effective_max.
+    - **Anti-Windup:** Back-Calculation im Script — Integral wird nach jedem Stelleingriff auf den Wert zurückgesetzt, der den tatsächlichen (ggf. geklemmten) Ausgang produziert. Clamp auf ±effective_max, gerundet auf 2 Nachkommastellen.
     - **Integral-Reset:** Bei jedem Zonenwechsel auf 0.
     - **Integral-Decay:** 5 % Abbau pro Zyklus solange Fehler ≤ Toleranz und |Integral| > 10 (in Hauptautomatisierung).
     - **Integral-Einfrieren:** In Zone 0 (Überschuss) kein Decay, kein PI-Aufruf.
@@ -64,7 +64,7 @@ blueprint:
     - **G** — AC Laden Start: AC aktiv UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + Output) < −Hysterese UND kein Tarif-Laden UND kein Überschuss → AC-Bool = `on`, Timer-Toggle, Output → 0W, Modus → `'3'`
     - **H** — AC Laden Ende: Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND Output = 0W)) → Integral = 0, AC-Bool = `off`, Zone 1: Output → 0W, Timer-Toggle, Modus → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Modus → `'0'`
     - **I** — Safety: Modus = `'3'` ohne aktive AC- oder Tarif-Lade-Session → Integral = 0, Zone 1: Output → 0W, Timer-Toggle, Modus → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Modus → `'0'`
-    - **E** — Zone 2 Start: Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht UND keine Entladesperre → Integral = 0, Timer-Toggle, Modus → `'1'`
+    - **E** — Zone 2 Start: Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht UND keine Entladesperre → Integral = 0, Output → 0W, Timer-Toggle, Modus → `'1'`
     - **F** — Nachtabschaltung: Nacht UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv UND kein AC/Tarif-Laden UND kein Überschuss → Integral = 0, Output → 0W, Timer-Toggle, Modus → `'0'`
 
     **Timer-Toggle:** Statt eines festen Werts wird zwischen 3598 und 3599 gewechselt — erzeugt eine Zustandsänderung damit der Solakon den neuen Modus sicher übernimmt. Wird bei jedem Moduswechsel direkt vor dem Modus-Setzen durchgeführt.
