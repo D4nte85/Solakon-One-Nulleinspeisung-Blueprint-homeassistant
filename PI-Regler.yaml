@@ -96,9 +96,9 @@ variables:
   # der genau final_power produziert. Bei ungeklemmtem Ausgang = integral_candidate.
   integral_new: >
     {% if i_val != 0 %}
-      {{ ((final_power - current_float - error_float * p_val) / i_val) | clamp(-effective_max, effective_max) }}
+      {{ ((final_power - current_float - error_float * p_val) / i_val) | clamp(-effective_max, effective_max) | round(2) }}
     {% else %}
-      {{ integral_candidate | clamp(-effective_max, effective_max) }}
+      {{ integral_candidate | clamp(-effective_max, effective_max) | round(2) }}
     {% endif %}
 
 sequence:
