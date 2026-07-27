@@ -20,6 +20,10 @@ blueprint:
     AC-Laden-Pool optional: nur wenn AC-Lade-Zustand-Helper und AC-Fehler-Anteil-Helfer gesetzt sind.
     Nicht konfigurierte optionale Instanzen (3/4) werden sicher uebersprungen —
     states()-Aufruf nur bei aktiver Instanz mit gueltigem Sensor-String.
+    Optional zusaetzlich: Ist-Leistungssensor je Instanz + gemeinsamer Sigma-Helper —
+    schreibt die Summe der Ausgangsleistung aller Instanzen im Entlademodus, damit
+    Fall G (AC-Laden-Eintritt) in der Hauptautomation nicht die Entladung einer
+    Schwester-Instanz als externen Netzueberschuss wertet.
   domain: automation
   source_url: https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/main/solakon_leistungsverteilung.yaml
   input:
@@ -64,6 +68,23 @@ blueprint:
                   value: "120"
                 - label: "300 Sekunden"
                   value: "300"
+
+        total_actual_power_number:
+          name: 🔀 Σ-Ausgangsleistung entladend — Helfer (Optional)
+          description: |
+            input_number-Entität in die die Summe der Ist-Ausgangsleistung aller
+            Instanzen im Entlademodus (Modus '1') geschrieben wird.
+            ⚠️ Nur wirksam wenn zusätzlich mindestens ein Ist-Leistungssensor
+            (Instanz-Einstellungen unten) eingetragen ist.
+            In jeder Instanz-Automation als „Σ-Ausgangsleistung entladend — Dynamisch"
+            (total_actual_power_entity) eintragen, damit Fall G (AC-Laden-Eintritt)
+            ihn statt des eigenen Ausgangswerts verwendet.
+            ⚠️ Wenn leer gelassen, wird nichts geschrieben — jede Instanz verwendet
+            dann in Fall G weiterhin nur ihren eigenen Ausgangswert.
+          default: {}
+          selector:
+            entity:
+              domain: input_number
 
     # ═══════════════════════════════════════════════════════════════════════
     # ⚖️ VERTEILUNGS-MODUS
@@ -128,6 +149,18 @@ blueprint:
             Kapazitätssensor der Solakon-ONE-Integration: sensor.solakon_one_batteriekapazitat
             Optional: verbessert die Gewichtung bei Batterien unterschiedlicher Kapazität.
             Ohne Angabe: Gewichtung rein nach SOC-Prozentpunkten (gleichwertige Kapazität angenommen).
+            ⚠️ Entweder für alle Instanzen setzen oder für keine.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+
+        inst1_actual_power_sensor:
+          name: ⚡ Instanz 1 — Ist-Leistungssensor (Optional)
+          description: |
+            Derselbe Sensor, der in der Instanz-Automation als „Aktuelle Ist-Leistung"
+            eingetragen ist. Nur nötig für den optionalen Σ-Ausgangsleistung-Helfer oben
+            (verhindert Batterie-zu-Batterie-Umpumpen bei Fall G).
             ⚠️ Entweder für alle Instanzen setzen oder für keine.
           default: {}
           selector:
@@ -218,6 +251,14 @@ blueprint:
             entity:
               domain: sensor
 
+        inst2_actual_power_sensor:
+          name: ⚡ Instanz 2 — Ist-Leistungssensor (Optional)
+          description: Siehe Instanz 1 — Ist-Leistungssensor.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+
         inst2_limit_number:
           name: ⚙️ Instanz 2 — Max. Leistung (input_number)
           selector:
@@ -281,6 +322,14 @@ blueprint:
         inst3_capacity_sensor:
           name: 🔋 Instanz 3 — Batteriekapazität in kWh (Optional)
           description: Siehe Instanz 1 — Kapazitätssensor der Solakon-ONE-Integration.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+
+        inst3_actual_power_sensor:
+          name: ⚡ Instanz 3 — Ist-Leistungssensor (Optional)
+          description: Siehe Instanz 1 — Ist-Leistungssensor.
           default: {}
           selector:
             entity:
@@ -356,6 +405,14 @@ blueprint:
             entity:
               domain: sensor
 
+        inst4_actual_power_sensor:
+          name: ⚡ Instanz 4 — Ist-Leistungssensor (Optional)
+          description: Siehe Instanz 1 — Ist-Leistungssensor.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+
         inst4_limit_number:
           name: ⚙️ Instanz 4 — Max. Leistung (input_number)
           default: {}
@@ -398,12 +455,14 @@ variables:
   global_max:    !input global_max_power
   interval_s:    !input interval_seconds
   equal_dist:    !input equal_distribution
+  total_actual_power_helper: !input total_actual_power_number
   i1_mode:       !input inst1_mode_select
   i1_soc:        !input inst1_soc_sensor
   i1_limit:      !input inst1_limit_number
   i1_share:      !input inst1_share_number
   i1_min_soc:    !input inst1_min_soc
   i1_cap:        !input inst1_capacity_sensor
+  i1_actual:     !input inst1_actual_power_sensor
   i1_ac_helper:  !input inst1_ac_charge_helper
   i1_ac_share:   !input inst1_ac_share_number
   i2_mode:       !input inst2_mode_select
@@ -412,6 +471,7 @@ variables:
   i2_share:      !input inst2_share_number
   i2_min_soc:    !input inst2_min_soc
   i2_cap:        !input inst2_capacity_sensor
+  i2_actual:     !input inst2_actual_power_sensor
   i2_ac_helper:  !input inst2_ac_charge_helper
   i2_ac_share:   !input inst2_ac_share_number
   i3_mode:       !input inst3_mode_select
@@ -420,6 +480,7 @@ variables:
   i3_share:      !input inst3_share_number
   i3_min_soc:    !input inst3_min_soc
   i3_cap:        !input inst3_capacity_sensor
+  i3_actual:     !input inst3_actual_power_sensor
   i3_ac_helper:  !input inst3_ac_charge_helper
   i3_ac_share:   !input inst3_ac_share_number
   i4_mode:       !input inst4_mode_select
@@ -428,6 +489,7 @@ variables:
   i4_share:      !input inst4_share_number
   i4_min_soc:    !input inst4_min_soc
   i4_cap:        !input inst4_capacity_sensor
+  i4_actual:     !input inst4_actual_power_sensor
   i4_ac_helper:  !input inst4_ac_charge_helper
   i4_ac_share:   !input inst4_ac_share_number
 
@@ -465,6 +527,41 @@ actions:
       i2_active: "{{ states(i2_mode) == '1' }}"
       i3_active: "{{ i3_configured and states(i3_mode) == '1' }}"
       i4_active: "{{ i4_configured and states(i4_mode) == '1' }}"
+
+      # Σ-Ausgangsleistung aller Instanzen im Entlademodus (kW→W normalisiert).
+      # Nur Instanzen mit konfiguriertem Ist-Leistungssensor tragen bei — fehlender
+      # Sensor zählt als 0, kein Fehler (Sensor ist überall optional).
+      actual1: >
+        {% if i1_active and i1_actual is string and i1_actual | length > 0 %}
+          {% set v = states(i1_actual) | float(0) %}
+          {{ v * 1000 if state_attr(i1_actual, 'unit_of_measurement') == 'kW' else v }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+      actual2: >
+        {% if i2_active and i2_actual is string and i2_actual | length > 0 %}
+          {% set v = states(i2_actual) | float(0) %}
+          {{ v * 1000 if state_attr(i2_actual, 'unit_of_measurement') == 'kW' else v }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+      actual3: >
+        {% if i3_active and i3_actual is string and i3_actual | length > 0 %}
+          {% set v = states(i3_actual) | float(0) %}
+          {{ v * 1000 if state_attr(i3_actual, 'unit_of_measurement') == 'kW' else v }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+      actual4: >
+        {% if i4_active and i4_actual is string and i4_actual | length > 0 %}
+          {% set v = states(i4_actual) | float(0) %}
+          {{ v * 1000 if state_attr(i4_actual, 'unit_of_measurement') == 'kW' else v }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+      total_actual_power: "{{ actual1 + actual2 + actual3 + actual4 }}"
+      total_actual_power_configured: >
+        {{ total_actual_power_helper is string and total_actual_power_helper | length > 0 }}
 
       # Kapazitätssensoren (Standard 100.0 → Gewichtung nach SOC-Prozentpunkten wenn nicht gesetzt).
       i1_cap_valid: "{{ i1_cap is string and i1_cap | length > 0 }}"
@@ -742,3 +839,14 @@ actions:
           entity_id: "{{ i4_ac_share }}"
         data:
           value: "{{ aw4 | round(3) }}"
+
+  # ── Σ-Ausgangsleistung entladend (nur wenn Helfer konfiguriert) ───────────
+  - if:
+      - condition: template
+        value_template: "{{ total_actual_power_configured }}"
+    then:
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ total_actual_power_helper }}"
+        data:
+          value: "{{ total_actual_power | round(0) }}"

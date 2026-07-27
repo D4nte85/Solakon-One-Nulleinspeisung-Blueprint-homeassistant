@@ -211,8 +211,8 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 | **GT** | Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel UND **Modus ≠ `'3'`** UND **NICHT Surplus-Bool = `on`** UND **NICHT PV-Forecast-Suppressed** | Tarif-Laden Start: Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'` |
 | **HT** | Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Tarif-Ladeziel) | Tarif-Laden Ende: Tarif-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
 | **TM** | Tarif aktiv UND Günstig ≤ Preis < Teuer-Schwelle UND kein AC/Tarif-Laden UND **NICHT Surplus-Bool = `on`** UND **Modus = `'1'`** UND **NICHT PV-Forecast-Suppressed** | Discharge-Lock: Integral = 0, Zyklus = `off` (wenn aktiv), Output → 0W, Timer-Toggle, Modus → `'0'` |
-| **G** | AC aktiv UND SOC < Ladeziel UND **Modus ≠ `'3'`** UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + Output) < −Hysterese | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
-| **H** | Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ `ac_charge_offset + Hysterese` UND Output = 0 W)) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
+| **G** | AC aktiv UND SOC < Ladeziel UND **Modus ≠ `'3'`** UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + ΣOutput_entladend) < −Hysterese | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
+| **H** | Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ `ac_charge_offset + Hysterese` UND eigener Output = 0 W)) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
 | **I** | Modus = `'3'` UND NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` | Safety-Korrektur: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W (Timer-Toggle) |
 | **E** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Output → 0W, Timer-Toggle, Modus → `'1'` |
 | **F** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Surplus-Bool = `on` UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Output → 0W, Timer-Toggle, Modus → `'0'` |
@@ -236,10 +236,10 @@ Ermöglicht aktives Einspeisen von PV-Überschuss wenn der Akku voll ist. SOC- u
 
 ### 6. ⚡ AC Laden (Optional)
 
-Laden der Batterie wenn eine externe Einspeisung ins Netz erkannt wird. Eintritts-Erkennung: `(Grid + Ausgangsleistung) < −Hysterese`.
+Laden der Batterie wenn eine externe Einspeisung ins Netz erkannt wird. Eintritts-Erkennung: `(Grid + ΣOutput_entladend) < −Hysterese` — im Einzelbetrieb die eigene Ausgangsleistung, im Multi-Instanz-Betrieb die Summe aller Instanzen im Entlademodus (verhindert, dass die Entladung einer Schwester-Instanz als externer Netzüberschuss gewertet wird — siehe `total_actual_power_entity` im Multi-Instancing-Abschnitt).
 
 * **Blockiert durch:** Zone 0 (Überschuss-Bool = `on`) und Tarif-Laden (Tarif-Bool = `on`).
-* **Eintritts-Bedingung (Fall G):** AC Laden aktiviert UND SOC < Ladeziel UND Modus ≠ `'3'` UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + Output) < −Hysterese.
+* **Eintritts-Bedingung (Fall G):** AC Laden aktiviert UND SOC < Ladeziel UND Modus ≠ `'3'` UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + ΣOutput_entladend) < −Hysterese.
 * **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`. Separate P/I-Faktoren. P klein halten (~0.3–0.5), I auf 0 belassen (Hardware zu träge).
 * **Rückkehr:** Zone 1 → Modus `'1'` (Timer-Toggle) + Integral Reset. Zone 2 → Modus `'0'` (Timer-Toggle) + Output 0W + Integral Reset.
 
@@ -594,6 +594,7 @@ Eintritts-Bedingung (Fall G):
   UND Modus ≠ '3' ← Guard: verhindert Re-Eintritt
   UND NICHT tariff_charge_active ← Guard: Tarif-Laden hat Vorrang
   UND NICHT surplus_active ← Guard: Zone 0 hat Vorrang
+  UND (grid + total_actual_power) < -hysteresis ← Σ über alle Instanzen im Entlademodus (Einzelbetrieb: eigener Output)
   → ac_charge_state_helper = on
   → Modus = '3', Output = 0W, Timer-Toggle
 ```
@@ -675,6 +676,7 @@ in Pool 2 oder in keinem von beiden (z. B. Zone 3 gestoppt, Tarif-Laden).
 | `...instanz_N_share` | `input_number` | min:0, max:1, step:0.001 | Fehler-Anteil Nulleinspeisung von Leistungsverteilung → PI-Regler (Pool 1) |
 | Kapazitätssensor (optional) | `sensor` | kWh — von Solakon-Integration bereitgestellt | kWh-genaue Gewichtung bei unterschiedlichen Batteriekapazitäten |
 | `...instanz_N_ac_share` (nur bei AC-Laden) | `input_number` | min:0, max:1, step:0.001 | Fehler-Anteil AC-Laden von Leistungsverteilung → PI-Regler (Pool 2) |
+| `total_actual_power` (optional, ein gemeinsamer Helfer, nicht pro Instanz) | `input_number` | min:0, max:≥Global-Max, step:1 | Summe der Ist-Ausgangsleistung aller Instanzen im Entlademodus, von Leistungsverteilung → `total_actual_power_entity` jeder Instanz (Fall-G-Eintritt) |
 
 Für Pool 2 wird zusätzlich derselbe AC-Lade-Zustand-Helfer (`input_boolean`, siehe Punkt 5 der
 Helper-Liste) in der Leistungsverteilung eingetragen — er zeigt an, welche Instanzen gerade
@@ -690,6 +692,7 @@ gleichzeitig laden.
    - `limit`- und `share`-Helper pro Instanz zuordnen
    - Optional: Kapazitätssensor der Solakon-ONE-Integration pro Instanz eintragen — empfohlen bei unterschiedlichen Batteriekapazitäten
    - Bei AC-Laden zusätzlich: AC-Lade-Zustand-Helfer und `ac_share`-Helfer pro ladender Instanz zuordnen
+   - Empfohlen (verhindert Batterie-zu-Batterie-Umpumpen bei Fall G): pro Instanz den Ist-Leistungssensor eintragen, dazu einen gemeinsamen `total_actual_power`-Helfer anlegen und in jeder Instanz-Automation als „Σ-Ausgangsleistung entladend — Dynamisch" (`total_actual_power_entity`) eintragen
 
 ---
 
