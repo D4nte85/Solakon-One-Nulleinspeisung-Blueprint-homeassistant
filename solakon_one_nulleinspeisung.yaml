@@ -204,6 +204,20 @@ blueprint:
 
     </details>
 
+    <details>
+    <summary><b>🌙 Surplus PV=0-Eintritt Latch (Optional)</b> 👈</summary>
+
+    Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher (PV = 0 dauerhaft).
+
+    - **Helper:** input_boolean, Default "scharf" (`on`)
+    - **Scharfschalten:** Sobald PV > 0 gemessen wird → Helper → `on`
+    - **Entschärfen (Fall 0B):** Beim Austritt während PV = 0 → Helper → `off`
+    - **Wirkung (Fall 0A):** Der PV=0-Eintrittszweig greift nur solange der Helper `on` ist. Nach einem nächtlichen Austritt bleibt er gesperrt, bis wieder echtes PV > 0 gemessen wurde — der reine SOC-/PV-Vergleichszweig bleibt unverändert
+    - **Nur wirksam wenn:** Überschuss-Einspeisung ebenfalls aktiviert ist
+    - **Fallback:** Helper nicht angelegt → Latch inaktiv, PV=0-Eintritt verhält sich wie bisher ungeschützt
+
+    </details>
+
   domain: automation
   source_url: https://raw.githubusercontent.com/D4nte85/Solakon-One-Nulleinspeisung-Blueprint-homeassistant/main/solakon_one_nulleinspeisung.yaml
   input:
@@ -654,6 +668,19 @@ blueprint:
               entity:
                 domain: input_boolean
 
+          surplus_zero_entry_armed_helper:
+            name: ☀️ Surplus PV=0-Eintritt Latch (input_boolean - nur für Zone 0)
+            description: |
+              input_boolean Helper zum persistenten Sperren des PV=0-Eintrittszweigs nach einem
+              nächtlichen Austritt, bis wieder echtes PV > 0 gemessen wurde. Verhindert Oszillation
+              zwischen Fall 0A/0B bei vollem Speicher in der Nacht.
+              ⚠️ Nur erforderlich wenn Überschuss-Einspeisung aktiviert ist. Fehlt der Helper
+              (nicht angelegt), verhält sich der Eintritt wie bisher ungeschützt.
+            default: input_boolean.solakon_surplus_zero_entry_armed
+            selector:
+              entity:
+                domain: input_boolean
+
           surplus_forecast_enabled:
             name: 🌤️ Surplus-Forecast Eintritt aktivieren (Optional)
             description: |
@@ -1077,6 +1104,15 @@ variables:
        surplus_state_entity | length > 0 and
        states(surplus_state_entity) not in ['unknown', 'unavailable'] }}
 
+  # Surplus PV=0-Eintritt Latch
+  surplus_zero_entry_armed_entity: !input surplus_zero_entry_armed_helper
+  surplus_zero_entry_armed_valid: >
+    {{ surplus_zero_entry_armed_entity is string and
+       surplus_zero_entry_armed_entity | length > 0 and
+       states(surplus_zero_entry_armed_entity) not in ['unknown', 'unavailable'] }}
+  surplus_zero_entry_armed: >
+    {{ (not surplus_zero_entry_armed_valid) or is_state(surplus_zero_entry_armed_entity, 'on') }}
+
   # AC Laden
   ac_charge_enabled_bool: !input ac_charge_enabled
   soc_ac_charge_limit_int: !input soc_ac_charge_limit
@@ -1290,6 +1326,17 @@ actions:
           - stop: "Kritischer Fehler oder ungültige Konfiguration."
 
   # -------------------------------------------------------------------------------------------------
+  # 0-PRE. LATCH SCHARF SCHALTEN sobald wieder echtes PV > 0 gemessen wird
+  # -------------------------------------------------------------------------------------------------
+  - if:
+      - condition: template
+        value_template: "{{ surplus_zero_entry_armed_valid and solar_power_float > 0 }}"
+    then:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: !input surplus_zero_entry_armed_helper
+
+  # -------------------------------------------------------------------------------------------------
   # 0. ÜBERSCHUSS-LOGIK (ZONE 0) STATUS-UPDATE
   # -------------------------------------------------------------------------------------------------
   - choose:
@@ -1303,7 +1350,8 @@ actions:
           - condition: template
             value_template: >
               {{ ((states(soc) | float(0) >= soc_export_limit_int) and
-                  (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int) or solar_power_float == 0)) or
+                  (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int) or
+                   (solar_power_float == 0 and surplus_zero_entry_armed))) or
                  surplus_forecast_forced | bool(false) }}
         sequence:
           # 1. Logbuch-Eintrag
@@ -1348,6 +1396,14 @@ actions:
               entity_id: !input integral_helper
             data:
               value: 0
+          # 4. Latch deaktivieren wenn bei PV=0 ausgetreten wird
+          - if:
+              - condition: template
+                value_template: "{{ surplus_zero_entry_armed_valid and solar_power_float == 0 }}"
+            then:
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: !input surplus_zero_entry_armed_helper
 
   # -------------------------------------------------------------------------------------------------
   # HAUPT-LOGIK: Modus- und Zyklus-Steuerung

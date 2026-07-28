@@ -9,17 +9,19 @@ flowchart TD
     end
     style SG_ENTRY fill:none,stroke:#aaaaaa,stroke-width:5,stroke-dasharray:6,color:#000
 
-    VAL -- OK --> SURPLUS_UPDATE
+    VAL -- OK --> LATCH_ARM
 
     %% ══════════════════════════════════════════════════════════════════════
     subgraph SG_ZONE0 ["☀️ Zone 0 — Überschuss Status-Update   (Falls 0A / 0B)"]
+        LATCH_ARM{{"🌙 PV=0-Latch scharf schalten   wenn PV > 0"}}
         SURPLUS_UPDATE{{"☀️ Zone 0 Status-Update   (Falls 0A / 0B)"}}
         S0A["☀️ Zone 0 aktivieren   Surplus-Bool → on"]
-        S0B["☁️ Zone 0 deaktivieren   Surplus-Bool → off   Integral = 0"]
+        S0B["☁️ Zone 0 deaktivieren   Surplus-Bool → off   Integral = 0   PV=0-Latch → off wenn PV=0"]
     end
     style SG_ZONE0 fill:none,stroke:#f0ad4e,stroke-width:5,stroke-dasharray:6,color:#000
 
-    SURPLUS_UPDATE -- "FALL 0A   Surplus-Bool = off   UND (SOC ≥ Export-Schwelle UND (PV > Output+Grid+PV-Hysterese ODER PV=0)   ODER Surplus-Forecast-Forced: Forecast ≥ Schwelle UND PV > Hard Limit UND SOC > Zone-3)" --> S0A
+    LATCH_ARM --> SURPLUS_UPDATE
+    SURPLUS_UPDATE -- "FALL 0A   Surplus-Bool = off   UND (SOC ≥ Export-Schwelle UND (PV > Output+Grid+PV-Hysterese ODER (PV=0 UND PV=0-Latch scharf)))   ODER Surplus-Forecast-Forced: Forecast ≥ Schwelle UND PV > Hard Limit UND SOC > Zone-3)" --> S0A
     SURPLUS_UPDATE -- "FALL 0B   Surplus-Bool = on   UND NICHT Surplus-Forecast-Forced   UND ((PV ≤ Output + Grid − PV-Hysterese UND NICHT Austritts-Sperre: Vorhersage ≥ Faktor × Hard Limit UND SOC > Zone-3) ODER SOC < Export-Schwelle − SOC-Hysterese)" --> S0B
     SURPLUS_UPDATE -- "Kein Surplus-Update" --> ZONE_CHECK
     S0A --> ZONE_CHECK
@@ -199,7 +201,7 @@ flowchart TD
     classDef pi fill:#cce5ff,stroke:#004085,color:#000
     classDef end_node fill:#f8f9fa,stroke:#6c757d,color:#000
 
-    class S0A,S0B,SURPLUS_UPDATE,CALC_SURPLUS,PI_DECISION zone0
+    class S0A,S0B,SURPLUS_UPDATE,LATCH_ARM,CALC_SURPLUS,PI_DECISION zone0
     class Z1_START zone1
     class Z2_START zone2
     class Z3_A,Z3_B zone3

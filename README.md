@@ -80,6 +80,15 @@ Persistenter Zustandsspeicher für die Überschuss-Einspeisung. Verhindert Flack
 3. Name: z.B. `Solakon Surplus Aktiv`
 4. Speichern (Entity ID: z.B. `input_boolean.solakon_surplus_aktiv`)
 
+### 4b. Input Boolean Helper (PV=0-Eintritt Latch) — NUR wenn Zone 0 aktiv
+
+Verhindert Oszillation zwischen Zone-0-Start/Ende nachts bei vollem Speicher und dauerhaftem PV = 0. Standard-Initialwert: `on` (scharf).
+
+1. Gehen Sie zu **Einstellungen** → **Geräte & Dienste** → **Helfer**
+2. Klicken Sie auf **Helfer erstellen** → **Schalter** (Input Boolean)
+3. Name: z.B. `Solakon Surplus Zero Entry Armed`
+4. Speichern (Entity ID: z.B. `input_boolean.solakon_surplus_zero_entry_armed`)
+
 ### 5. Input Boolean Helper (AC-Lade-Zustand) — NUR wenn AC Laden aktiv
 
 Persistenter Zustandsspeicher für das AC Laden. Signalisiert dem PI-Script die invertierte Fehlerberechnung (`ac_charge_mode=true`). Verhindert außerdem, dass die Guards (at\_max/at\_min) den PI fälschlich blockieren.
@@ -202,7 +211,7 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 
 | Fall | Bedingung | Aktion |
 |:-----|:----------|:-------|
-| **0A** | Surplus-Bool = `off` UND (SOC ≥ Export-Schwelle UND (PV > Output + Grid + PV-Hysterese ODER PV = 0) **ODER** Surplus-Forecast-Forced) | Zone 0 Start: Surplus-Bool → `on` |
+| **0A** | Surplus-Bool = `off` UND (SOC ≥ Export-Schwelle UND (PV > Output + Grid + PV-Hysterese ODER (PV = 0 UND PV=0-Latch scharf)) **ODER** Surplus-Forecast-Forced) | Zone 0 Start: Surplus-Bool → `on` |
 | **0B** | Surplus-Bool = `on` UND **NICHT Surplus-Forecast-Forced** UND (SOC < Export-Schwelle − SOC-Hysterese ODER (PV ≤ Output + Grid − PV-Hysterese UND **NICHT Austritts-Sperre**)) | Zone 0 Ende: Surplus-Bool → `off`, Integral = 0 |
 | **A** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'` |
 | **B** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC < Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Output → 0W, Timer-Toggle, Modus → `'0'` |
@@ -224,7 +233,7 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 Ermöglicht aktives Einspeisen von PV-Überschuss wenn der Akku voll ist. SOC- und PV-Hysterese verhindern instabiles Hin- und Herschalten.
 
 * **Aktivierung:** Über den Parameter "Überschuss-Einspeisung aktivieren"
-* **Eintritts-Bedingung:** SOC ≥ Export-Schwelle UND (PV > (Output + Grid + PV-Hysterese) ODER PV = 0)
+* **Eintritts-Bedingung:** SOC ≥ Export-Schwelle UND (PV > (Output + Grid + PV-Hysterese) ODER (PV = 0 UND PV=0-Latch scharf, siehe Abschnitt 13))
 * **Austritts-Bedingung:** (PV ≤ (Output + Grid − PV-Hysterese) UND NICHT Austritts-Sperre) ODER SOC < (Export-Schwelle − SOC-Hysterese) — beide Terme werden blockiert solange Surplus-Forecast forciert (siehe Abschnitt 11); die optionale Austritts-Sperre (siehe Abschnitt 12) blockiert nur den PV-Term
 * **Blockiert:** Tarif-Laden (Fall GT) und AC-Laden (Fall G) können nicht starten solange Zone 0 aktiv ist.
 * **Verhalten:** Output auf Hard Limit, Entladestrom 2 A (Stabilitätspuffer), Integral eingefroren.
@@ -344,6 +353,19 @@ Hält Zone 0 bei kurzen PV-Einbrüchen (Wolken), statt auszutreten.
 
 ---
 
+### 13. 🌙 Surplus PV=0-Eintritt Latch (Optional)
+
+Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher, wenn PV dauerhaft 0 misst.
+
+* **Voraussetzung:** Überschuss-Einspeisung muss ebenfalls aktiviert sein.
+* **Helper:** input_boolean, Standard-Initialwert `on` (scharf).
+* **Scharfschalten:** Sobald PV > 0 gemessen wird → Helper → `on`.
+* **Entschärfen (Fall 0B):** Beim Austritt während PV = 0 → Helper → `off`.
+* **Wirkung (Fall 0A):** Der PV=0-Eintrittszweig greift nur solange der Helper `on` ist. Nach einem nächtlichen Austritt bleibt er gesperrt, bis wieder echtes PV > 0 gemessen wurde — ohne den Latch würde ein erneuter PV=0-Messwert sofort wieder in Zone 0 eintreten, obwohl gerade erst ausgetreten wurde (Oszillation im Sekunden-/Minutenbereich).
+* **Fallback:** Helper nicht angelegt/unavailable → Latch inaktiv, PV=0-Eintritt verhält sich wie bisher ungeschützt.
+
+---
+
 ## 📊 Input-Variablen und Konfiguration
 
 ### 🔌 Erforderliche Entitäten
@@ -415,6 +437,7 @@ Hält Zone 0 bei kurzen PV-Einbrüchen (Wolken), statt auszutreten.
 | **SOC-Schwelle Überschuss** | 90 % | 50 % | 99 % | Ab diesem SOC bei PV-Überschuss → Zone 0. Empfehlung: ~5 % unter der App-Ladeobergrenze (Begründung siehe Abschnitt 5). |
 | **Hysterese Überschuss-Austritt (SOC)** | 5 % | 1 % | 20 % | SOC muss um diesen Wert unter die Eintritts-Schwelle fallen bevor Zone 0 verlassen wird. |
 | **Hysterese PV-Überschuss** | 50 W | 10 W | 200 W | Totband um Hausverbrauch für Ein- und Austritt. |
+| **PV=0-Eintritt Latch Helfer** | *(leer)* | — | — | Optionaler `input_boolean`. Sperrt den PV=0-Eintrittszweig nach nächtlichem Austritt bis wieder PV > 0 gemessen wird (siehe Abschnitt 13). Nicht angelegt → PV=0-Eintritt bleibt ungeschützt. |
 
 ---
 
