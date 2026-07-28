@@ -388,7 +388,7 @@ Hält Zone 0 bei kurzen PV-Einbrüchen (Wolken), statt auszutreten.
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
 | **Zone 1 Start (Statisch)** | 50 % | 1 % | 99 % | Überschreiten aktiviert Zone 1. Fallback, falls kein dynamischer Override gesetzt/verfügbar. |
-| **Zone 1 Start (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert (z.B. per Automation abends niedriger setzen, wenn Akku an einem wolkigen Tag die Standard-Schwelle nicht erreicht, aber der PV-Forecast für morgen hoch ist — Issue #80). |
+| **Zone 1 Start (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert (z.B. per Automation abends niedriger setzen, wenn Akku an einem wolkigen Tag die Standard-Schwelle nicht erreicht, aber der PV-Forecast für morgen hoch ist). |
 | **Zone 3 Stopp** | 20 % | 1 % | 49 % | Unterschreiten stoppt Entladung komplett. |
 | **Max. Entladestrom Zone 1** | 40 A | 0 A | 40 A | Zone 2 und AC/Tarif-Laden nutzen automatisch 0 A. |
 | **Nullpunkt-Offset 1 (Statisch)** | 30 W | -100 | 100 W | Statischer Fallback für Zone 1. |

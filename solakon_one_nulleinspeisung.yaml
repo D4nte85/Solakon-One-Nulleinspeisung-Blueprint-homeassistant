@@ -415,7 +415,7 @@ blueprint:
             description: |
               Optionale Entität (z. B. input_number). Wenn gesetzt, überschreibt ihr Wert die statische Schwelle.
               Beispiel: eigene Automation setzt die Schwelle abends niedriger, wenn der PV-Forecast für morgen hoch ist,
-              damit der Akku trotz nicht erreichter Standard-Schwelle über Nacht entlädt (Issue #80).
+              damit der Akku trotz nicht erreichter Standard-Schwelle über Nacht entlädt.
               ⚠️ Der interne Wake-up-Trigger auf die SOC-Schwelle bleibt am statischen Fallback-Wert —
               Grid-/PV-Leistungsänderungen triggern aber ohnehin sekündlich neu, worüber die dynamische Schwelle ausgewertet wird.
             default: {}
