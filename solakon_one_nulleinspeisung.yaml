@@ -53,6 +53,8 @@ blueprint:
     | **2 — Batterieschonend** | Zone-3 < SOC ≤ Zone-1, Zyklus = off | `'1'` | 0 A | Dynamisches Limit: `Min(Hard Limit, Max(0, PV − Reserve))`. Optional: Nachtabschaltung. |
     | **3 — Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` | 0 A | Output = 0 W. Vollständiger Batterieschutz. Hat immer Vorrang. |
 
+    Die Zone-1-Schwelle kann statisch oder per **dynamischem Helfer** (`input_number`, `soc_fast_limit_entity`) gesetzt werden — ein gesetzter Helfer überschreibt den statischen Wert automatisch (z.B. für eine eigene Automation, die die Schwelle abends senkt, wenn der PV-Forecast für morgen hoch, der Akku aber unter der Standard-Schwelle geblieben ist).
+
     **Steuer-Falls (Reihenfolge ist entscheidend):**
     - **A** — Zone 1 Start: SOC > Zone-1-Schwelle UND Zyklus = `off` UND kein AC/Tarif-Laden UND keine Entladesperre → Integral = 0, Zyklus = `on`, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'`
     - **B** — Zone 3 Stop: SOC < Zone-3-Schwelle UND Zyklus = `on` UND kein AC/Tarif-Laden → Integral = 0, Zyklus = `off`, Surplus/AC-Bool zurücksetzen, Output → 0W, Timer-Toggle, Modus → `'0'`
@@ -396,16 +398,30 @@ blueprint:
         collapsed: true
         input:
           soc_fast_limit:
-            name: 🔋 SOC-Schwelle "Zone 1 Start"
+            name: 🔋 SOC-Schwelle "Zone 1 Start" Statisch (Fallback)
             description: |
               Obere Schwelle (z.B. 50 %). Überschreiten aktiviert Zone 1.
               Zone 1 läuft bis SOC unter die Zone-3-Schwelle fällt (kein Yo-Yo-Effekt).
+              Wird genutzt, wenn kein dynamischer Override gesetzt oder dieser nicht verfügbar ist.
             default: 50
             selector:
               number:
                 min: 1
                 max: 99
                 unit_of_measurement: "%"
+
+          soc_fast_limit_entity:
+            name: 🔋 Dynamische SOC-Schwelle "Zone 1 Start" (Optionaler Override)
+            description: |
+              Optionale Entität (z. B. input_number). Wenn gesetzt, überschreibt ihr Wert die statische Schwelle.
+              Beispiel: eigene Automation setzt die Schwelle abends niedriger, wenn der PV-Forecast für morgen hoch ist,
+              damit der Akku trotz nicht erreichter Standard-Schwelle über Nacht entlädt (Issue #80).
+              ⚠️ Der interne Wake-up-Trigger auf die SOC-Schwelle bleibt am statischen Fallback-Wert —
+              Grid-/PV-Leistungsänderungen triggern aber ohnehin sekündlich neu, worüber die dynamische Schwelle ausgewertet wird.
+            default: {}
+            selector:
+              entity:
+                domain: input_number
 
           soc_conservation_limit:
             name: 🔋 SOC-Schwelle "Zone 3 Stopp"
@@ -1017,7 +1033,14 @@ variables:
     {{ v * 1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else v }}
 
   # Zonen-Schwellwerte
-  soc_fast_limit_int: !input soc_fast_limit
+  soc_fast_limit_static: !input soc_fast_limit
+  soc_fast_limit_entity_id: !input soc_fast_limit_entity
+  soc_fast_limit_int: >
+    {% if soc_fast_limit_entity_id is string and soc_fast_limit_entity_id | length > 0 and states(soc_fast_limit_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+      {{ states(soc_fast_limit_entity_id) | float(soc_fast_limit_static) }}
+    {% else %}
+      {{ soc_fast_limit_static }}
+    {% endif %}
   soc_conservation_limit_int: !input soc_conservation_limit
 
   # Aktuelle Sensorwerte für Conditions
@@ -1220,7 +1243,9 @@ triggers:
     entity_id: !input solar_power_sensor
     id: solar_power_change
 
-  # SOC überschreitet Zone-1-Schwelle
+  # SOC überschreitet Zone-1-Schwelle (Wake-up nur am statischen Fallback-Wert;
+  # bei dynamischem Override via soc_fast_limit_entity greift dieser über die
+  # ohnehin sekündlich feuernden Grid-/PV-Trigger, siehe soc_fast_limit_int)
   - trigger: numeric_state
     entity_id: !input soc_sensor
     above: !input soc_fast_limit

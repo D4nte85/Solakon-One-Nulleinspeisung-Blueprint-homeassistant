@@ -387,7 +387,8 @@ Hält Zone 0 bei kurzen PV-Einbrüchen (Wolken), statt auszutreten.
 
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
-| **Zone 1 Start** | 50 % | 1 % | 99 % | Überschreiten aktiviert Zone 1. |
+| **Zone 1 Start (Statisch)** | 50 % | 1 % | 99 % | Überschreiten aktiviert Zone 1. Fallback, falls kein dynamischer Override gesetzt/verfügbar. |
+| **Zone 1 Start (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert (z.B. per Automation abends niedriger setzen, wenn Akku an einem wolkigen Tag die Standard-Schwelle nicht erreicht, aber der PV-Forecast für morgen hoch ist — Issue #80). |
 | **Zone 3 Stopp** | 20 % | 1 % | 49 % | Unterschreiten stoppt Entladung komplett. |
 | **Max. Entladestrom Zone 1** | 40 A | 0 A | 40 A | Zone 2 und AC/Tarif-Laden nutzen automatisch 0 A. |
 | **Nullpunkt-Offset 1 (Statisch)** | 30 W | -100 | 100 W | Statischer Fallback für Zone 1. |
@@ -719,3 +720,5 @@ gleichzeitig laden.
 | Mode Change | `mode_change` | Reagiert auf externe Modusänderungen, löst ggf. Recovery (Fall D) oder Safety-Korrektur (Fall I) aus |
 
 > **Hinweis Tarif-Trigger:** Ein separater Preis-Trigger ist in Blueprint-Automationen mit optionalen Entitäten nicht sauber realisierbar. Die Tarif-Logik greift beim nächsten regulären Grid/PV-Trigger. Da diese bei aktiver PV sehr häufig feuern, ist die Reaktionsverzögerung bei Preisübergängen vernachlässigbar.
+
+> **Hinweis dynamische Zone-1-Schwelle:** `soc_high` triggert nur am statischen Fallback-Wert, da HA-Trigger keine Templates erlauben. Ist ein Override per `input_number` gesetzt, wird die Zone-1-Schwelle beim nächsten Grid-/PV-Trigger korrekt ausgewertet — dieselbe Verzögerungslogik wie beim Tarif-Trigger.
