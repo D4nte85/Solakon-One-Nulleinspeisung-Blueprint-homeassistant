@@ -11,6 +11,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - Recommendation for the export SOC threshold clarified (README, input description, header): ~5% below the app charge limit, with rationale — entry (PV > consumption + hysteresis) is only measurable while the battery is still charging; at the full-charge point the inverter throttles PV down to consumption and the surplus becomes invisible
 - README (sections 5 + 12): corrected claim that the "battery stays untouched during a cloud" — contradicted the already-documented 2 A stability buffer in Zone 0, which discharges the battery continuously at ~1.5–2 A regardless of PV (reporter measurement, integration repo Discussion #18). The argument itself (SOC barely moves during a cloud, exit lock still needed) is unchanged, only the incorrect zero-discharge claim was replaced
+- README (section 3): clarified why the 2 A discharge allowance (ceiling, not a fixed setpoint) exists and can't be 0 — with a full battery no current can flow in, and the Solakon can only regulate PV while battery current flows; without this current flow the device shuts down completely, the 2 A is deliberately kept low to minimize battery load
 
 ## [V308] – 2026-07-08
 

@@ -212,6 +212,8 @@ Enables active export of PV surplus when the battery is full. SOC and PV hystere
 * **Behavior:** Output to Hard Limit, discharge current 2 A (stability buffer), integral frozen (no decay, no PI call)
 * **Disabled:** Classic zero export — no active export
 
+**On the 2 A stability buffer:** With a full battery, no more current can flow in — the Solakon can only regulate PV while battery current is flowing, so it has to flow out instead in this case. Without this current flow (0 A) the device shuts down completely. The 2 A is therefore a discharge allowance (ceiling, not a fixed setpoint), deliberately kept low to put as little load on the battery as possible.
+
 **Why the export threshold must sit below the full-charge point:** Entry checks `PV > consumption + hysteresis`. That is only measurable while the battery is still charging — the PV then runs unthrottled and shows `consumption + charge power`. At the full-charge point (app charge limit) the inverter throttles PV down to exactly the consumption; the surplus becomes invisible and entry depends on random consumption transients — delays of minutes are possible. A threshold ~5% below the app charge limit (e.g. 90–95% with max 100%) places entry safely inside the charging phase where the surplus is reliably measurable. For the same reason, re-entry after a cloud can be delayed when the SOC is already pinned at the maximum — during the cloud the battery only discharges through the 2 A stability buffer (see "Behavior" above), which barely moves the SOC. The exit lock (section 11) addresses exactly this.
 
 ---
