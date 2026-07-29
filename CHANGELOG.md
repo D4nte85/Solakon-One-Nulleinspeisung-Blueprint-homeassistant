@@ -6,10 +6,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
-- Surplus exit lock (optional, Issue #11 in the integration repo): new inputs `surplus_lock_enabled`, `surplus_lock_sensor`, `surplus_lock_factor`. While the currently forecast PV power is ≥ lock factor × Hard Limit (default 1.5) AND SOC > zone-3 limit, only the PV exit in Case 0B is blocked — short PV dips (clouds) are ridden out in Zone 0 instead of exiting. Background: exiting with a full battery enters a state where the hardware throttles PV down to consumption and the surplus becomes unmeasurable; since the battery is not discharged during a cloud, the SOC stays pinned at the maximum and re-entry is delayed by minutes. The SOC exit stays unblocked; sensor unavailable → lock inactive (parity with the integration)
+- Surplus exit lock (optional, Issue #11 in the integration repo): new inputs `surplus_lock_enabled`, `surplus_lock_sensor`, `surplus_lock_factor`. While the currently forecast PV power is ≥ lock factor × Hard Limit (default 1.5) AND SOC > zone-3 limit, only the PV exit in Case 0B is blocked — short PV dips (clouds) are ridden out in Zone 0 instead of exiting. Background: exiting with a full battery enters a state where the hardware throttles PV down to consumption and the surplus becomes unmeasurable; since the battery only discharges through the 2 A stability buffer during a cloud, the SOC stays practically pinned at the maximum and re-entry is delayed by minutes. The SOC exit stays unblocked; sensor unavailable → lock inactive (parity with the integration)
 
 ### Changed
 - Recommendation for the export SOC threshold clarified (README, input description, header): ~5% below the app charge limit, with rationale — entry (PV > consumption + hysteresis) is only measurable while the battery is still charging; at the full-charge point the inverter throttles PV down to consumption and the surplus becomes invisible
+- README (sections 5 + 12): corrected claim that the "battery stays untouched during a cloud" — contradicted the already-documented 2 A stability buffer in Zone 0, which discharges the battery continuously at ~1.5–2 A regardless of PV (reporter measurement, integration repo Discussion #18). The argument itself (SOC barely moves during a cloud, exit lock still needed) is unchanged, only the incorrect zero-discharge claim was replaced
 
 ## [V308] – 2026-07-08
 
