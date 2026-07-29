@@ -18,6 +18,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 ### Geändert
 - Empfehlung für die Export-SOC-Schwelle präzisiert (README, Input-Beschreibung, Header): ~5 % unter der App-Ladeobergrenze, mit Begründung — der Eintritt (PV > Verbrauch + Hysterese) ist nur messbar solange der Akku noch lädt; am Vollladepunkt drosselt der WR die PV auf den Eigenbedarf und der Überschuss wird unsichtbar
 - README (Abschnitt 5 + 12): Behauptung „Batterie bleibt während einer Wolke unangetastet" korrigiert — widersprach dem bereits dokumentierten 2-A-Stabilitätspuffer in Zone 0, der die Batterie unabhängig von PV kontinuierlich mit ~1,5–2 A entlädt (Reporter-Messung, Integration-Repo Discussion #18). Argumentation (SOC bleibt beim Wolkendurchgang praktisch stehen, Austritts-Sperre bleibt nötig) unverändert, nur die falsche Nulldiskrepanz-Behauptung ersetzt
+- README (Abschnitt 5): Klarstellung ergänzt, warum die 2-A-Entladefreigabe (Obergrenze, kein fester Sollwert) existiert und nicht 0 sein darf — bei vollem Akku kann kein Strom mehr hineinfließen, der Solakon kann PV aber nur regeln solange Batteriestrom fließt; ohne diesen Stromfluss schaltet das Gerät komplett ab, die 2 A sind bewusst niedrig gewählt um die Batterie dabei minimal zu belasten
 
 ## [V308] – 2026-07-08
 

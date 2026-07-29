@@ -239,6 +239,8 @@ Ermöglicht aktives Einspeisen von PV-Überschuss wenn der Akku voll ist. SOC- u
 * **Verhalten:** Output auf Hard Limit, Entladestrom 2 A (Stabilitätspuffer), Integral eingefroren.
 * **Deaktiviert:** Klassische Nulleinspeisung — kein aktives Einspeisen.
 
+**Zum 2-A-Stabilitätspuffer:** Ist der Akku voll, kann kein Strom mehr hineinfließen — der Solakon kann PV aber nur regeln solange Batteriestrom fließt, also muss er in diesem Fall herausfließen. Ohne diesen Stromfluss (0 A) schaltet das Gerät komplett ab. Die 2 A sind deshalb eine Entladefreigabe (Obergrenze, kein fester Sollwert) und bewusst niedrig gewählt, um die Batterie dabei so wenig wie möglich zu belasten.
+
 **Warum die Export-Schwelle unter dem Vollladepunkt liegen muss:** Der Eintritt prüft `PV > Verbrauch + Hysterese`. Das ist nur messbar, solange der Akku noch lädt — dann läuft die PV ungedrosselt und zeigt `Verbrauch + Ladeleistung`. Am Vollladepunkt (App-Ladeobergrenze) drosselt der Wechselrichter die PV exakt auf den Eigenbedarf herunter; der Überschuss ist dann unsichtbar und der Eintritt hängt von zufälligen Verbrauchsschwankungen ab — minutenlange Verzögerung möglich. Eine Schwelle ~5 % unter der App-Ladeobergrenze (z.B. 90–95 % bei Max 100 %) legt den Eintritt sicher in die Ladephase, wo der Überschuss zuverlässig messbar ist. Aus demselben Grund kann der Wiedereintritt nach einer Wolke verzögert sein, wenn der SOC bereits am Maximum gepinnt ist — während der Wolke entlädt sich die Batterie nur über den 2-A-Stabilitätspuffer (siehe „Verhalten" oben), das bewegt den SOC praktisch nicht. Dagegen hilft die Austritts-Sperre (Abschnitt 12).
 
 ---
