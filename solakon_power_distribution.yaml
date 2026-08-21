@@ -68,6 +68,23 @@ blueprint:
                 - label: "300 seconds"
                   value: "300"
 
+        total_actual_power_number:
+          name: 🔀 Σ Output Discharging — Helper (Optional)
+          description: |
+            input_number entity into which the sum of actual output power across
+            all instances in discharge mode (mode '1') is written.
+            ⚠️ Only effective when at least one actual-power sensor
+            (instance settings below) is also set.
+            Enter this in each instance automation as "Σ Output Discharging — Dynamic"
+            (total_actual_power_entity) so that Case G (AC-charge entry)
+            uses it instead of the instance's own output value.
+            ⚠️ If left empty, nothing is written — every instance still uses only
+            its own output value in Case G.
+          default: {}
+          selector:
+            entity:
+              domain: input_number
+
     # ═══════════════════════════════════════════════════════════════════════
     # ⚖️ DISTRIBUTION MODE
     # ═══════════════════════════════════════════════════════════════════════
@@ -131,6 +148,18 @@ blueprint:
             Capacity sensor from the Solakon ONE integration: sensor.solakon_one_battery_capacity
             Optional: improves weighting when instances have batteries of different capacity.
             Without entry: weighting purely by SOC percentage points (equal capacity assumed).
+            ⚠️ Either set for all instances or for none.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+
+        inst1_actual_power_sensor:
+          name: ⚡ Instance 1 — Actual Power Sensor (Optional)
+          description: |
+            The same sensor entered as "Current Actual Power" in the instance automation.
+            Only needed for the optional Σ output helper above
+            (prevents battery-to-battery pumping in Case G).
             ⚠️ Either set for all instances or for none.
           default: {}
           selector:
@@ -221,6 +250,14 @@ blueprint:
             entity:
               domain: sensor
 
+        inst2_actual_power_sensor:
+          name: ⚡ Instance 2 — Actual Power Sensor (Optional)
+          description: See Instance 1 — actual power sensor.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+
         inst2_limit_number:
           name: ⚙️ Instance 2 — Max. Power (input_number)
           selector:
@@ -284,6 +321,14 @@ blueprint:
         inst3_capacity_sensor:
           name: 🔋 Instance 3 — Battery Capacity in kWh (Optional)
           description: See Instance 1 — capacity sensor from the Solakon ONE integration.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+
+        inst3_actual_power_sensor:
+          name: ⚡ Instance 3 — Actual Power Sensor (Optional)
+          description: See Instance 1 — actual power sensor.
           default: {}
           selector:
             entity:
@@ -359,6 +404,14 @@ blueprint:
             entity:
               domain: sensor
 
+        inst4_actual_power_sensor:
+          name: ⚡ Instance 4 — Actual Power Sensor (Optional)
+          description: See Instance 1 — actual power sensor.
+          default: {}
+          selector:
+            entity:
+              domain: sensor
+
         inst4_limit_number:
           name: ⚙️ Instance 4 — Max. Power (input_number)
           default: {}
@@ -401,12 +454,14 @@ variables:
   global_max:    !input global_max_power
   interval_s:    !input interval_seconds
   equal_dist:    !input equal_distribution
+  total_actual_power_helper: !input total_actual_power_number
   i1_mode:       !input inst1_mode_select
   i1_soc:        !input inst1_soc_sensor
   i1_limit:      !input inst1_limit_number
   i1_share:      !input inst1_share_number
   i1_min_soc:    !input inst1_min_soc
   i1_cap:        !input inst1_capacity_sensor
+  i1_actual:     !input inst1_actual_power_sensor
   i1_ac_helper:  !input inst1_ac_charge_helper
   i1_ac_share:   !input inst1_ac_share_number
   i2_mode:       !input inst2_mode_select
@@ -415,6 +470,7 @@ variables:
   i2_share:      !input inst2_share_number
   i2_min_soc:    !input inst2_min_soc
   i2_cap:        !input inst2_capacity_sensor
+  i2_actual:     !input inst2_actual_power_sensor
   i2_ac_helper:  !input inst2_ac_charge_helper
   i2_ac_share:   !input inst2_ac_share_number
   i3_mode:       !input inst3_mode_select
@@ -423,6 +479,7 @@ variables:
   i3_share:      !input inst3_share_number
   i3_min_soc:    !input inst3_min_soc
   i3_cap:        !input inst3_capacity_sensor
+  i3_actual:     !input inst3_actual_power_sensor
   i3_ac_helper:  !input inst3_ac_charge_helper
   i3_ac_share:   !input inst3_ac_share_number
   i4_mode:       !input inst4_mode_select
@@ -431,6 +488,7 @@ variables:
   i4_share:      !input inst4_share_number
   i4_min_soc:    !input inst4_min_soc
   i4_cap:        !input inst4_capacity_sensor
+  i4_actual:     !input inst4_actual_power_sensor
   i4_ac_helper:  !input inst4_ac_charge_helper
   i4_ac_share:   !input inst4_ac_share_number
 
@@ -468,6 +526,41 @@ actions:
       i2_active: "{{ states(i2_mode) == '1' }}"
       i3_active: "{{ i3_configured and states(i3_mode) == '1' }}"
       i4_active: "{{ i4_configured and states(i4_mode) == '1' }}"
+
+      # Σ output power of all instances in discharge mode (kW→W normalized).
+      # Only instances with a configured actual-power sensor contribute — a missing
+      # sensor counts as 0, not an error (sensor is optional everywhere).
+      actual1: >
+        {% if i1_active and i1_actual is string and i1_actual | length > 0 %}
+          {% set v = states(i1_actual) | float(0) %}
+          {{ v * 1000 if state_attr(i1_actual, 'unit_of_measurement') == 'kW' else v }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+      actual2: >
+        {% if i2_active and i2_actual is string and i2_actual | length > 0 %}
+          {% set v = states(i2_actual) | float(0) %}
+          {{ v * 1000 if state_attr(i2_actual, 'unit_of_measurement') == 'kW' else v }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+      actual3: >
+        {% if i3_active and i3_actual is string and i3_actual | length > 0 %}
+          {% set v = states(i3_actual) | float(0) %}
+          {{ v * 1000 if state_attr(i3_actual, 'unit_of_measurement') == 'kW' else v }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+      actual4: >
+        {% if i4_active and i4_actual is string and i4_actual | length > 0 %}
+          {% set v = states(i4_actual) | float(0) %}
+          {{ v * 1000 if state_attr(i4_actual, 'unit_of_measurement') == 'kW' else v }}
+        {% else %}
+          {{ 0 }}
+        {% endif %}
+      total_actual_power: "{{ actual1 + actual2 + actual3 + actual4 }}"
+      total_actual_power_configured: >
+        {{ total_actual_power_helper is string and total_actual_power_helper | length > 0 }}
 
       # Capacity sensors (default 100.0 → weighting by SOC percentage points if not set)
       i1_cap_valid: "{{ i1_cap is string and i1_cap | length > 0 }}"
@@ -770,3 +863,14 @@ actions:
           entity_id: "{{ i4_ac_share }}"
         data:
           value: "{{ aw4 | round(3) }}"
+
+  # ── Σ output discharging (only if helper configured) ───────────────────────
+  - if:
+      - condition: template
+        value_template: "{{ total_actual_power_configured }}"
+    then:
+      - action: input_number.set_value
+        target:
+          entity_id: "{{ total_actual_power_helper }}"
+        data:
+          value: "{{ total_actual_power | round(0) }}"

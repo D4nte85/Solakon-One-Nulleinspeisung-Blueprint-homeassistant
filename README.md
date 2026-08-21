@@ -63,6 +63,15 @@ Persistent state storage for surplus export. Prevents flickering with variable P
 3. Name: e.g. `Solakon Surplus Active`
 4. Save (Entity ID: e.g. `input_boolean.solakon_surplus_active`)
 
+### 4b. Input Boolean Helper (PV=0 Entry Latch) — ONLY if Zone 0 enabled
+
+Prevents oscillation between Zone 0 start/end at night with a full battery and persistent PV = 0. Default initial value: `on` (armed).
+
+1. Go to **Settings** → **Devices & Services** → **Helpers**
+2. Click **Create Helper** → **Toggle** (Input Boolean)
+3. Name: e.g. `Solakon Surplus Zero Entry Armed`
+4. Save (Entity ID: e.g. `input_boolean.solakon_surplus_zero_entry_armed`)
+
 ### 5. Input Boolean Helper (AC Charge State) — ONLY if AC Charging enabled
 
 Persistent state storage for AC charging. Signals the PI script the inverted error calculation (`ac_charge_mode=true`). Also prevents the guards (at_max/at_min) from incorrectly blocking PI.
@@ -172,7 +181,7 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
 
 | Case | Condition | Action |
 |:-----|:----------|:-------|
-| **0A** | Surplus-Bool = `off` AND ((SOC ≥ export threshold AND (PV > Output + Grid + PV-Hysteresis OR PV = 0)) OR Surplus-Forecast-Forced) | Zone 0 Start: Surplus-Bool → `on` |
+| **0A** | Surplus-Bool = `off` AND ((SOC ≥ export threshold AND (PV > Output + Grid + PV-Hysteresis OR (PV = 0 AND PV=0 latch armed))) OR Surplus-Forecast-Forced) | Zone 0 Start: Surplus-Bool → `on` |
 | **0B** | Surplus-Bool = `on` AND NOT Surplus-Forecast-Forced AND ((PV ≤ Output + Grid − PV-Hysteresis AND **NOT exit lock**) OR SOC < export threshold − SOC-Hysteresis) | Zone 0 End: Surplus-Bool → `off`, Integral = 0 |
 | **A** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND NOT discharge lock AND SOC > Zone 1 threshold AND Cycle = `off` | Zone 1 Start: Cycle = `on`, Integral = 0, reset Surplus/AC-Bool, Timer-Toggle, Mode → `'1'` |
 | **B** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND SOC < Zone 3 threshold AND Cycle = `on` | Zone 3 Stop: Cycle = `off`, Integral = 0, reset Surplus/AC-Bool, Output → 0W, Timer-Toggle, Mode → `'0'` |
@@ -181,10 +190,10 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
 | **GT** | Tariff enabled AND price < cheap threshold AND NOT PV-forecast-suppressed AND SOC < tariff target AND Mode ≠ `'3'` AND NOT Surplus-Bool = `on` | Tariff Charging Start: Tariff-Bool = `on`, Timer-Toggle, Output → charge power (direct), Mode → `'3'` |
 | **HT** | Mode = `'3'` AND Tariff-Bool = `on` AND (price ≥ cheap threshold OR SOC ≥ target) | Tariff Charging End: Integral = 0, Tariff-Bool = `off`, Zone 1 → Timer-Toggle + `'1'` / Zone 2 → `'0'` + 0W |
 | **TM** | Tariff active AND cheap ≤ price < expensive AND NOT PV-forecast-suppressed AND no charging AND NOT Surplus-Bool = `on` AND Mode = `'1'` | Discharge Lock: Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Timer-Toggle, Mode → `'0'` |
-| **G** | AC active AND SOC < charge target AND **Mode ≠ `'3'`** AND NOT Tariff-Bool = `on` AND NOT Surplus-Bool = `on` AND (Grid + Output) < −Hysteresis | AC Charging Start: AC-Bool = `on`, Timer-Toggle, Mode → `'3'`, Output → 0W |
+| **G** | AC active AND SOC < charge target AND **Mode ≠ `'3'`** AND NOT Tariff-Bool = `on` AND NOT Surplus-Bool = `on` AND (Grid + ΣOutput_discharging) < −Hysteresis | AC Charging Start: AC-Bool = `on`, Timer-Toggle, Mode → `'3'`, Output → 0W |
 | **H** | Mode = `'3'` AND NOT Tariff-Bool = `on` AND (SOC ≥ charge target OR (Grid ≥ `ac_charge_offset + Hysteresis` AND Output ≤ 0 W)) | AC Charging End: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
 | **I** | Mode = `'3'` AND NOT AC-Bool = `on` AND NOT Tariff-Bool = `on` | Safety correction: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
-| **E** | NOT AC-Bool = `on` AND NOT Tariff-Bool = `on` AND NOT discharge lock AND Zone 3 < SOC ≤ Zone 1 AND Cycle = `off` AND Mode = `'0'` AND NOT night | Zone 2 Start: Integral = 0, Timer-Toggle, Mode → `'1'` |
+| **E** | NOT AC-Bool = `on` AND NOT Tariff-Bool = `on` AND NOT discharge lock AND Zone 3 < SOC ≤ Zone 1 AND Cycle = `off` AND Mode = `'0'` AND NOT night | Zone 2 Start: Integral = 0, Output → 0W, Timer-Toggle, Mode → `'1'` |
 | **F** | NOT AC-Bool = `on` AND NOT Tariff-Bool = `on` AND NOT Surplus-Bool = `on` AND Night Shutdown active AND PV < PV Charge Reserve AND Cycle = `off` AND Mode active | Night Shutdown: Integral = 0, Output → 0W, Timer-Toggle, Mode → `'0'` |
 
 > **Order is critical:** Case D comes before Cases GT/G. This means Recovery only checks Mode ∉ `{'1','3'}` — AC/Tariff charging mode `'3'` is **not** overwritten by Recovery. Case I comes after H and catches every Mode `'3'` state not legitimized by an active charging session.
@@ -205,7 +214,7 @@ Catches the condition where the inverter is in Mode `'3'` but no active charging
 
 Enables active export of PV surplus when the battery is full. SOC and PV hysteresis prevent unstable toggling.
 
-* **Standard Entry:** SOC ≥ export threshold AND (PV > (Output + Grid + PV-Hysteresis) OR PV = 0)
+* **Standard Entry:** SOC ≥ export threshold AND (PV > (Output + Grid + PV-Hysteresis) OR (PV = 0 AND PV=0 entry latch armed, see section 12))
 * **Forecast Entry (optional):** Surplus forecast sensor ≥ threshold AND PV > Hard Limit AND SOC > zone-3 limit → Zone 0 entry **without export threshold**
 * **Exit:** (PV ≤ (Output + Grid − PV-Hysteresis) AND NOT exit lock) OR SOC < (export threshold − SOC-Hysteresis) — both terms are blocked while surplus forecast is forced (see section 7); the optional exit lock (see section 11) blocks only the PV term
 * **Persistence:** State stored in `input_boolean` — survives multiple automation runs
@@ -220,7 +229,7 @@ Enables active export of PV surplus when the battery is full. SOC and PV hystere
 
 ### 4. ⚡ AC Charging (Optional)
 
-Charges the battery when external grid feed-in is detected. Detection is based on `(Grid + Output) < −Hysteresis` — i.e. after subtracting the Solakon's contribution, surplus still remains. Typical use case: external PV system feeds surplus into the grid.
+Charges the battery when external grid feed-in is detected. Detection is based on `(Grid + ΣOutput_discharging) < −Hysteresis` — i.e. after subtracting the Solakon's contribution, surplus still remains — single-instance: own output power, multi-instance: sum across all instances in discharge mode (prevents a sibling instance's discharge from being read as external grid surplus — see `total_actual_power_entity` in the Multi-Instancing section). Typical use case: external PV system feeds surplus into the grid.
 
 * **Entry condition (Case G):**
   - AC Charging enabled AND SOC < charge target
@@ -327,6 +336,17 @@ Keeps Zone 0 alive through short PV dips (clouds) instead of exiting.
 * **Sensor:** Currently forecast PV power in W, e.g. Solcast `power_now`.
 * **Fallback:** Sensor unavailable/unknown → lock inactive, normal exit logic applies.
 
+### 12. 🌙 Surplus PV=0 Entry Latch (Optional)
+
+Prevents oscillation between Case 0A/0B at night with a full battery when PV reads 0 persistently.
+
+* **Prerequisite:** Surplus Export must also be enabled.
+* **Helper:** input_boolean, default initial value `on` (armed).
+* **Arming:** As soon as PV > 0 is measured → helper → `on`.
+* **Disarming (Case 0B):** On exit while PV = 0 → helper → `off`.
+* **Effect (Case 0A):** The PV=0 entry branch only fires while the helper is `on`. After a nightly exit it stays locked until real PV > 0 is measured again — without the latch, a renewed PV=0 reading would immediately re-enter Zone 0 right after exiting (oscillation on a seconds-to-minutes timescale).
+* **Fallback:** Helper not set up/unavailable → latch inactive, PV=0 entry behaves as before, unprotected.
+
 ---
 
 ## 📊 Input Variables and Configuration
@@ -372,7 +392,8 @@ Keeps Zone 0 alive through short PV dips (clouds) instead of exiting.
 
 | Parameter | Default | Min | Max | Description |
 |:----------|:--------|:----|:----|:------------|
-| **Zone 1 Start** | 50 % | 1 % | 99 % | Exceeding activates Zone 1. |
+| **Zone 1 Start (Static)** | 50 % | 1 % | 99 % | Exceeding activates Zone 1. Fallback if no dynamic override is set/available. |
+| **Zone 1 Start (Dynamic)** | *(empty)* | — | — | Optional `input_number` entity. Overrides the static value (e.g. via automation lowered in the evening if the battery didn't reach the default threshold on a cloudy day but tomorrow's PV forecast is high). |
 | **Zone 3 Stop** | 20 % | 1 % | 49 % | Falling below stops discharge completely. |
 | **Max. Discharge Current Zone 1** | 40 A | 0 A | 40 A | Zone 2 and AC Charging automatically use 0 A. |
 
@@ -411,6 +432,7 @@ Keeps Zone 0 alive through short PV dips (clouds) instead of exiting.
 | **SOC Threshold Surplus** | 90 % | 50 % | 99 % | From this SOC with PV surplus → Zone 0. Recommendation: ~5% below the app charge limit (rationale in section 3). |
 | **Hysteresis Surplus Exit (SOC)** | 5 % | 1 % | 20 % | SOC must fall by this amount below entry threshold before Zone 0 is exited. |
 | **PV Surplus Hysteresis** | 50 W | 10 W | 200 W | Deadband around house consumption for entry and exit. |
+| **PV=0 Entry Latch Helper** | *(empty)* | — | — | Optional `input_boolean`. Locks the PV=0 entry branch after a nightly exit until PV > 0 is measured again (see section 12). Not set up → PV=0 entry stays unprotected. |
 | **Enable Surplus Forecast Entry** | false | — | — | Forces Zone 0 entry on high forecast without export threshold (SOC must stay above zone 3). |
 | **Surplus Forecast Sensor** | *(empty)* | — | — | PV surplus forecast in W (e.g. Solcast). |
 | **Surplus Forecast Threshold** | 5000 W | 0 | 20000 W | Minimum forecast value for forced Zone 0 entry. |
@@ -638,7 +660,7 @@ Condition: ac_charge_enabled
        AND Mode ≠ '3' ← Guard: prevents re-entry when AC Charging already active
        AND NOT tariff_charge_mode_active
        AND NOT surplus_active
-       AND (grid + actual_power) < -ac_charge_hysteresis
+       AND (grid + total_actual_power) < -ac_charge_hysteresis ← Σ across all instances in discharge mode (single-instance: own output)
 ```
 
 ### Case H — Exit Condition
@@ -757,6 +779,7 @@ equal-split mode, since no SOC sensors feed into the weighting there.
 | `...instance_N_share` | `input_number` | min:0, max:1, step:0.001 | Zero-Export error share from distribution → PI controller (Pool 1) |
 | Capacity sensor (optional) | `sensor` | kWh — from Solakon integration | Accurate kWh weighting for different battery capacities |
 | `...instance_N_ac_share` (AC charging only) | `input_number` | min:0, max:1, step:0.001 | AC-charging error share from distribution → PI controller (Pool 2) |
+| `total_actual_power` (optional, one shared helper, not per instance) | `input_number` | min:0, max:≥Global-Max, step:1 | Sum of actual output power across all instances in discharge mode, from distribution → each instance's `total_actual_power_entity` (Case G entry) |
 
 For Pool 2, the same AC charge state helper (`input_boolean`, see helper list item 5) is also
 entered in the power distribution automation — it identifies which instances are currently
@@ -772,6 +795,7 @@ charging at the same time.
    - Assign `limit` and `share` helpers per instance
    - Optional: enter the capacity sensor from the Solakon ONE integration per instance — recommended for different battery capacities
    - For AC charging: additionally assign the AC charge state helper and `ac_share` helper per charging instance
+   - Recommended (prevents battery-to-battery pumping in Case G): enter the actual-power sensor per instance, plus create a shared `total_actual_power` helper and enter it in each instance automation as "Σ Output Discharging — Dynamic" (`total_actual_power_entity`)
 
 ---
 
@@ -804,3 +828,5 @@ charging at the same time.
 | SOC High | `soc_high` | Zone 1 Start (SOC > Zone 1 threshold) |
 | SOC Low | `soc_low` | Zone 3 Start (SOC < Zone 3 threshold) |
 | Mode Change | `mode_change` | Reacts to external mode changes, triggers Recovery (Case D) or Safety correction (Case I) if applicable |
+
+> **Note on the dynamic Zone 1 threshold:** `soc_high` only triggers on the static fallback value, since HA triggers don't support templates. If an override is set via `input_number`, the Zone 1 threshold is evaluated correctly on the next grid/PV trigger — the same delay pattern as the tariff logic.

@@ -9,17 +9,19 @@ flowchart TD
     end
     style SG_ENTRY fill:none,stroke:#aaaaaa,stroke-width:5,stroke-dasharray:6,color:#000
 
-    VAL -- OK --> SURPLUS_UPDATE
+    VAL -- OK --> LATCH_ARM
 
     %% ══════════════════════════════════════════════════════════════════════
     subgraph SG_ZONE0 ["☀️ Zone 0 — Surplus Status Update   (Cases 0A / 0B)"]
+        LATCH_ARM{{"🌙 Arm PV=0 latch   when PV > 0"}}
         SURPLUS_UPDATE{{"☀️ Zone 0 Status Update   (Cases 0A / 0B)"}}
         S0A["☀️ Zone 0 activate   Surplus-Bool → on"]
-        S0B["☁️ Zone 0 deactivate   Surplus-Bool → off   Integral = 0"]
+        S0B["☁️ Zone 0 deactivate   Surplus-Bool → off   Integral = 0   PV=0 latch → off if PV=0"]
     end
     style SG_ZONE0 fill:none,stroke:#f0ad4e,stroke-width:5,stroke-dasharray:6,color:#000
 
-    SURPLUS_UPDATE -- "CASE 0A   Surplus-Bool = off   AND (SOC ≥ Export Threshold AND (PV > Output+Grid+PV-Hysteresis OR PV=0)   OR Surplus-Forecast-Forced: forecast ≥ threshold AND PV > Hard Limit AND SOC > zone-3)" --> S0A
+    LATCH_ARM --> SURPLUS_UPDATE
+    SURPLUS_UPDATE -- "CASE 0A   Surplus-Bool = off   AND (SOC ≥ Export Threshold AND (PV > Output+Grid+PV-Hysteresis OR (PV=0 AND PV=0 latch armed)))   OR Surplus-Forecast-Forced: forecast ≥ threshold AND PV > Hard Limit AND SOC > zone-3)" --> S0A
     SURPLUS_UPDATE -- "CASE 0B   Surplus-Bool = on   AND NOT Surplus-Forecast-Forced   AND ((PV ≤ Output + Grid − PV-Hysteresis AND NOT Exit Lock: forecast ≥ factor × Hard Limit AND SOC > zone-3) OR SOC < Export Threshold − SOC-Hysteresis)" --> S0B
     SURPLUS_UPDATE -- "No Surplus Update" --> ZONE_CHECK
     S0A --> ZONE_CHECK
@@ -43,7 +45,7 @@ flowchart TD
         RECOVERY["🔄 Recovery — Mode Reactivation   Timer-Toggle (3598↔3599)   AC-Charge-Bool = on OR Tariff-Charge-Bool = on → Mode '3'   otherwise → Mode '1'   (no integral reset, no zone change)"]
 
         %% ── Case E: Zone 2 ───────────────────────────────────────────────
-        Z2_START["🔋 Zone 2 activate   Integral = 0   Timer-Toggle (3598↔3599)   Mode → '1' (INV Discharge PV Priority)"]
+        Z2_START["🔋 Zone 2 activate   Integral = 0   Output → 0 W   Timer-Toggle (3598↔3599)   Mode → '1' (INV Discharge PV Priority)"]
 
         %% ── Case F: Night Shutdown ─────────────────────────────────────
         NIGHT["🌙 Night Shutdown   Integral = 0   Output → 0 W   Timer-Toggle (3598↔3599)   Mode → '0' (Disabled)"]
@@ -95,7 +97,7 @@ flowchart TD
     ZONE_CHECK -- "CASE GT   Tariff Arbitrage enabled   AND price < cheap threshold   AND SOC < tariff charge target   AND Mode ≠ '3' ← Guard!   AND NOT Surplus-Bool = on   AND NOT PV-Forecast-Suppressed" --> TARIFF_START
     ZONE_CHECK -- "CASE HT   Mode = '3'   AND Tariff-Charge-Bool = on   AND (price ≥ cheap threshold OR SOC ≥ tariff charge target)" --> TARIFF_END
     ZONE_CHECK -- "CASE TM   Tariff active   AND cheap ≤ price < expensive   AND no AC/Tariff charging   AND NOT Surplus-Bool = on   AND Mode = '1'   AND NOT PV-Forecast-Suppressed" --> TARIFF_MID
-    ZONE_CHECK -- "CASE G   AC Charging enabled   AND SOC < charge target   AND Mode ≠ '3' ← Guard!   AND NOT Tariff-Charge-Bool = on   AND NOT Surplus-Bool = on   AND (Grid + Output) < −Hysteresis" --> AC_START
+    ZONE_CHECK -- "CASE G   AC Charging enabled   AND SOC < charge target   AND Mode ≠ '3' ← Guard!   AND NOT Tariff-Charge-Bool = on   AND NOT Surplus-Bool = on   AND (Grid + ΣOutput_discharging) < −Hysteresis" --> AC_START
     ZONE_CHECK -- "CASE H   Mode = '3'   AND (SOC ≥ charge target OR (Grid ≥ AC-Offset + Hysteresis AND Output ≤ 0 W))" --> AC_END
     ZONE_CHECK -- "CASE I   Mode = '3'   AND NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on" --> SAFETY_I
     ZONE_CHECK -- "CASE E   NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on   AND NOT Discharge Lock (price < expensive)   AND Zone 3 < SOC ≤ Zone 1 AND Cycle = off AND Mode = '0' AND NOT night" --> Z2_START

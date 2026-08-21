@@ -53,6 +53,8 @@ blueprint:
     | **2 — Conserving** | Zone 3 < SOC ≤ Zone 1, Cycle = off | `'1'` | 0 A | Dynamic limit: `Min(Hard Limit, Max(0, PV − Reserve))`. Optional: Night Shutdown. |
     | **3 — Safety Stop** | SOC ≤ Zone 3 threshold | `'0'` | 0 A | Output = 0 W. Full battery protection. Always takes priority. |
 
+    The Zone 1 threshold can be set statically or via a **dynamic helper** (`input_number`, `soc_fast_limit_entity`) — a set helper automatically overrides the static value (e.g. for a separate automation that lowers the threshold in the evening if tomorrow's PV forecast is high but the battery stayed below the default threshold).
+
     **Control Cases (order is critical):**
     - **A** — Zone 1 Start: SOC > Zone 1 threshold AND Cycle = `off` AND no AC/Tariff charging AND no discharge lock → Integral = 0, Cycle = `on`, reset Surplus/AC booleans, Timer-Toggle, Mode → `'1'`
     - **B** — Zone 3 Stop: SOC < Zone 3 threshold AND Cycle = `on` AND no AC/Tariff charging → Integral = 0, Cycle = `off`, reset Surplus/AC booleans, Output → 0W, Timer-Toggle, Mode → `'0'`
@@ -104,11 +106,13 @@ blueprint:
     <summary><b>⚡ AC Charging (Optional)</b> 👈</summary>
 
     Charges the battery when external grid feed-in is detected.
-    Detection: `(Grid + Output) < −Hysteresis` — i.e. after subtracting the Solakon's contribution, surplus remains.
+    Detection: `(Grid + ΣOutput_discharging) < −Hysteresis` — i.e. after subtracting the Solakon's contribution, surplus remains.
+    ΣOutput_discharging: single-instance = own output power, multi-instance = sum of all instances in discharge mode.
     Typical use case: external PV system feeds surplus into the grid.
 
-    - **Entry (Case G):** AC Charging enabled AND SOC < charge target AND Mode ≠ `'3'` AND (Grid + Output) < −Hysteresis AND no Tariff charging AND no surplus
+    - **Entry (Case G):** AC Charging enabled AND SOC < charge target AND Mode ≠ `'3'` AND (Grid + ΣOutput_discharging) < −Hysteresis AND no Tariff charging AND no surplus
       - Guard `Mode ≠ '3'` prevents re-entry when AC Charging is already active
+      - Multi-instance: `ΣOutput_discharging` prevents a sibling instance's discharge from being read as external grid surplus (optional helper `total_actual_power_entity`, written by the power distribution automation)
     - **Stay:** Mode `'3'` while SOC < charge target AND Grid < (Offset + Hysteresis)
     - **Exit (Case H):** SOC ≥ charge target OR (Grid ≥ Offset + Hysteresis AND Output ≤ 0 W)
       - `Output ≤ 0 W` guard prevents false trigger while PI is still controlling; `≤` instead of exact `= 0` is more robust against isolated one-second zero readings caused by Modbus noise
@@ -197,6 +201,20 @@ blueprint:
     - **Risk:** If the sensor reports a stuck, too-high value, Zone 0 stays active for just as long — until the SOC exit kicks in
     - **Only active when:** Surplus export is also enabled
     - **Fallback:** Sensor `unknown`/`unavailable` → lock inactive, normal exit logic applies
+
+    </details>
+
+    <details>
+    <summary><b>🌙 Surplus PV=0 Entry Latch (Optional)</b> 👈</summary>
+
+    Prevents oscillation between Case 0A/0B at night with a full battery (PV = 0 persistently).
+
+    - **Helper:** input_boolean, default "armed" (`on`)
+    - **Arming:** As soon as PV > 0 is measured → helper → `on`
+    - **Disarming (Case 0B):** On exit while PV = 0 → helper → `off`
+    - **Effect (Case 0A):** The PV=0 entry branch only fires while the helper is `on`. After a nightly exit it stays locked until real PV > 0 is measured again — the plain SOC/PV comparison branch is unaffected
+    - **Only active when:** Surplus export is also enabled
+    - **Fallback:** Helper not set up → latch inactive, PV=0 entry behaves as before, unprotected
 
     </details>
 
@@ -394,16 +412,32 @@ blueprint:
         collapsed: true
         input:
           soc_fast_limit:
-            name: 🔋 SOC Threshold "Zone 1 Start"
+            name: 🔋 SOC Threshold "Zone 1 Start" Static (Fallback)
             description: |
               Upper threshold (e.g. 50%). Exceeding activates Zone 1.
               Zone 1 runs until SOC falls below the Zone 3 threshold (no yo-yo effect).
+              Used when no dynamic override is set or it is unavailable.
             default: 50
             selector:
               number:
                 min: 1
                 max: 99
                 unit_of_measurement: "%"
+
+          soc_fast_limit_entity:
+            name: 🔋 Dynamic SOC Threshold "Zone 1 Start" (Optional Override)
+            description: |
+              Optional entity (e.g. input_number). If set, its value overrides the static threshold.
+              Example: a separate automation lowers the threshold in the evening if tomorrow's PV
+              forecast is high, so the battery discharges overnight despite not reaching the
+              default threshold.
+              ⚠️ The internal wake-up trigger on the SOC threshold stays on the static fallback
+              value — grid/PV power changes trigger every second anyway, which is where the
+              dynamic threshold gets evaluated.
+            default: {}
+            selector:
+              entity:
+                domain: input_number
 
           soc_conservation_limit:
             name: 🔋 SOC Threshold "Zone 3 Stop"
@@ -553,6 +587,22 @@ blueprint:
               entity:
                 domain: input_number
 
+      total_actual_power_entity:
+            name: 🔀 Σ Output Discharging — Dynamic (Multi-Instancing)
+            description: |
+              ⚠️ ONLY required for multi-instancing — leave empty in single-instance operation.
+              Optional input_number entity holding the sum of actual output power across
+              all instances currently in discharge mode (mode '1').
+              Calculated and written by the power distribution automation.
+              Prevents Case G (AC-charge entry) from reading a sibling instance's
+              discharge as external grid surplus.
+              ⚠️ If left empty, Case G uses only this instance's own output value
+              (single-instance behavior).
+            default: {}
+            selector:
+              entity:
+                domain: input_number
+
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # ☀️ SURPLUS EXPORT (Optional - Zone 0)
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -617,6 +667,19 @@ blueprint:
               ⚠️ Only required when Surplus Export is enabled.
               - Name: e.g. 'Solakon Surplus Active'
             default: input_boolean.solakon_surplus_active
+            selector:
+              entity:
+                domain: input_boolean
+
+          surplus_zero_entry_armed_helper:
+            name: ☀️ Surplus PV=0 Entry Latch (input_boolean - Zone 0 only)
+            description: |
+              input_boolean helper for persistently locking the PV=0 entry branch after a
+              nightly exit, until real PV > 0 is measured again. Prevents oscillation
+              between Case 0A/0B at a full battery overnight.
+              ⚠️ Only required when Surplus Export is enabled. If the helper is missing
+              (not set up), entry behaves as before, unprotected.
+            default: input_boolean.solakon_surplus_zero_entry_armed
             selector:
               entity:
                 domain: input_boolean
@@ -998,7 +1061,14 @@ variables:
     {{ v * 1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else v }}
 
   # Zone thresholds
-  soc_fast_limit_int: !input soc_fast_limit
+  soc_fast_limit_static: !input soc_fast_limit
+  soc_fast_limit_entity_id: !input soc_fast_limit_entity
+  soc_fast_limit_int: >
+    {% if soc_fast_limit_entity_id is string and soc_fast_limit_entity_id | length > 0 and states(soc_fast_limit_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+      {{ states(soc_fast_limit_entity_id) | float(soc_fast_limit_static) }}
+    {% else %}
+      {{ soc_fast_limit_static }}
+    {% endif %}
   soc_conservation_limit_int: !input soc_conservation_limit
 
   # Current sensor values for conditions
@@ -1034,6 +1104,15 @@ variables:
        surplus_state_entity is string and
        surplus_state_entity | length > 0 and
        states(surplus_state_entity) not in ['unknown', 'unavailable'] }}
+
+  # Surplus PV=0 entry latch
+  surplus_zero_entry_armed_entity: !input surplus_zero_entry_armed_helper
+  surplus_zero_entry_armed_valid: >
+    {{ surplus_zero_entry_armed_entity is string and
+       surplus_zero_entry_armed_entity | length > 0 and
+       states(surplus_zero_entry_armed_entity) not in ['unknown', 'unavailable'] }}
+  surplus_zero_entry_armed: >
+    {{ (not surplus_zero_entry_armed_valid) or is_state(surplus_zero_entry_armed_entity, 'on') }}
 
   # AC Charging
   ac_charge_enabled_bool: !input ac_charge_enabled
@@ -1076,6 +1155,16 @@ variables:
       {{ states(ac_error_share_entity_id) | float(1.0) }}
     {% else %}
       1.0
+    {% endif %}
+
+  # Σ output of all discharging instances (Case G) — single-instance: own value
+  total_actual_power_entity_id: !input total_actual_power_entity
+  total_actual_power_float: >
+    {% if total_actual_power_entity_id is string and total_actual_power_entity_id | length > 0
+         and states(total_actual_power_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+      {{ states(total_actual_power_entity_id) | float(actual_power_float) }}
+    {% else %}
+      {{ actual_power_float }}
     {% endif %}
 
   # Tariff Arbitrage
@@ -1190,7 +1279,9 @@ triggers:
     entity_id: !input solar_power_sensor
     id: solar_power_change
 
-  # SOC exceeds Zone 1 threshold
+  # SOC exceeds Zone 1 threshold (wake-up only on the static fallback value;
+  # with a dynamic override via soc_fast_limit_entity it takes effect through the
+  # grid/PV triggers that fire every second anyway — see soc_fast_limit_int)
   - trigger: numeric_state
     entity_id: !input soc_sensor
     above: !input soc_fast_limit
@@ -1235,6 +1326,17 @@ actions:
           - stop: "Critical error or invalid configuration."
 
   # -------------------------------------------------------------------------------------------------
+  # 0-PRE. ARM LATCH as soon as real PV > 0 is measured again
+  # -------------------------------------------------------------------------------------------------
+  - if:
+      - condition: template
+        value_template: "{{ surplus_zero_entry_armed_valid and solar_power_float > 0 }}"
+    then:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: !input surplus_zero_entry_armed_helper
+
+  # -------------------------------------------------------------------------------------------------
   # 0. SURPLUS LOGIC (ZONE 0) STATUS UPDATE
   # -------------------------------------------------------------------------------------------------
   - choose:
@@ -1248,7 +1350,8 @@ actions:
           - condition: template
             value_template: >
               {{ ((states(soc) | float(0) >= soc_export_limit_int) and
-                  (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int) or solar_power_float == 0)) or
+                  (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int) or
+                   (solar_power_float == 0 and surplus_zero_entry_armed))) or
                  surplus_forecast_forced | bool(false) }}
         sequence:
           # 1. Logbook entry
@@ -1293,6 +1396,14 @@ actions:
               entity_id: !input integral_helper
             data:
               value: 0
+          # 4. Disarm latch if exiting at PV=0
+          - if:
+              - condition: template
+                value_template: "{{ surplus_zero_entry_armed_valid and solar_power_float == 0 }}"
+            then:
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: !input surplus_zero_entry_armed_helper
 
   # -------------------------------------------------------------------------------------------------
   # MAIN LOGIC: Mode and Cycle Control
@@ -1800,6 +1911,7 @@ actions:
       # Guard: Mode ≠ '3' — prevents re-entry when AC Charging already active
       # Guard: NOT Tariff-Charge-Bool = on — Tariff charging has priority
       # Guard: NOT Surplus-Bool = on — Zone 0 blocks charging
+      # total_actual_power_float sums across all discharging instances (single-instance: own value)
       - conditions:
           - condition: template
             value_template: "{{ ac_charge_enabled_bool }}"
@@ -1814,7 +1926,7 @@ actions:
           - condition: template
             value_template: "{{ states(solakon_mode) != '3' }}"
           - condition: template
-            value_template: "{{ (grid_power_float + actual_power_float) < (-1 * (ac_charge_hysteresis_int | float(0))) }}"
+            value_template: "{{ (grid_power_float + total_actual_power_float) < (-1 * (ac_charge_hysteresis_int | float(0))) }}"
         sequence:
           # 1. Logbook entry
           - action: logbook.log
@@ -2083,7 +2195,13 @@ actions:
               entity_id: !input integral_helper
             data:
               value: 0
-          # 3. Mode → '1' (Timer-Toggle 3598↔3599)
+          # 3. Output → 0 W
+          - action: number.set_value
+            target:
+              entity_id: !input active_power_number
+            data:
+              value: 0
+          # 4. Mode → '1' (Timer-Toggle 3598↔3599)
           - choose:
               - conditions: "{{ states(solakon_mode) != '1' }}"
                 sequence:
