@@ -5,7 +5,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Case H exit (AC charging end): comparison changed from `Output = 0 W` to `Output ≤ 0 W` — more robust against isolated one-second zero readings caused by Modbus noise in power sensors, matching the comparison operator already used at other guard points in the blueprint (e.g. the Zone-0 `solar==0` branch)
+
 ### Added
+- Logbook warning on degraded distribution (`solakon_power_distribution.yaml`): if an active instance's SOC sensor becomes unavailable in SOC-weighted mode, it previously fell to weight 0 silently — now also surfaced as a logbook entry. Message-only feature, distribution behavior itself is unchanged
 - Surplus exit lock (optional, Issue #11 in the integration repo): new inputs `surplus_lock_enabled`, `surplus_lock_sensor`, `surplus_lock_factor`. While the currently forecast PV power is ≥ lock factor × Hard Limit (default 1.5) AND SOC > zone-3 limit, only the PV exit in Case 0B is blocked — short PV dips (clouds) are ridden out in Zone 0 instead of exiting. Background: exiting with a full battery enters a state where the hardware throttles PV down to consumption and the surplus becomes unmeasurable; since the battery only discharges through the 2 A stability buffer during a cloud, the SOC stays practically pinned at the maximum and re-entry is delayed by minutes. The SOC exit stays unblocked; sensor unavailable → lock inactive (parity with the integration)
 
 ### Changed

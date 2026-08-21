@@ -12,6 +12,9 @@ blueprint:
     Distribution via toggle: equal split or SOC-weighted (usable capacity) — applies to both pools.
     Weighting based on usable energy: (SOC - Min-SOC) / 100 x capacity_kWh per instance.
     Without capacity sensor: capacity = 100 — weighting by SOC percentage points.
+    In SOC-weighted mode, an active instance with an unavailable SOC sensor silently
+    falls to weight 0 (distribution behavior unchanged) — now additionally surfaced
+    as a logbook warning.
     Each instance receives a share proportional to its usable energy —
     both for the power limit (Pool 1) and for the grid-error share (error_share, both pools).
     Execution interval: trigger every 10 s, interval controlled via last_updated of share entity (instance 1).
@@ -504,6 +507,19 @@ actions:
         {{ [i1_active, i2_active, i3_active, i4_active]
            | select('equalto', true) | list | count }}
 
+      # Degradation detection: in weighted mode (not equal_dist), an active
+      # instance with an unavailable SOC sensor silently falls to weight 0 —
+      # this only surfaces it (behavior unchanged, message-only fix).
+      degraded_instances: >
+        {% set ns = namespace(list=[]) %}
+        {% if not equal_dist %}
+          {% if i1_active and (is_state(i1_soc, 'unknown') or is_state(i1_soc, 'unavailable')) %}{% set ns.list = ns.list + ['1'] %}{% endif %}
+          {% if i2_active and (is_state(i2_soc, 'unknown') or is_state(i2_soc, 'unavailable')) %}{% set ns.list = ns.list + ['2'] %}{% endif %}
+          {% if i3_active and (is_state(i3_soc, 'unknown') or is_state(i3_soc, 'unavailable')) %}{% set ns.list = ns.list + ['3'] %}{% endif %}
+          {% if i4_active and (is_state(i4_soc, 'unknown') or is_state(i4_soc, 'unavailable')) %}{% set ns.list = ns.list + ['4'] %}{% endif %}
+        {% endif %}
+        {{ ns.list }}
+
       # total_soc = sum of usable capacities (SOC − Min-SOC, inactive = 0).
       # Used as denominator for weight calculation (proportional share).
       total_soc: "{{ soc1 + soc2 + soc3 + soc4 }}"
@@ -642,6 +658,18 @@ actions:
           {% set eq = 1.0 / ac_active_count %}
           {{ ac_soc4 / ac_total_soc if ac_total_soc > 0 else eq }}
         {% endif %}
+
+  # ── Degradation warning ───────────────────────────────────────────────────
+  - if:
+      - condition: template
+        value_template: "{{ degraded_instances | length > 0 }}"
+    then:
+      - action: logbook.log
+        data:
+          name: Solakon Distribution
+          message: >
+            ⚠️ Distribution degraded: SOC sensor instance {{ degraded_instances | join(', ') }}
+            unavailable, weight=0
 
   # ── Write ─────────────────────────────────────────────────────────────────
 

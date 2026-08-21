@@ -110,8 +110,8 @@ blueprint:
     - **Entry (Case G):** AC Charging enabled AND SOC < charge target AND Mode ≠ `'3'` AND (Grid + Output) < −Hysteresis AND no Tariff charging AND no surplus
       - Guard `Mode ≠ '3'` prevents re-entry when AC Charging is already active
     - **Stay:** Mode `'3'` while SOC < charge target AND Grid < (Offset + Hysteresis)
-    - **Exit (Case H):** SOC ≥ charge target OR (Grid ≥ Offset + Hysteresis AND Output = 0 W)
-      - `Output = 0 W` guard prevents false trigger while PI is still controlling
+    - **Exit (Case H):** SOC ≥ charge target OR (Grid ≥ Offset + Hysteresis AND Output ≤ 0 W)
+      - `Output ≤ 0 W` guard prevents false trigger while PI is still controlling; `≤` instead of exact `= 0` is more robust against isolated one-second zero readings caused by Modbus noise
     - **PI Control:** `ac_charge_mode=true` → inverted error: `target_offset − grid`
       - Positive error (Grid too negative) → increase charge power
       - `at_max/at_min` guards disabled (direction inverted)
@@ -740,7 +740,7 @@ blueprint:
             description: |
               Deadband for entry and exit.
               Entry: (Grid + Output) < −Hysteresis.
-              Exit: Grid ≥ (Offset + Hysteresis) AND Output = 0 W.
+              Exit: Grid ≥ (Offset + Hysteresis) AND Output ≤ 0 W.
               Prevents flickering with varying feed-in (e.g. 50 W).
             default: 50
             selector:
@@ -1871,7 +1871,7 @@ actions:
           - condition: template
             value_template: >
               {{ states(soc) | float(0) >= soc_ac_charge_limit_int or
-                 (grid_power_float >= (ac_charge_offset_int | float(0) + ac_charge_hysteresis_int | float(0)) and (actual_power_float | float(0) == 0)) }}
+                 (grid_power_float >= (ac_charge_offset_int | float(0) + ac_charge_hysteresis_int | float(0)) and (actual_power_float | float(0) <= 0)) }}
         sequence:
           # 1. Logbook entry
           - action: logbook.log
