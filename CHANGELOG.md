@@ -5,6 +5,8 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 ## [Unreleased]
 
+## [V309] – 2026-08-21
+
 ### Behoben
 - Fall-H-Austritt (AC Laden Ende): Vergleich `eigener Output = 0 W` auf `eigener Output ≤ 0 W` geändert — robuster gegen isolierte Ein-Sekunden-Nullwerte durch Modbus-Rauschen in Leistungssensoren, entspricht damit demselben Vergleichsoperator wie an anderen Guard-Stellen im Blueprint (z. B. Zone-0-`solar==0`-Zweig)
 - Fall-0A-Eintritt (Zone 0, PV=0-Zweig) oszillierte nachts bei vollem Speicher zwischen Zone 0 und Zone 3/1, wenn PV dauerhaft 0 misst (Issue #17, ursprünglich gegen die Integration gemeldet — Blueprint hatte dieselbe Schwachstelle, sogar ungeschützter, da es nicht mal die dortige Zwei-Zyklen-Entprellung besaß). Fix: neuer optionaler Helfer `surplus_zero_entry_armed_helper` (input_boolean) als Latch — scharf sobald PV > 0 gemessen wird, entschärft bei Austritt (Fall 0B) während PV = 0. Der PV=0-Eintrittszweig (Fall 0A) greift nur solange der Latch scharf ist, bleibt nach einem nächtlichen Austritt gesperrt bis wieder echtes PV > 0 gemessen wurde. Rein additiv, Fallback auf bisheriges (ungeschütztes) Verhalten wenn Helfer nicht angelegt
