@@ -5,6 +5,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [V309] – 2026-08-21
+
 ### Fixed
 - Case H exit (AC charging end): comparison changed from `Output = 0 W` to `Output ≤ 0 W` — more robust against isolated one-second zero readings caused by Modbus noise in power sensors, matching the comparison operator already used at other guard points in the blueprint (e.g. the Zone-0 `solar==0` branch)
 - **Catch-up port from the DE blueprint (this repo's variants had drifted out of sync):**
