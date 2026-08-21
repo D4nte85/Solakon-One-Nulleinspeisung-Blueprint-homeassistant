@@ -221,7 +221,7 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 | **HT** | Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Tarif-Ladeziel) | Tarif-Laden Ende: Tarif-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
 | **TM** | Tarif aktiv UND Günstig ≤ Preis < Teuer-Schwelle UND kein AC/Tarif-Laden UND **NICHT Surplus-Bool = `on`** UND **Modus = `'1'`** UND **NICHT PV-Forecast-Suppressed** | Discharge-Lock: Integral = 0, Zyklus = `off` (wenn aktiv), Output → 0W, Timer-Toggle, Modus → `'0'` |
 | **G** | AC aktiv UND SOC < Ladeziel UND **Modus ≠ `'3'`** UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + ΣOutput_entladend) < −Hysterese | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
-| **H** | Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ `ac_charge_offset + Hysterese` UND eigener Output = 0 W)) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
+| **H** | Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ `ac_charge_offset + Hysterese` UND eigener Output ≤ 0 W)) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
 | **I** | Modus = `'3'` UND NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` | Safety-Korrektur: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W (Timer-Toggle) |
 | **E** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Output → 0W, Timer-Toggle, Modus → `'1'` |
 | **F** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Surplus-Bool = `on` UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Output → 0W, Timer-Toggle, Modus → `'0'` |
@@ -693,6 +693,13 @@ eigenen, korrekt berechneten Anteil. Beide Pools verwenden dieselbe Gewichtungsl
 
 Die beiden Pools überschneiden sich nie — eine Instanz ist zu jedem Zeitpunkt entweder in Pool 1,
 in Pool 2 oder in keinem von beiden (z. B. Zone 3 gestoppt, Tarif-Laden).
+
+**Degradations-Warnung:** Bei SOC-gewichteter Verteilung fällt eine aktive Instanz mit nicht
+verfügbarem (`unknown`/`unavailable`) SOC-Sensor lautlos auf Gewicht 0 — das Verteilungsverhalten
+selbst ändert sich dadurch nicht, wird aber jetzt zusätzlich als Logbuch-Eintrag
+(„⚠️ Verteilung degradiert: SOC-Sensor Instanz N nicht verfügbar, Gewicht=0") sichtbar gemacht.
+Bei Gleichverteilung greift die Prüfung nicht, da dort keine SOC-Sensoren in die Gewichtung
+einfließen.
 
 ### Erforderliche Helper pro Instanz (zusätzlich zu Einzelinstanz)
 

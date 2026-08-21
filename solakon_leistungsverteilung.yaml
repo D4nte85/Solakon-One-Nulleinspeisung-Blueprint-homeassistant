@@ -12,6 +12,9 @@ blueprint:
     Verteilung per Umschalter: Gleichverteilung oder SOC-gewichtet (nutzbare Kapazitaet) — gilt fuer beide Pools.
     Gewichtung basiert auf nutzbarer Energie: (SOC - Min-SOC) / 100 x Kapazitaet_kWh pro Instanz.
     Ohne Kapazitaetssensor: Kapazitaet = 100 — Gewichtung nach SOC-Prozentpunkten.
+    Bei SOC-gewichteter Verteilung faellt eine aktive Instanz mit nicht verfuegbarem
+    SOC-Sensor lautlos auf Gewicht 0 (Verteilungsverhalten unveraendert) — wird jetzt
+    zusaetzlich als Logbuch-Warnung sichtbar gemacht.
     Jede Instanz erhaelt einen Anteil proportional zu ihrer nutzbaren Energie —
     sowohl fuer das Leistungslimit (Pool 1) als auch fuer den Netzfehler-Anteil (error_share, beide Pools).
     Ausfuehrungsintervall: Trigger alle 10 s, Intervallkontrolle per last_updated der Share-Entity (Instanz 1).
@@ -601,6 +604,19 @@ actions:
         {{ [i1_active, i2_active, i3_active, i4_active]
            | select('equalto', true) | list | count }}
 
+      # Degradations-Erkennung: im gewichteten Modus (nicht equal_dist) fällt eine
+      # aktive Instanz mit unverfügbarem SOC-Sensor lautlos auf Gewicht 0 — hier nur
+      # sichtbar gemacht (kein Verhaltens-, nur ein Meldungs-Fix).
+      degraded_instances: >
+        {% set ns = namespace(list=[]) %}
+        {% if not equal_dist %}
+          {% if i1_active and (is_state(i1_soc, 'unknown') or is_state(i1_soc, 'unavailable')) %}{% set ns.list = ns.list + ['1'] %}{% endif %}
+          {% if i2_active and (is_state(i2_soc, 'unknown') or is_state(i2_soc, 'unavailable')) %}{% set ns.list = ns.list + ['2'] %}{% endif %}
+          {% if i3_active and (is_state(i3_soc, 'unknown') or is_state(i3_soc, 'unavailable')) %}{% set ns.list = ns.list + ['3'] %}{% endif %}
+          {% if i4_active and (is_state(i4_soc, 'unknown') or is_state(i4_soc, 'unavailable')) %}{% set ns.list = ns.list + ['4'] %}{% endif %}
+        {% endif %}
+        {{ ns.list }}
+
       # total_soc = Summe der nutzbaren Kapazitäten (SOC − Min-SOC, inaktive = 0).
       # Wird als Nenner für die Gewichtsberechnung genutzt (proportionaler Anteil).
       total_soc: "{{ soc1 + soc2 + soc3 + soc4 }}"
@@ -739,6 +755,18 @@ actions:
           {% set eq = 1.0 / ac_active_count %}
           {{ ac_soc4 / ac_total_soc if ac_total_soc > 0 else eq }}
         {% endif %}
+
+  # ── Degradations-Warnung ──────────────────────────────────────────────────
+  - if:
+      - condition: template
+        value_template: "{{ degraded_instances | length > 0 }}"
+    then:
+      - action: logbook.log
+        data:
+          name: Solakon Verteilung
+          message: >
+            ⚠️ Verteilung degradiert: SOC-Sensor Instanz {{ degraded_instances | join(', ') }}
+            nicht verfügbar, Gewicht=0
 
   # ── Schreiben ─────────────────────────────────────────────────────────────
 

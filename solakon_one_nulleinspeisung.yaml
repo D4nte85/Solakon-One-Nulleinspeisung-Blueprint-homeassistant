@@ -114,8 +114,8 @@ blueprint:
       - Guard `Modus ≠ '3'` verhindert Re-Eintritt wenn AC Laden bereits läuft
       - Multi-Instanz: `ΣOutput_entladend` verhindert, dass die Entladung einer Schwester-Instanz als externer Netzüberschuss gewertet wird (optionaler Helfer `total_actual_power_entity`, geschrieben von der Leistungsverteilungs-Automation)
     - **Verbleib:** Modus `'3'` solange SOC < Ladeziel UND Grid < (Offset + Hysterese)
-    - **Abbruch (Fall H):** SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND eigener Output = 0 W)
-      - `Output = 0 W`-Guard verhindert Fehlauslösung während PI noch regelt (bezieht sich stets auf den eigenen Output dieser Instanz)
+    - **Abbruch (Fall H):** SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND eigener Output ≤ 0 W)
+      - `Output ≤ 0 W`-Guard verhindert Fehlauslösung während PI noch regelt (bezieht sich stets auf den eigenen Output dieser Instanz); `≤` statt exaktem `= 0` robuster gegen isolierte Ein-Sekunden-Nullwerte durch Modbus-Rauschen
     - **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`
       - Positiver Fehler (Grid zu negativ) → Ladeleistung erhöhen
       - `at_max/at_min`-Guards deaktiviert (Richtung invertiert)
@@ -1985,7 +1985,7 @@ actions:
           - condition: template
             value_template: >
               {{ states(soc) | float(0) >= soc_ac_charge_limit_int or
-                 (grid_power_float >= (ac_charge_offset_int | float(0) + ac_charge_hysteresis_int | float(0)) and (actual_power_float |float(0) == 0 ))}}
+                 (grid_power_float >= (ac_charge_offset_int | float(0) + ac_charge_hysteresis_int | float(0)) and (actual_power_float |float(0) <= 0 ))}}
         sequence:
           # 1. Logbuch-Eintrag
           - action: logbook.log
