@@ -5,6 +5,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Surplus Exit Lock (`surplus_lock_sensor`) compared the raw sensor value against `Factor × Hard Limit` (W) regardless of its unit — unlike Grid/Solar/Actual (already kW→W normalized), no unit detection existed here. A sensor reporting in `kW` (e.g. Solcast `power_now`) would almost never trigger the lock. New variable `surplus_lock_power_float` (kW→W normalized, analog to `grid_power_float`) replaces the raw sensor value in the comparison
+
 ## [V309] – 2026-08-21
 
 ### Fixed
