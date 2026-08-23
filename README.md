@@ -333,7 +333,7 @@ Keeps Zone 0 alive through short PV dips (clouds) instead of exiting.
 * **Effect (Case 0B):** Blocks **only** the PV exit. The SOC exit stays unblocked and always ends surplus — if the SOC genuinely falls below the exit threshold, the exit applies despite the lock. Zone 3 (Case C) ends surplus at any time as well.
 * **Background:** Exiting with a full battery enters a state where the inverter throttles PV down to consumption — the surplus becomes unmeasurable afterwards, and re-entry depends on random consumption transients (delays of minutes). Since the battery only discharges through the 2 A stability buffer during a cloud (section 5), the SOC stays practically pinned at the maximum and the state does not resolve itself. The lock avoids it by not letting transient dips trigger the exit in the first place.
 * **Risk:** If the sensor reports a stuck, too-high value, Zone 0 stays active for just as long — until the SOC exit kicks in.
-* **Sensor:** Currently forecast PV power in W, e.g. Solcast `power_now`.
+* **Sensor:** Currently forecast PV power in W, e.g. Solcast `power_now` (kW is normalized ×1000 automatically).
 * **Fallback:** Sensor unavailable/unknown → lock inactive, normal exit logic applies.
 
 ### 12. 🌙 Surplus PV=0 Entry Latch (Optional)
@@ -434,10 +434,10 @@ Prevents oscillation between Case 0A/0B at night with a full battery when PV rea
 | **PV Surplus Hysteresis** | 50 W | 10 W | 200 W | Deadband around house consumption for entry and exit. |
 | **PV=0 Entry Latch Helper** | *(empty)* | — | — | Optional `input_boolean`. Locks the PV=0 entry branch after a nightly exit until PV > 0 is measured again (see section 12). Not set up → PV=0 entry stays unprotected. |
 | **Enable Surplus Forecast Entry** | false | — | — | Forces Zone 0 entry on high forecast without export threshold (SOC must stay above zone 3). |
-| **Surplus Forecast Sensor** | *(empty)* | — | — | PV surplus forecast in W (e.g. Solcast). |
+| **Surplus Forecast Sensor** | *(empty)* | — | — | PV surplus forecast in W (e.g. Solcast; kW is normalized ×1000 automatically). |
 | **Surplus Forecast Threshold** | 5000 W | 0 | 20000 W | Minimum forecast value for forced Zone 0 entry. |
 | **Enable Surplus Exit Lock** | false | — | — | Blocks the PV exit while forecast ≥ factor × Hard Limit (rides out clouds). |
-| **Surplus Exit Lock Forecast Sensor** | *(empty)* | — | — | Currently forecast PV power in W (e.g. Solcast `power_now`). |
+| **Surplus Exit Lock Forecast Sensor** | *(empty)* | — | — | Currently forecast PV power in W (e.g. Solcast `power_now`; kW is normalized ×1000 automatically). |
 | **Surplus Exit Lock Factor** | 1.5 | 1.0 | 3.0 | Lock active while forecast ≥ factor × Hard Limit. Higher = more safety margin. |
 
 ---
