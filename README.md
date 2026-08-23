@@ -336,7 +336,7 @@ Erzwingt frühzeitigen Zone-0-Eintritt auf Basis einer PV-Überschuss-Prognose.
 * **Forcierungs-Flag:** `surplus_forecast_forced = (Forecast ≥ Schwelle) UND (Solar > Hard Limit) UND (SOC > Zone-3-Schwelle)` — an ein echtes Abregel-Risiko gekoppelt, nicht am rohen Vorhersagewert allein. So bleibt die Forcierung nur so lange aktiv, wie tatsächlich mehr PV anliegt als das Hard Limit zulässt. Die SOC-Untergrenze verhindert, dass die Forcierung bei tiefentladener Batterie gegen den Zone-3-Sicherheitsstopp ankämpft (Flattern 0A ↔ C).
 * **Eintritt (Fall 0A, OR-Branch):** Wenn `surplus_forecast_forced` → Zone-0-Eintritt **ohne Export-Schwelle** (die Export-SOC-Schwelle wird ignoriert; der SOC muss nur über der Zone-3-Schwelle liegen).
 * **Exit-Sperre (Fall 0B):** Solange `surplus_forecast_forced = true` werden **SOC-** und **PV-basierter** Austritt gleichermaßen blockiert. Fällt Solar unter das Hard Limit (auch nachts, PV = 0), die Vorhersage unter die Schwelle oder der SOC unter die Zone-3-Schwelle, wird das Flag sofort `false` — normale Austrittslogik (SOC- oder PV-Term) greift ohne Sonderfall.
-* **Sensor:** Z.B. Solcast `power_now_1h` oder stündlicher Überschuss-Forecast in W.
+* **Sensor:** Z.B. Solcast `power_now_1h` oder stündlicher Überschuss-Forecast in W (kW wird automatisch ×1000 normalisiert).
 * **Fallback:** Sensor unavailable/unknown → Forecast inaktiv, normale Export-Schwelle gilt.
 
 ---
@@ -350,7 +350,7 @@ Hält Zone 0 bei kurzen PV-Einbrüchen (Wolken), statt auszutreten.
 * **Wirkung (Fall 0B):** Sperrt **nur** den PV-Austritt. Der SOC-Austritt bleibt ungesperrt und beendet Surplus immer — fällt der SOC real unter die Austrittsschwelle, greift der Exit trotz Sperre. Zone 3 (Fall C) beendet Surplus zusätzlich jederzeit.
 * **Hintergrund:** Der Austritt bei vollem Akku führt in einen Zustand, in dem der Wechselrichter die PV auf den Eigenbedarf drosselt — der Überschuss ist danach nicht mehr messbar, und der Wiedereintritt hängt an zufälligen Verbrauchsschwankungen (minutenlange Verzögerung). Da sich die Batterie während einer Wolke nur über den 2-A-Stabilitätspuffer entlädt (Abschnitt 5), bleibt der SOC praktisch am Maximum gepinnt und der Zustand löst sich nicht von selbst. Die Sperre vermeidet ihn, indem transiente Einbrüche gar nicht erst zum Austritt führen.
 * **Risiko:** Meldet der Sensor dauerhaft einen zu hohen Wert, bleibt Zone 0 entsprechend lange aktiv — bis der SOC-Austritt eingreift.
-* **Sensor:** Aktuell prognostizierte PV-Leistung in W, z.B. Solcast `power_now`.
+* **Sensor:** Aktuell prognostizierte PV-Leistung in W, z.B. Solcast `power_now` (kW wird automatisch ×1000 normalisiert).
 * **Fallback:** Sensor unavailable/unknown → Sperre inaktiv, normale Austrittslogik gilt.
 
 ---
@@ -495,7 +495,7 @@ Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher, wenn PV d
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
 | **Surplus-Forecast aktivieren** | false | — | — | Schalter für die Funktion. Nur wirksam wenn Überschuss-Einspeisung aktiv. |
-| **Surplus-Forecast Sensor** | *(leer)* | — | — | PV-Überschuss-Prognose in W (z.B. Solcast). Leer lassen wenn nicht genutzt. |
+| **Surplus-Forecast Sensor** | *(leer)* | — | — | PV-Überschuss-Prognose in W (z.B. Solcast; kW wird automatisch ×1000 normalisiert). Leer lassen wenn nicht genutzt. |
 | **Surplus-Forecast Schwelle** | 5000 W | 0 | 20000 W | Forecast muss diesen Wert erreichen um erzwungenen Zone-0-Eintritt auszulösen. |
 
 ---
@@ -505,7 +505,7 @@ Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher, wenn PV d
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
 | **Austritts-Sperre aktivieren** | false | — | — | Schalter für die Funktion. Nur wirksam wenn Überschuss-Einspeisung aktiv. |
-| **Austritts-Sperre Vorhersage-Sensor** | *(leer)* | — | — | Aktuell prognostizierte PV-Leistung in W (z.B. Solcast `power_now`). Leer lassen wenn nicht genutzt. |
+| **Austritts-Sperre Vorhersage-Sensor** | *(leer)* | — | — | Aktuell prognostizierte PV-Leistung in W (z.B. Solcast `power_now`; kW wird automatisch ×1000 normalisiert). Leer lassen wenn nicht genutzt. |
 | **Austritts-Sperre Faktor** | 1.5 | 1.0 | 3.0 | Sperre aktiv solange Vorhersage ≥ Faktor × Hard Limit. Höher = mehr Sicherheitsmarge gegen Vorhersagefehler. |
 
 ---

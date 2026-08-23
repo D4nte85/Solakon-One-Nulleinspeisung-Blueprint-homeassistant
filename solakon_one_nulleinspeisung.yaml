@@ -696,7 +696,7 @@ blueprint:
           surplus_forecast_sensor:
             name: 🌤️ Surplus-Forecast Sensor (Optional)
             description: |
-              PV-Überschuss-Prognose in W (z.B. Solcast-Sensor).
+              PV-Überschuss-Prognose in W (z.B. Solcast-Sensor; kW wird automatisch ×1000 normalisiert).
               ⚠️ Leer lassen wenn Surplus-Forecast nicht genutzt wird.
             default: {}
             selector:
@@ -1236,11 +1236,17 @@ variables:
   surplus_forecast_enabled_bool: !input surplus_forecast_enabled
   surplus_forecast_sensor_id: !input surplus_forecast_sensor
   surplus_forecast_threshold_float: !input surplus_forecast_threshold
+  # kW→W normalisiert, analog zu grid/solar/actual und surplus_lock_power_float —
+  # der Sensor liefert eine Leistung (W), verglichen wird gegen solar_power_float/
+  # hard_limit_int (W); ein kW-Sensor würde die Forcierung sonst praktisch nie auslösen.
+  surplus_forecast_power_float: >
+    {% set v = states(surplus_forecast_sensor_id) | float(0) %}
+    {{ v * 1000 if state_attr(surplus_forecast_sensor_id, 'unit_of_measurement') == 'kW' else v }}
   surplus_forecast_forced: >
     {{ surplus_forecast_enabled_bool | bool(false) and
        surplus_forecast_sensor_id is string and surplus_forecast_sensor_id | length > 0 and
        states(surplus_forecast_sensor_id) not in ['unknown', 'unavailable'] and
-       states(surplus_forecast_sensor_id) | float(0) >= surplus_forecast_threshold_float | float(0) and
+       surplus_forecast_power_float >= surplus_forecast_threshold_float | float(0) and
        solar_power_float > hard_limit_int and
        states(soc) | float(0) > soc_conservation_limit_int | float(0) }}
 
