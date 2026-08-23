@@ -5,6 +5,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 ## [Unreleased]
 
+### Behoben
+- Surplus Austritts-Sperre (`surplus_lock_sensor`) verglich den rohen Sensorwert ungeachtet der Einheit direkt gegen `Faktor × Hard Limit` (W) — anders als Grid/Solar/Actual (die bereits kW→W normalisiert werden) fehlte hier jede Einheiten-Erkennung. Ein Sensor mit Einheit `kW` (z. B. Solcast `power_now`) hätte die Sperre dadurch praktisch nie ausgelöst. Neue Variable `surplus_lock_power_float` (kW→W normalisiert, analog zu `grid_power_float`) ersetzt den rohen Sensorwert im Vergleich
+
 ## [V309] – 2026-08-21
 
 ### Behoben

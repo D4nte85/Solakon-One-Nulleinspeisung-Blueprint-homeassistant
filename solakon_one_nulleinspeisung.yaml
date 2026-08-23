@@ -734,7 +734,7 @@ blueprint:
           surplus_lock_sensor:
             name: ⛅ Surplus Austritts-Sperre Vorhersage-Sensor (Optional)
             description: |
-              Aktuell prognostizierte PV-Leistung in W (z.B. Solcast power_now).
+              Aktuell prognostizierte PV-Leistung in W (z.B. Solcast power_now; kW wird automatisch ×1000 normalisiert).
               Sensor nicht verfügbar → Sperre inaktiv.
               ⚠️ Leer lassen wenn die Austritts-Sperre nicht genutzt wird.
             default: {}
@@ -1251,11 +1251,17 @@ variables:
   surplus_lock_enabled_bool: !input surplus_lock_enabled
   surplus_lock_sensor_id: !input surplus_lock_sensor
   surplus_lock_factor_float: !input surplus_lock_factor
+  # kW→W normalisiert, analog zu grid/solar/actual oben — der Sensor liefert
+  # eine Leistung (W), verglichen wird gegen hard_limit_int (W); ein kW-Sensor
+  # (z. B. Solcast pv_power_now in kW) würde die Sperre sonst praktisch nie auslösen.
+  surplus_lock_power_float: >
+    {% set v = states(surplus_lock_sensor_id) | float(0) %}
+    {{ v * 1000 if state_attr(surplus_lock_sensor_id, 'unit_of_measurement') == 'kW' else v }}
   surplus_exit_locked: >
     {{ surplus_lock_enabled_bool | bool(false) and
        surplus_lock_sensor_id is string and surplus_lock_sensor_id | length > 0 and
        states(surplus_lock_sensor_id) not in ['unknown', 'unavailable'] and
-       states(surplus_lock_sensor_id) | float(0) >= (surplus_lock_factor_float | float(1.5)) * hard_limit_int and
+       surplus_lock_power_float >= (surplus_lock_factor_float | float(1.5)) * hard_limit_int and
        states(soc) | float(0) > soc_conservation_limit_int | float(0) }}
 
   # PV-Forecast Tarif-Unterdrückung
