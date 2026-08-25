@@ -561,6 +561,7 @@ Typischer Arbeitsbereich: **0.03–0.08**. Für AC Laden separat tunen — P bes
 | **SOC-Limits ungültig** | Überschuss aktiviert UND Export-Schwelle ≤ Zone-1-Schwelle | Export-Schwelle (z.B. 90%) > Zone-1 (z.B. 50%) |
 | **SOC-Sensor UNKNOWN/UNAVAILABLE** | Solakon Integration offline | Verbindung prüfen |
 | **Timeout Countdown UNKNOWN/UNAVAILABLE** | Sensor nicht verfügbar | Solakon Integration prüfen |
+| **TypeError: cannot use 'dict' as a dict key** | Betraf Blueprint-Versionen vor diesem Fix: `surplus_forecast_sensor`/`surplus_lock_sensor` (Abschnitte 11/12) leer gelassen | Blueprint aktualisieren — seither werden beide optionalen Felder nur noch berechnet, wenn eine Entity gesetzt ist |
 
 ---
 
