@@ -382,7 +382,8 @@ Prevents oscillation between Case 0A/0B at night with a full battery when PV rea
 | **P Factor** | 1.3 | 0.1 | 5.0 | Proportional gain. Higher = more aggressive. |
 | **I Factor** | 0.05 | 0 | 0.2 | Integral gain. Higher = faster error correction, but less stable. |
 | **Tolerance Range** | 25 W | 0 | 200 W | Deadband around setpoint. No PI correction within (integral decay instead). |
-| **Wait Time** | 3 s | 0 | 30 s | Maximum wait time. Adaptive: exits early once actual power ≈ setpoint ± tolerance. Compensates for inverter response time. |
+| **Wait Time** | 3 s | 0 | 30 s | Wait time after power change. If "Adaptive Wait Time" is enabled, this value only acts as a timeout. |
+| **Adaptive Wait Time** | Off | – | – | Exits the wait time early once actual power ≈ setpoint ± tolerance. Caution with slow external grid measurements (e.g. IR reading head) — can cause premature controller action. |
 
 > **Note:** P and I factors apply to Zone 1 and Zone 2. For AC Charging mode (Mode `'3'`) separate factors are used — see [AC Charging Parameters](#-ac-charging-optional-1).
 
@@ -528,7 +529,7 @@ The total delay consists of several parts:
 2. **Inverter response** — the Solakon ONE needs time after the successful write to actually adjust output power (hardware ramp). This is the main component of the wait time.
 3. **Measurement latency** — Shelly and Solakon integration read new values via their own Modbus polling; this delay also belongs to the wait time.
 
-The **wait time** covers points 2 and 3. Adaptive mode exits early once actual power ≈ setpoint ± tolerance — no unnecessary waiting when the inverter responds quickly.
+The **wait time** covers points 2 and 3. If "Adaptive Wait Time" is enabled, the controller exits early once actual power ≈ setpoint ± tolerance instead of always using the full wait time — but this can be unreliable if your external grid sensor updates slower than the inverter reacts (see caution below); off by default.
 
 ```
 number.set_value sent

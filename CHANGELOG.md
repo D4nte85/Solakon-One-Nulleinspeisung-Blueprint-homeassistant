@@ -5,6 +5,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Adaptive wait time (introduced in V304/V306) is now optional instead of hardwired — new input `adaptive_wait_time` (default: off). With Zero Export active and a high-latency external grid sensor (e.g. an IR reading head on the meter, see DE-repo Discussion #82), the adaptive exit (actual power ≈ the storage's own setpoint, independent of the grid reading) could shrink the control cycle below the meter's update rate — the configured wait time then had no effect, since it only served as a rarely-reached timeout. Default behavior is the fixed wait (`delay`) again, as before V304
+
 ### Fixed
 - The four multi-instancing fields (`max_power_entity`, `error_share_entity`, `ac_error_share_entity`, `total_actual_power_entity`) were placed in the config UI as standalone, non-collapsible top-level fields directly after the "🔒 SAFETY PARAMETERS" section instead of inside a section of their own — visually they appeared attached to the safety section instead of being what they are (optional, relevant only for multi-instance setups). New collapsible section "🔀 MULTI-INSTANCING (Optional)" groups all four fields. Pure UI/structure change, no behavior or formula difference
 - Surplus Exit Lock (`surplus_lock_sensor`) compared the raw sensor value against `Factor × Hard Limit` (W) regardless of its unit — unlike Grid/Solar/Actual (already kW→W normalized), no unit detection existed here. A sensor reporting in `kW` (e.g. Solcast `power_now`) would almost never trigger the lock. New variable `surplus_lock_power_float` (kW→W normalized, analog to `grid_power_float`) replaces the raw sensor value in the comparison

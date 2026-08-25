@@ -3,7 +3,7 @@ blueprint:
   description: |
     Dynamic zero export for the Solakon ONE inverter with PI controller, SOC zone logic,
     optional surplus export (incl. surplus forecast entry), optional AC charging from external
-    feed-in, optional tariff arbitrage (incl. PV forecast suppression), and adaptive wait time.
+    feed-in, optional tariff arbitrage (incl. PV forecast suppression), and optional adaptive wait time.
 
     <details>
     <summary><b>🧠 PI Controller & Control Logic</b> 👈</summary>
@@ -393,9 +393,10 @@ blueprint:
           wait_time:
             name: ⏱️ Wait Time After Setting Output
             description: |
-              Maximum wait time (in seconds) after setting output power.
-              Adaptive: exits early once actual power ≈ setpoint ± tolerance.
-              Compensates for the inverter's response time (e.g. 3 s).
+              Wait time (in seconds) after setting output power.
+              Compensates for the inverter's response time and the measurement latency of the grid/solar sensors (e.g. 3 s).
+              If "Adaptive Wait Time" is enabled, this value only acts as a timeout — the controller exits
+              earlier once actual power ≈ setpoint ± tolerance.
             default: 3
             selector:
               number:
@@ -403,6 +404,18 @@ blueprint:
                 max: 30
                 step: 1
                 unit_of_measurement: s
+
+          adaptive_wait_time:
+            name: 🧠 Adaptive Wait Time
+            description: |
+              Exits the wait time early once actual power ≈ setpoint ± tolerance, instead of always using
+              the full wait time. Caution with high-latency external grid measurements (e.g. an IR reading
+              head on the meter) — the control cycle can then become shorter than the update rate of the
+              grid measurement, causing premature controller action.
+              Default: off (always fixed wait time).
+            default: false
+            selector:
+              boolean:
 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🔋 SOC ZONE PARAMETERS
@@ -2347,6 +2360,7 @@ actions:
 
       # Configuration
       wait_time_int: !input wait_time
+      adaptive_wait_bool: !input adaptive_wait_time
       pi_script: !input PI_regler_script
       max_active_power_limit_int: !input max_active_power_limit
       max_power_entity_id: !input max_power_entity
@@ -2510,12 +2524,19 @@ actions:
                   entity_id: !input integral_helper
                 data:
                   value: "{{ integral_old }}"
-          # Wait time — adaptive until actual power ≈ setpoint or timeout
-          - wait_template: >
-              {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
-            timeout:
-              seconds: "{{ wait_time_int }}"
-            continue_on_timeout: true
+          # Wait time — adaptive (if enabled) until actual power ≈ setpoint or timeout, otherwise fixed
+          - if:
+              - condition: template
+                value_template: "{{ adaptive_wait_bool }}"
+            then:
+              - wait_template: >
+                  {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+                timeout:
+                  seconds: "{{ wait_time_int }}"
+                continue_on_timeout: true
+            else:
+              - delay:
+                  seconds: "{{ wait_time_int }}"
 
       # BRANCH BT: Tariff Charging — Direct set (no PI)
       # Output → tariff_charge_power (constant, independent of grid)
@@ -2529,12 +2550,19 @@ actions:
               entity_id: !input active_power_number
             data:
               value: "{{ tariff_charge_power_int }}"
-          # Wait time — adaptive until actual power ≈ setpoint or timeout
-          - wait_template: >
-              {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
-            timeout:
-              seconds: "{{ wait_time_int }}"
-            continue_on_timeout: true
+          # Wait time — adaptive (if enabled) until actual power ≈ setpoint or timeout, otherwise fixed
+          - if:
+              - condition: template
+                value_template: "{{ adaptive_wait_bool }}"
+            then:
+              - wait_template: >
+                  {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+                timeout:
+                  seconds: "{{ wait_time_int }}"
+                continue_on_timeout: true
+            else:
+              - delay:
+                  seconds: "{{ wait_time_int }}"
 
       # BRANCH B: AC Charging — PI Script with ac_charge_mode=true (inverted error calculation)
       # at_max/at_min guards not applied: error direction is inverted in script
@@ -2556,12 +2584,19 @@ actions:
               output_entity: !input active_power_number
               ac_charge_mode: true
               error_share: "{{ ac_error_share_value }}"
-          # Wait time — adaptive until actual power ≈ setpoint or timeout
-          - wait_template: >
-              {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
-            timeout:
-              seconds: "{{ wait_time_int }}"
-            continue_on_timeout: true
+          # Wait time — adaptive (if enabled) until actual power ≈ setpoint or timeout, otherwise fixed
+          - if:
+              - condition: template
+                value_template: "{{ adaptive_wait_bool }}"
+            then:
+              - wait_template: >
+                  {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+                timeout:
+                  seconds: "{{ wait_time_int }}"
+                continue_on_timeout: true
+            else:
+              - delay:
+                  seconds: "{{ wait_time_int }}"
 
       # BRANCH C: Normal PI Controller (Zone 1 / Zone 2)
       - conditions:
@@ -2586,12 +2621,19 @@ actions:
               output_entity: !input active_power_number
               ac_charge_mode: false
               error_share: "{{ error_share_value }}"
-          # Wait time — adaptive until actual power ≈ setpoint or timeout
-          - wait_template: >
-              {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
-            timeout:
-              seconds: "{{ wait_time_int }}"
-            continue_on_timeout: true
+          # Wait time — adaptive (if enabled) until actual power ≈ setpoint or timeout, otherwise fixed
+          - if:
+              - condition: template
+                value_template: "{{ adaptive_wait_bool }}"
+            then:
+              - wait_template: >
+                  {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+                timeout:
+                  seconds: "{{ wait_time_int }}"
+                continue_on_timeout: true
+            else:
+              - delay:
+                  seconds: "{{ wait_time_int }}"
 
     # DEFAULT: Integral Decay (error within tolerance or at limit)
     default:
