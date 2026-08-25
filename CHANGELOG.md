@@ -8,6 +8,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - Surplus Exit Lock (`surplus_lock_sensor`) compared the raw sensor value against `Factor × Hard Limit` (W) regardless of its unit — unlike Grid/Solar/Actual (already kW→W normalized), no unit detection existed here. A sensor reporting in `kW` (e.g. Solcast `power_now`) would almost never trigger the lock. New variable `surplus_lock_power_float` (kW→W normalized, analog to `grid_power_float`) replaces the raw sensor value in the comparison
 - Same bug in Surplus Forecast Entry (`surplus_forecast_sensor`, section 7) — also missing kW→W normalization, even though the sensor is clearly Watt-scale per its own threshold label "(W)" and its `AND` with `Solar > Hard Limit`. New variable `surplus_forecast_power_float` replaces the raw sensor value in the comparison
+- `TypeError: cannot use 'dict' as a dict key` when `surplus_forecast_sensor`/`surplus_lock_sensor` is left empty (Issue #81): both optional fields were unguarded when unconfigured — the selector then yields `{}` (a dict) instead of an empty string, and `states({})` triggers an internal dict-key lookup with a dict as the key, aborting the entire variable rendering (automation trace stayed empty, no meaningful log entry). Affected every installation without these optional Solcast forecast fields. Fix: `surplus_forecast_power_float`/`surplus_lock_power_float` are now only computed when the respective sensor entity is a non-empty string, otherwise `0`
 
 ## [V309] – 2026-08-21
 

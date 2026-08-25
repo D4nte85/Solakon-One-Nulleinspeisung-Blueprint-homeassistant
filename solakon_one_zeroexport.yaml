@@ -1241,8 +1241,12 @@ variables:
   # the sensor reports a power value (W), compared against solar_power_float/
   # hard_limit_int (W); a kW sensor would otherwise almost never trigger the forcing.
   surplus_forecast_power_float: >
-    {% set v = states(surplus_forecast_sensor_id) | float(0) %}
-    {{ v * 1000 if state_attr(surplus_forecast_sensor_id, 'unit_of_measurement') == 'kW' else v }}
+    {% if surplus_forecast_sensor_id is string and surplus_forecast_sensor_id | length > 0 %}
+      {% set v = states(surplus_forecast_sensor_id) | float(0) %}
+      {{ v * 1000 if state_attr(surplus_forecast_sensor_id, 'unit_of_measurement') == 'kW' else v }}
+    {% else %}
+      0
+    {% endif %}
   surplus_forecast_forced: >
     {{ surplus_forecast_enabled_bool | bool(false) and
        surplus_forecast_sensor_id is string and surplus_forecast_sensor_id | length > 0 and
@@ -1261,8 +1265,12 @@ variables:
   # power value (W), compared against hard_limit_int (W); a kW sensor
   # (e.g. Solcast pv_power_now in kW) would otherwise almost never trigger the lock.
   surplus_lock_power_float: >
-    {% set v = states(surplus_lock_sensor_id) | float(0) %}
-    {{ v * 1000 if state_attr(surplus_lock_sensor_id, 'unit_of_measurement') == 'kW' else v }}
+    {% if surplus_lock_sensor_id is string and surplus_lock_sensor_id | length > 0 %}
+      {% set v = states(surplus_lock_sensor_id) | float(0) %}
+      {{ v * 1000 if state_attr(surplus_lock_sensor_id, 'unit_of_measurement') == 'kW' else v }}
+    {% else %}
+      0
+    {% endif %}
   surplus_exit_locked: >
     {{ surplus_lock_enabled_bool | bool(false) and
        surplus_lock_sensor_id is string and surplus_lock_sensor_id | length > 0 and
