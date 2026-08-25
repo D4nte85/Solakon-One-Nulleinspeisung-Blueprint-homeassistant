@@ -540,7 +540,14 @@ blueprint:
                 max: 1200
                 unit_of_measurement: W
 
-      max_power_entity:
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+        # 🔀 MULTI-INSTANCING (Optional):
+        # ═══════════════════════════════════════════════════════════════════════════════════════════════
+      multi_instancing_parameter:
+        name: "🔀 MULTI-INSTANCING (Optional):"
+        collapsed: true
+        input:
+          max_power_entity:
             name: 🔀 Max. Output Power — Dynamic (Multi-Instancing)
             description: |
               ⚠️ Only required for multi-instancing — leave empty in single-instance operation.
@@ -555,7 +562,7 @@ blueprint:
               entity:
                 domain: input_number
 
-      error_share_entity:
+          error_share_entity:
             name: ⚖️ Error Share Helper (input_number, Optional — Multi-Instancing)
             description: |
               ⚠️ Only required for multi-instancing — leave empty in single-instance operation.
@@ -570,7 +577,7 @@ blueprint:
               entity:
                 domain: input_number
 
-      ac_error_share_entity:
+          ac_error_share_entity:
             name: ⚖️ AC Charge Error Share Helper (input_number, Optional — Multi-Instancing)
             description: |
               ⚠️ Only required for multi-instancing WITH AC charging — otherwise leave empty.
@@ -587,7 +594,7 @@ blueprint:
               entity:
                 domain: input_number
 
-      total_actual_power_entity:
+          total_actual_power_entity:
             name: 🔀 Σ Output Discharging — Dynamic (Multi-Instancing)
             description: |
               ⚠️ ONLY required for multi-instancing — leave empty in single-instance operation.
