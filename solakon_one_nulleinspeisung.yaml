@@ -3,7 +3,7 @@ blueprint:
   description: |
     Dynamische Nulleinspeisung für den Solakon ONE Wechselrichter mit PI-Regler, SOC-Zonenlogik,
     optionaler Überschuss-Einspeisung (inkl. Surplus-Forecast-Eintritt), optionalem AC Laden,
-    optionaler Tarif-Arbitrage (inkl. PV-Forecast-Unterdrückung) und adaptiver Wartezeit.
+    optionaler Tarif-Arbitrage (inkl. PV-Forecast-Unterdrückung) und optionaler adaptiver Wartezeit.
 
     <details>
     <summary><b>🧠 PI-Regler & Steuerlogik</b> 👈</summary>
@@ -393,9 +393,10 @@ blueprint:
           wait_time:
             name: ⏱️ Wartezeit nach setzen des Ausgangs
             description: |
-              Maximale Wartezeit (in Sekunden) nach dem Setzen der Ausgangsleistung.
-              Adaptiv: bricht früh ab sobald Ist-Leistung ≈ Sollwert ± Toleranz.
-              Kompensiert die Reaktionszeit des Wechselrichters (z.B. 3 s).
+              Wartezeit (in Sekunden) nach dem Setzen der Ausgangsleistung.
+              Kompensiert die Reaktionszeit des Wechselrichters und die Messlatenz der Grid-/Solar-Sensoren (z.B. 3 s).
+              Ist "Adaptive Wartezeit" aktiviert, gilt dieser Wert nur als Timeout — der Regler bricht früher ab,
+              sobald Ist-Leistung ≈ Sollwert ± Toleranz.
             default: 3
             selector:
               number:
@@ -403,6 +404,18 @@ blueprint:
                 max: 30
                 step: 1
                 unit_of_measurement: s
+
+          adaptive_wait_time:
+            name: 🧠 Adaptive Wartezeit
+            description: |
+              Bricht die Wartezeit früh ab, sobald Ist-Leistung ≈ Sollwert ± Toleranz, statt immer die
+              volle Wartezeit auszuschöpfen. Vorsicht bei externen Netzmesswerten mit hoher Latenz
+              (z.B. IR-Lesekopf am Zähler) — dort kann der Regelzyklus dann kürzer sein als die
+              Aktualisierungsrate der Netzmessung, was zu verfrühtem Reglereingriff führt.
+              Standard: aus (immer feste Wartezeit).
+            default: false
+            selector:
+              boolean:
 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🔋 SOC-ZONEN-PARAMETER
@@ -2349,6 +2362,7 @@ actions:
 
       # Konfiguration
       wait_time_int: !input wait_time
+      adaptive_wait_bool: !input adaptive_wait_time
       pi_script: !input PI_regler_script
       max_active_power_limit_int: !input max_active_power_limit
       max_power_entity_id: !input max_power_entity
@@ -2512,12 +2526,19 @@ actions:
                   entity_id: !input integral_helper
                 data:
                   value: "{{ integral_old }}"
-          # Wartezeit — adaptiv bis Ist-Leistung ≈ Sollwert oder Timeout
-          - wait_template: >
-              {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
-            timeout:
-              seconds: "{{ wait_time_int }}"
-            continue_on_timeout: true
+          # Wartezeit — adaptiv (falls aktiviert) bis Ist-Leistung ≈ Sollwert oder Timeout, sonst fest
+          - if:
+              - condition: template
+                value_template: "{{ adaptive_wait_bool }}"
+            then:
+              - wait_template: >
+                  {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+                timeout:
+                  seconds: "{{ wait_time_int }}"
+                continue_on_timeout: true
+            else:
+              - delay:
+                  seconds: "{{ wait_time_int }}"
 
       # ZWEIG BT: Tarif-Laden — Direkt setzen (kein PI)
       # Output → tariff_charge_power (konstant, unabhängig vom Grid)
@@ -2531,12 +2552,19 @@ actions:
               entity_id: !input active_power_number
             data:
               value: "{{ tariff_charge_power_int }}"
-          # Wartezeit — adaptiv bis Ist-Leistung ≈ Sollwert oder Timeout
-          - wait_template: >
-              {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
-            timeout:
-              seconds: "{{ wait_time_int }}"
-            continue_on_timeout: true
+          # Wartezeit — adaptiv (falls aktiviert) bis Ist-Leistung ≈ Sollwert oder Timeout, sonst fest
+          - if:
+              - condition: template
+                value_template: "{{ adaptive_wait_bool }}"
+            then:
+              - wait_template: >
+                  {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+                timeout:
+                  seconds: "{{ wait_time_int }}"
+                continue_on_timeout: true
+            else:
+              - delay:
+                  seconds: "{{ wait_time_int }}"
 
       # ZWEIG B: AC Laden — PI-Script mit ac_charge_mode=true (invertierte Fehlerberechnung)
       # at_max/at_min Guards entfallen: Fehlerrichtung ist im Script invertiert
@@ -2558,12 +2586,19 @@ actions:
               output_entity: !input active_power_number
               ac_charge_mode: true
               error_share: "{{ ac_error_share_value }}"
-          # Wartezeit — adaptiv bis Ist-Leistung ≈ Sollwert oder Timeout
-          - wait_template: >
-              {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
-            timeout:
-              seconds: "{{ wait_time_int }}"
-            continue_on_timeout: true
+          # Wartezeit — adaptiv (falls aktiviert) bis Ist-Leistung ≈ Sollwert oder Timeout, sonst fest
+          - if:
+              - condition: template
+                value_template: "{{ adaptive_wait_bool }}"
+            then:
+              - wait_template: >
+                  {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+                timeout:
+                  seconds: "{{ wait_time_int }}"
+                continue_on_timeout: true
+            else:
+              - delay:
+                  seconds: "{{ wait_time_int }}"
 
       # ZWEIG C: Normaler PI-Regler (Zone 1 / Zone 2)
       - conditions:
@@ -2588,12 +2623,19 @@ actions:
               output_entity: !input active_power_number
               ac_charge_mode: false
               error_share: "{{ error_share_value }}"
-          # Wartezeit — adaptiv bis Ist-Leistung ≈ Sollwert oder Timeout
-          - wait_template: >
-              {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
-            timeout:
-              seconds: "{{ wait_time_int }}"
-            continue_on_timeout: true
+          # Wartezeit — adaptiv (falls aktiviert) bis Ist-Leistung ≈ Sollwert oder Timeout, sonst fest
+          - if:
+              - condition: template
+                value_template: "{{ adaptive_wait_bool }}"
+            then:
+              - wait_template: >
+                  {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+                timeout:
+                  seconds: "{{ wait_time_int }}"
+                continue_on_timeout: true
+            else:
+              - delay:
+                  seconds: "{{ wait_time_int }}"
 
     # STANDARD: Integral-Decay (Fehler innerhalb Toleranz oder At-Limit)
     default:

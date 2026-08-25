@@ -5,6 +5,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 ## [Unreleased]
 
+### Geändert
+- Adaptive Wartezeit (V304/V306 eingeführt) ist jetzt optional statt fest verdrahtet — neuer Input `adaptive_wait_time` (Standard: aus). Bei aktiver Nulleinspeisung mit externem Netzmesswert hoher Latenz (z.B. IR-Lesekopf am Zähler, siehe Discussion #82) konnte der adaptive Abbruch (Ist-Leistung ≈ Sollwert des Speichers, unabhängig von der Netzmessung) den Regelzyklus unter die Aktualisierungsrate des Zählers verkürzen — die konfigurierte Wartezeit hatte dann keine Wirkung mehr, da sie nur noch als selten erreichter Timeout diente. Standardverhalten ist wieder die feste Wartezeit (`delay`) wie vor V304
+
 ### Behoben
 - Die vier Multi-Instancing-Felder (`max_power_entity`, `error_share_entity`, `ac_error_share_entity`, `total_actual_power_entity`) waren im Konfigurations-UI als eigenständige, nicht einklappbare Top-Level-Felder direkt nach dem Abschnitt „🔒 SICHERHEITS-PARAMETER" platziert statt in einer eigenen Sektion — sie erschienen dadurch visuell wie ungeschützt am Sicherheits-Abschnitt angehängt statt als das, was sie sind (optional, nur für Multi-Instanz-Setups relevant). Neuer eigener, aufklappbarer Abschnitt „🔀 MULTI-INSTANCING (Optional)" fasst alle vier Felder zusammen. Reine UI-/Struktur-Änderung, kein Verhaltens- oder Formelunterschied
 - Surplus Austritts-Sperre (`surplus_lock_sensor`) verglich den rohen Sensorwert ungeachtet der Einheit direkt gegen `Faktor × Hard Limit` (W) — anders als Grid/Solar/Actual (die bereits kW→W normalisiert werden) fehlte hier jede Einheiten-Erkennung. Ein Sensor mit Einheit `kW` (z. B. Solcast `power_now`) hätte die Sperre dadurch praktisch nie ausgelöst. Neue Variable `surplus_lock_power_float` (kW→W normalisiert, analog zu `grid_power_float`) ersetzt den rohen Sensorwert im Vergleich
