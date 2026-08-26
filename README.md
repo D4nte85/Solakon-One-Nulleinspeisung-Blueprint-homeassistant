@@ -571,6 +571,8 @@ Typical working range: **0.03–0.08**. For AC Charging, tune separately — kee
 | **SOC limits invalid** | Surplus export enabled AND export threshold ≤ zone-1 threshold | Export threshold (e.g. 90%) > Zone 1 (e.g. 50%) |
 | **SOC sensor UNKNOWN/UNAVAILABLE** | Solakon integration offline | Check connection |
 | **Timeout Countdown UNKNOWN/UNAVAILABLE** | Sensor unavailable | Check Solakon integration |
+| **Grid power sensor UNKNOWN/UNAVAILABLE** | Meter integration offline/network issue | Check connection — automation skips the cycle instead of proceeding with a false zero reading |
+| **Actual power sensor UNKNOWN/UNAVAILABLE** | Solakon integration offline/Modbus issue | Check connection — automation skips the cycle instead of proceeding with a false zero reading |
 | **TypeError: cannot use 'dict' as a dict key** | Affected blueprint versions before this fix: `surplus_forecast_sensor`/`surplus_lock_sensor` (sections 7/11) left empty | Update the blueprint — both optional fields are now only computed when an entity is set |
 
 ---
