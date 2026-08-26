@@ -1069,15 +1069,15 @@ variables:
   grid_power: !input grid_power_sensor
   grid_power_float: >
     {% set v = states(grid_power) | float(0) %}
-    {{ v * 1000 if state_attr(grid_power, 'unit_of_measurement') == 'kW' else v }}
+    {{ ((v * 1000) if state_attr(grid_power, 'unit_of_measurement') == 'kW' else v) | round(3) }}
   solar_power: !input solar_power_sensor
   solar_power_float: >
     {% set v = states(solar_power) | float(0) %}
-    {{ v * 1000 if state_attr(solar_power, 'unit_of_measurement') == 'kW' else v }}
+    {{ ((v * 1000) if state_attr(solar_power, 'unit_of_measurement') == 'kW' else v) | round(3) }}
   actual_power_sensor: !input actual_power_sensor
   actual_power_float: >
     {% set v = states(actual_power_sensor) | float(0) %}
-    {{ v * 1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else v }}
+    {{ ((v * 1000) if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else v) | round(3) }}
 
   # Zonen-Schwellwerte
   soc_fast_limit_static: !input soc_fast_limit
@@ -2357,10 +2357,10 @@ actions:
       # Frische Sensorwerte zum Zeitpunkt der PI-Berechnung (kW→W normalisiert)
       grid_power_float: >
         {% set v = states(grid_power) | float(0) %}
-        {{ v * 1000 if state_attr(grid_power, 'unit_of_measurement') == 'kW' else v }}
+        {{ ((v * 1000) if state_attr(grid_power, 'unit_of_measurement') == 'kW' else v) | round(3) }}
       solar_power_float: >
         {% set v = states(solar_power) | float(0) %}
-        {{ v * 1000 if state_attr(solar_power, 'unit_of_measurement') == 'kW' else v }}
+        {{ ((v * 1000) if state_attr(solar_power, 'unit_of_measurement') == 'kW' else v) | round(3) }}
 
       # Konfiguration
       wait_time_int: !input wait_time
