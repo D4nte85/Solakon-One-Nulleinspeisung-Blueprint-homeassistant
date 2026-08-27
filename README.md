@@ -565,6 +565,7 @@ Typischer Arbeitsbereich: **0.03–0.08**. Für AC Laden separat tunen — P bes
 | **Netzleistungs-Sensor UNKNOWN/UNAVAILABLE** | Zähler-Integration offline/Netzwerkstörung | Verbindung prüfen — Automation überspringt den Zyklus statt mit einem falschen Nullwert weiterzurechnen |
 | **Ist-Leistungs-Sensor UNKNOWN/UNAVAILABLE** | Solakon Integration offline/Modbus-Störung | Verbindung prüfen — Automation überspringt den Zyklus statt mit einem falschen Nullwert weiterzurechnen |
 | **TypeError: cannot use 'dict' as a dict key** | Betraf Blueprint-Versionen vor diesem Fix: `surplus_forecast_sensor`/`surplus_lock_sensor` (Abschnitte 11/12) leer gelassen | Blueprint aktualisieren — seither werden beide optionalen Felder nur noch berechnet, wenn eine Entity gesetzt ist |
+| **TypeError: unsupported operand type(s) for -: 'str' and 'float'** | Betraf Blueprint-Versionen vor diesem Fix: `grid_power_float`/`solar_power_float`/`actual_power_float` konnten bei Werten nahe 0 (z.B. sich aufhebende Phasen eines Summensensors) in wissenschaftlicher Notation gerendert und dadurch als String statt Zahl weiterverrechnet werden | Blueprint aktualisieren — die drei Werte werden seither auf 3 Nachkommastellen gerundet, bevor sie weiterverwendet werden |
 
 ---
 

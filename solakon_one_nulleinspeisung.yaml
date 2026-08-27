@@ -1067,6 +1067,9 @@ variables:
 
   # Grid / Solar / Actual Power (kW→W normalisiert)
   grid_power: !input grid_power_sensor
+  # round(3): verhindert, dass ein Wert nahe 0 (z.B. bei sich aufhebenden
+  # Phasen eines Summensensors) als wissenschaftliche Notation gerendert wird —
+  # HA behandelt "1e-05" beim Wiedereinlesen als String statt als Zahl.
   grid_power_float: >
     {% set v = states(grid_power) | float(0) %}
     {{ ((v * 1000) if state_attr(grid_power, 'unit_of_measurement') == 'kW' else v) | round(3) }}
@@ -2354,7 +2357,7 @@ actions:
   # BLOCK 2: Variablen NUR für PI-Regler
   # ===========================================
   - variables:
-      # Frische Sensorwerte zum Zeitpunkt der PI-Berechnung (kW→W normalisiert)
+      # Frische Sensorwerte zum Zeitpunkt der PI-Berechnung (kW→W normalisiert, round(3) gegen wissenschaftliche Notation)
       grid_power_float: >
         {% set v = states(grid_power) | float(0) %}
         {{ ((v * 1000) if state_attr(grid_power, 'unit_of_measurement') == 'kW' else v) | round(3) }}
