@@ -115,7 +115,7 @@ blueprint:
       - Multi-Instanz: `ΣOutput_entladend` verhindert, dass die Entladung einer Schwester-Instanz als externer Netzüberschuss gewertet wird (optionaler Helfer `total_actual_power_entity`, geschrieben von der Leistungsverteilungs-Automation)
     - **Verbleib:** Modus `'3'` solange SOC < Ladeziel UND Grid < (Offset + Hysterese)
     - **Abbruch (Fall H):** SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND |eigener Output| ≤ Toleranz)
-      - `|Output| ≤ Toleranz`-Guard verhindert Fehlauslösung während PI noch regelt (bezieht sich stets auf den eigenen Output dieser Instanz); Toleranzband um 0 W statt exaktem `= 0` oder einseitigem `≤ 0` robuster gegen isolierte Ein-Sekunden-Rauschwerte (auch leicht negative) durch Modbus-Rauschen — nutzt dieselbe `tolerance`-Einstellung wie die PI-Konvergenzprüfung
+      - `|Output| ≤ Toleranz`-Guard verhindert Fehlauslösung während PI noch regelt (bezieht sich stets auf den eigenen Output dieser Instanz); Output folgt derselben Vorzeichenkonvention wie Grid (negativ = ladend) und ist während aktivem Laden durchgehend deutlich negativ, nicht nur Rauschen nahe 0 — Toleranzband verlangt echte Konvergenz gegen null statt bloß eines beliebigen negativen (= noch aktiv ladenden) Werts, nutzt dieselbe `tolerance`-Einstellung wie die PI-Konvergenzprüfung
     - **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`
       - Positiver Fehler (Grid zu negativ) → Ladeleistung erhöhen
       - `at_max/at_min`-Guards deaktiviert (Richtung invertiert)
