@@ -239,7 +239,7 @@ Charges the battery when external grid feed-in is detected. Detection is based o
   - (Grid + Output) < −Hysteresis
 * **Stay condition:** Mode stays `'3'` while SOC < charge target AND Grid < (ac_charge_offset + Hysteresis)
 * **Exit condition (Case H):** SOC ≥ charge target OR (Grid ≥ ac_charge_offset + Hysteresis AND |Output| ≤ Tolerance)
-  - `|Output| ≤ Tolerance` guard prevents false trigger while PI is still actively controlling; a symmetric tolerance band around 0 W instead of exact `= 0` or one-sided `≤ 0` is more robust against isolated one-second noise readings (including slightly negative ones) caused by Modbus noise — reuses the same `tolerance` setting as the PI convergence check
+  - `|Output| ≤ Tolerance` guard prevents false trigger while PI is still actively controlling; output follows the same sign convention as grid (negative = charging) and stays clearly negative throughout active charging, not just noise near 0 — tolerance band requires genuine convergence toward zero instead of merely any negative (= still charging) value, reuses the same `tolerance` setting as the PI convergence check
 * **PI Control:** `ac_charge_mode=true` → inverted error: `(target_offset − grid) × error_share`
   - Positive error → increase charge power (Grid too negative → charge more)
   - `at_max/at_min` guards not applied (direction inverted)

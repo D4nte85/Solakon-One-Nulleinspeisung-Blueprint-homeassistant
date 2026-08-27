@@ -115,7 +115,7 @@ blueprint:
       - Multi-instance: `ΣOutput_discharging` prevents a sibling instance's discharge from being read as external grid surplus (optional helper `total_actual_power_entity`, written by the power distribution automation)
     - **Stay:** Mode `'3'` while SOC < charge target AND Grid < (Offset + Hysteresis)
     - **Exit (Case H):** SOC ≥ charge target OR (Grid ≥ Offset + Hysteresis AND |Output| ≤ Tolerance)
-      - `|Output| ≤ Tolerance` guard prevents false trigger while PI is still controlling; a symmetric tolerance band around 0 W instead of exact `= 0` or one-sided `≤ 0` is more robust against isolated one-second noise readings (including slightly negative ones) caused by Modbus noise — reuses the same `tolerance` setting as the PI convergence check
+      - `|Output| ≤ Tolerance` guard prevents false trigger while PI is still controlling (always refers to this instance's own output); output follows the same sign convention as grid (negative = charging) and stays clearly negative throughout active charging, not just noise near 0 — tolerance band requires genuine convergence toward zero instead of merely any negative (= still charging) value, reuses the same `tolerance` setting as the PI convergence check
     - **PI Control:** `ac_charge_mode=true` → inverted error: `target_offset − grid`
       - Positive error (Grid too negative) → increase charge power
       - `at_max/at_min` guards disabled (direction inverted)
