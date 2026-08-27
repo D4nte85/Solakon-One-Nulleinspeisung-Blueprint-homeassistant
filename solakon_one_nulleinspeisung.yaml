@@ -64,7 +64,7 @@ blueprint:
     - **HT** — Tarif-Laden Ende: Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Ladeziel) → Integral = 0, Tarif-Bool = `off`, Zone 1: Timer-Toggle + Modus `'1'` / Zone 2: Timer-Toggle + Modus `'0'` + 0W
     - **TM** — Entladesperre (Mittelpreis): Tarif aktiv UND Günstig ≤ Preis < Teuer UND kein Laden UND kein Überschuss UND Modus = `'1'` UND **NICHT PV-Forecast-Suppressed** → Integral = 0, Zyklus = `off` (wenn Zone 1), Output → 0W, Timer-Toggle, Modus → `'0'`
     - **G** — AC Laden Start: AC aktiv UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + ΣOutput_entladend) < −Hysterese UND kein Tarif-Laden UND kein Überschuss → AC-Bool = `on`, Timer-Toggle, Output → 0W, Modus → `'3'`. ΣOutput_entladend: Einzelbetrieb = eigener Output, Multi-Instanz = Summe aller Instanzen im Entlademodus (verhindert, dass die Entladung einer Schwester-Instanz als externer Netzüberschuss gewertet wird)
-    - **H** — AC Laden Ende: Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND eigener Output = 0W)) → Integral = 0, AC-Bool = `off`, Zone 1: Output → 0W, Timer-Toggle, Modus → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Modus → `'0'`
+    - **H** — AC Laden Ende: Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND |eigener Output| ≤ Toleranz)) → Integral = 0, AC-Bool = `off`, Zone 1: Output → 0W, Timer-Toggle, Modus → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Modus → `'0'`
     - **I** — Safety: Modus = `'3'` ohne aktive AC- oder Tarif-Lade-Session → Integral = 0, Zone 1: Output → 0W, Timer-Toggle, Modus → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Modus → `'0'`
     - **E** — Zone 2 Start: Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht UND keine Entladesperre → Integral = 0, Output → 0W, Timer-Toggle, Modus → `'1'`
     - **F** — Nachtabschaltung: Nacht UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv UND kein AC/Tarif-Laden UND kein Überschuss → Integral = 0, Output → 0W, Timer-Toggle, Modus → `'0'`
@@ -114,8 +114,8 @@ blueprint:
       - Guard `Modus ≠ '3'` verhindert Re-Eintritt wenn AC Laden bereits läuft
       - Multi-Instanz: `ΣOutput_entladend` verhindert, dass die Entladung einer Schwester-Instanz als externer Netzüberschuss gewertet wird (optionaler Helfer `total_actual_power_entity`, geschrieben von der Leistungsverteilungs-Automation)
     - **Verbleib:** Modus `'3'` solange SOC < Ladeziel UND Grid < (Offset + Hysterese)
-    - **Abbruch (Fall H):** SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND eigener Output ≤ 0 W)
-      - `Output ≤ 0 W`-Guard verhindert Fehlauslösung während PI noch regelt (bezieht sich stets auf den eigenen Output dieser Instanz); `≤` statt exaktem `= 0` robuster gegen isolierte Ein-Sekunden-Nullwerte durch Modbus-Rauschen
+    - **Abbruch (Fall H):** SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND |eigener Output| ≤ Toleranz)
+      - `|Output| ≤ Toleranz`-Guard verhindert Fehlauslösung während PI noch regelt (bezieht sich stets auf den eigenen Output dieser Instanz); Toleranzband um 0 W statt exaktem `= 0` oder einseitigem `≤ 0` robuster gegen isolierte Ein-Sekunden-Rauschwerte (auch leicht negative) durch Modbus-Rauschen — nutzt dieselbe `tolerance`-Einstellung wie die PI-Konvergenzprüfung
     - **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`
       - Positiver Fehler (Grid zu negativ) → Ladeleistung erhöhen
       - `at_max/at_min`-Guards deaktiviert (Richtung invertiert)
@@ -820,7 +820,7 @@ blueprint:
             description: |
               Totband für Ein- und Austritt.
               Eintritt: (Grid + ΣOutput_entladend) < −Hysterese — Σ über alle Instanzen im Entlademodus, Einzelbetrieb = eigener Output.
-              Austritt: Grid ≥ (Offset + Hysterese) UND eigener Output = 0 W.
+              Austritt: Grid ≥ (Offset + Hysterese) UND |eigener Output| ≤ Toleranz.
               Verhindert Flackern bei wechselnder Einspeisung (z.B. 50 W).
             default: 50
             selector:
@@ -2030,7 +2030,7 @@ actions:
           - condition: template
             value_template: >
               {{ states(soc) | float(0) >= soc_ac_charge_limit_int or
-                 (grid_power_float >= (ac_charge_offset_int | float(0) + ac_charge_hysteresis_int | float(0)) and (actual_power_float |float(0) <= 0 ))}}
+                 (grid_power_float >= (ac_charge_offset_int | float(0) + ac_charge_hysteresis_int | float(0)) and ((actual_power_float | float(0)) | abs <= tolerance_int))}}
         sequence:
           # 1. Logbuch-Eintrag
           - action: logbook.log
