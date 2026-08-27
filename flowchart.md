@@ -98,7 +98,7 @@ flowchart TD
     ZONE_CHECK -- "CASE HT   Mode = '3'   AND Tariff-Charge-Bool = on   AND (price ≥ cheap threshold OR SOC ≥ tariff charge target)" --> TARIFF_END
     ZONE_CHECK -- "CASE TM   Tariff active   AND cheap ≤ price < expensive   AND no AC/Tariff charging   AND NOT Surplus-Bool = on   AND Mode = '1'   AND NOT PV-Forecast-Suppressed" --> TARIFF_MID
     ZONE_CHECK -- "CASE G   AC Charging enabled   AND SOC < charge target   AND Mode ≠ '3' ← Guard!   AND NOT Tariff-Charge-Bool = on   AND NOT Surplus-Bool = on   AND (Grid + ΣOutput_discharging) < −Hysteresis" --> AC_START
-    ZONE_CHECK -- "CASE H   Mode = '3'   AND (SOC ≥ charge target OR (Grid ≥ AC-Offset + Hysteresis AND Output ≤ 0 W))" --> AC_END
+    ZONE_CHECK -- "CASE H   Mode = '3'   AND (SOC ≥ charge target OR (Grid ≥ AC-Offset + Hysteresis AND |Output| ≤ Tolerance))" --> AC_END
     ZONE_CHECK -- "CASE I   Mode = '3'   AND NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on" --> SAFETY_I
     ZONE_CHECK -- "CASE E   NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on   AND NOT Discharge Lock (price < expensive)   AND Zone 3 < SOC ≤ Zone 1 AND Cycle = off AND Mode = '0' AND NOT night" --> Z2_START
     ZONE_CHECK -- "CASE F   NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on   AND NOT Surplus-Bool = on   AND Night Shutdown active AND PV < PV Charge Reserve AND Cycle = off AND Mode active" --> NIGHT

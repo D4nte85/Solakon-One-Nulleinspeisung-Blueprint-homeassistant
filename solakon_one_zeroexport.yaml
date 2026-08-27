@@ -64,7 +64,7 @@ blueprint:
     - **HT** — Tariff Charging End: Mode = `'3'` AND Tariff-Bool = `on` AND (price ≥ cheap threshold OR SOC ≥ target) → Integral = 0, Tariff-Bool = `off`, Zone 1: Timer-Toggle + Mode `'1'` / Zone 2: Timer-Toggle + Mode `'0'` + 0W
     - **TM** — Discharge Lock (mid-price): Tariff active AND cheap ≤ price < expensive AND no charging AND no surplus AND Mode = `'1'` AND **NOT PV-forecast-suppressed** → Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Timer-Toggle, Mode → `'0'`
     - **G** — AC Charging Start: AC active AND SOC < charge target AND Mode ≠ `'3'` AND (Grid + Output) < −Hysteresis AND no Tariff charging AND no surplus → AC-Bool = `on`, Timer-Toggle, Output → 0W, Mode → `'3'`
-    - **H** — AC Charging End: Mode = `'3'` AND (SOC ≥ charge target OR (Grid ≥ Offset + Hysteresis AND Output = 0W)) → Integral = 0, AC-Bool = `off`, Zone 1: Output → 0W, Timer-Toggle, Mode → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Mode → `'0'`
+    - **H** — AC Charging End: Mode = `'3'` AND (SOC ≥ charge target OR (Grid ≥ Offset + Hysteresis AND |Output| ≤ Tolerance)) → Integral = 0, AC-Bool = `off`, Zone 1: Output → 0W, Timer-Toggle, Mode → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Mode → `'0'`
     - **I** — Safety: Mode = `'3'` without active AC or Tariff charging session → Integral = 0, Zone 1: Output → 0W, Timer-Toggle, Mode → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Mode → `'0'`
     - **E** — Zone 2 Start: Zone 3 < SOC ≤ Zone 1 AND Cycle = `off` AND Mode = `'0'` AND NOT night AND no discharge lock → Integral = 0, Timer-Toggle, Mode → `'1'`
     - **F** — Night Shutdown: Night AND PV < PV charge reserve AND Cycle = `off` AND Mode active AND no AC/Tariff charging AND no surplus → Integral = 0, Output → 0W, Timer-Toggle, Mode → `'0'`
@@ -114,8 +114,8 @@ blueprint:
       - Guard `Mode ≠ '3'` prevents re-entry when AC Charging is already active
       - Multi-instance: `ΣOutput_discharging` prevents a sibling instance's discharge from being read as external grid surplus (optional helper `total_actual_power_entity`, written by the power distribution automation)
     - **Stay:** Mode `'3'` while SOC < charge target AND Grid < (Offset + Hysteresis)
-    - **Exit (Case H):** SOC ≥ charge target OR (Grid ≥ Offset + Hysteresis AND Output ≤ 0 W)
-      - `Output ≤ 0 W` guard prevents false trigger while PI is still controlling; `≤` instead of exact `= 0` is more robust against isolated one-second zero readings caused by Modbus noise
+    - **Exit (Case H):** SOC ≥ charge target OR (Grid ≥ Offset + Hysteresis AND |Output| ≤ Tolerance)
+      - `|Output| ≤ Tolerance` guard prevents false trigger while PI is still controlling; a symmetric tolerance band around 0 W instead of exact `= 0` or one-sided `≤ 0` is more robust against isolated one-second noise readings (including slightly negative ones) caused by Modbus noise — reuses the same `tolerance` setting as the PI convergence check
     - **PI Control:** `ac_charge_mode=true` → inverted error: `target_offset − grid`
       - Positive error (Grid too negative) → increase charge power
       - `at_max/at_min` guards disabled (direction inverted)
@@ -823,7 +823,7 @@ blueprint:
             description: |
               Deadband for entry and exit.
               Entry: (Grid + Output) < −Hysteresis.
-              Exit: Grid ≥ (Offset + Hysteresis) AND Output ≤ 0 W.
+              Exit: Grid ≥ (Offset + Hysteresis) AND |Output| ≤ Tolerance.
               Prevents flickering with varying feed-in (e.g. 50 W).
             default: 50
             selector:
@@ -2028,7 +2028,7 @@ actions:
           - condition: template
             value_template: >
               {{ states(soc) | float(0) >= soc_ac_charge_limit_int or
-                 (grid_power_float >= (ac_charge_offset_int | float(0) + ac_charge_hysteresis_int | float(0)) and (actual_power_float | float(0) <= 0)) }}
+                 (grid_power_float >= (ac_charge_offset_int | float(0) + ac_charge_hysteresis_int | float(0)) and ((actual_power_float | float(0)) | abs <= tolerance_int)) }}
         sequence:
           # 1. Logbook entry
           - action: logbook.log

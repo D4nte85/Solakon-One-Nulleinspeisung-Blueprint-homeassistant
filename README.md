@@ -191,7 +191,7 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
 | **HT** | Mode = `'3'` AND Tariff-Bool = `on` AND (price ≥ cheap threshold OR SOC ≥ target) | Tariff Charging End: Integral = 0, Tariff-Bool = `off`, Zone 1 → Timer-Toggle + `'1'` / Zone 2 → `'0'` + 0W |
 | **TM** | Tariff active AND cheap ≤ price < expensive AND NOT PV-forecast-suppressed AND no charging AND NOT Surplus-Bool = `on` AND Mode = `'1'` | Discharge Lock: Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Timer-Toggle, Mode → `'0'` |
 | **G** | AC active AND SOC < charge target AND **Mode ≠ `'3'`** AND NOT Tariff-Bool = `on` AND NOT Surplus-Bool = `on` AND (Grid + ΣOutput_discharging) < −Hysteresis | AC Charging Start: AC-Bool = `on`, Timer-Toggle, Mode → `'3'`, Output → 0W |
-| **H** | Mode = `'3'` AND NOT Tariff-Bool = `on` AND (SOC ≥ charge target OR (Grid ≥ `ac_charge_offset + Hysteresis` AND Output ≤ 0 W)) | AC Charging End: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
+| **H** | Mode = `'3'` AND NOT Tariff-Bool = `on` AND (SOC ≥ charge target OR (Grid ≥ `ac_charge_offset + Hysteresis` AND \|Output\| ≤ Tolerance)) | AC Charging End: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
 | **I** | Mode = `'3'` AND NOT AC-Bool = `on` AND NOT Tariff-Bool = `on` | Safety correction: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
 | **E** | NOT AC-Bool = `on` AND NOT Tariff-Bool = `on` AND NOT discharge lock AND Zone 3 < SOC ≤ Zone 1 AND Cycle = `off` AND Mode = `'0'` AND NOT night | Zone 2 Start: Integral = 0, Output → 0W, Timer-Toggle, Mode → `'1'` |
 | **F** | NOT AC-Bool = `on` AND NOT Tariff-Bool = `on` AND NOT Surplus-Bool = `on` AND Night Shutdown active AND PV < PV Charge Reserve AND Cycle = `off` AND Mode active | Night Shutdown: Integral = 0, Output → 0W, Timer-Toggle, Mode → `'0'` |
@@ -238,8 +238,8 @@ Charges the battery when external grid feed-in is detected. Detection is based o
   - NOT Surplus-Bool = `on` (Zone 0 blocks charging)
   - (Grid + Output) < −Hysteresis
 * **Stay condition:** Mode stays `'3'` while SOC < charge target AND Grid < (ac_charge_offset + Hysteresis)
-* **Exit condition (Case H):** SOC ≥ charge target OR (Grid ≥ ac_charge_offset + Hysteresis AND Output ≤ 0 W)
-  - `Output ≤ 0 W` guard prevents false trigger while PI is still actively controlling; `≤` instead of exact `= 0` is more robust against isolated one-second zero readings caused by Modbus noise
+* **Exit condition (Case H):** SOC ≥ charge target OR (Grid ≥ ac_charge_offset + Hysteresis AND |Output| ≤ Tolerance)
+  - `|Output| ≤ Tolerance` guard prevents false trigger while PI is still actively controlling; a symmetric tolerance band around 0 W instead of exact `= 0` or one-sided `≤ 0` is more robust against isolated one-second noise readings (including slightly negative ones) caused by Modbus noise — reuses the same `tolerance` setting as the PI convergence check
 * **PI Control:** `ac_charge_mode=true` → inverted error: `(target_offset − grid) × error_share`
   - Positive error → increase charge power (Grid too negative → charge more)
   - `at_max/at_min` guards not applied (direction inverted)
@@ -450,7 +450,7 @@ Prevents oscillation between Case 0A/0B at night with a full battery when PV rea
 | **Enable AC Charging** | false | — | — | Toggle for AC Charging. |
 | **SOC Charge Target** | 90 % | 10 % | 99 % | Charging stops at this SOC. |
 | **Max. Charge Power** | 800 W | 50 | 1200 W | Upper limit of AC charge power (`max_power` to script). |
-| **Hysteresis AC Charging** | 50 W | 0 | 300 W | Deadband for entry and exit. Entry: (Grid + Output) < −Hysteresis. Exit: Grid ≥ (Offset + Hysteresis) AND Output ≤ 0 W. |
+| **Hysteresis AC Charging** | 50 W | 0 | 300 W | Deadband for entry and exit. Entry: (Grid + Output) < −Hysteresis. Exit: Grid ≥ (Offset + Hysteresis) AND \|Output\| ≤ Tolerance. |
 | **AC Charging Offset (Static)** | -50 W | -100 | 100 W | Control target in AC charging mode. Negative = targeting export → higher charge power. |
 | **AC Charging Offset (Dynamic)** | *(empty)* | — | — | Optional `input_number` entity. Overrides static value. |
 | **AC Charging P Factor** | 0.5 | 0.1 | 5.0 | Proportional gain in AC charging mode. Keep small due to long hardware response (~25 s). |
