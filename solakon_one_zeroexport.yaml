@@ -1068,17 +1068,20 @@ variables:
 
   # Grid / Solar / Actual Power (kW→W normalized)
   grid_power: !input grid_power_sensor
+  # round(3): prevents a value near 0 (e.g. cancelling phases on a summing
+  # sensor) from rendering in scientific notation — HA treats "1e-05" as a
+  # string instead of a number when re-parsing it.
   grid_power_float: >
     {% set v = states(grid_power) | float(0) %}
-    {{ v * 1000 if state_attr(grid_power, 'unit_of_measurement') == 'kW' else v }}
+    {{ ((v * 1000) if state_attr(grid_power, 'unit_of_measurement') == 'kW' else v) | round(3) }}
   solar_power: !input solar_power_sensor
   solar_power_float: >
     {% set v = states(solar_power) | float(0) %}
-    {{ v * 1000 if state_attr(solar_power, 'unit_of_measurement') == 'kW' else v }}
+    {{ ((v * 1000) if state_attr(solar_power, 'unit_of_measurement') == 'kW' else v) | round(3) }}
   actual_power_sensor: !input actual_power_sensor
   actual_power_float: >
     {% set v = states(actual_power_sensor) | float(0) %}
-    {{ v * 1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else v }}
+    {{ ((v * 1000) if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else v) | round(3) }}
 
   # Zone thresholds
   soc_fast_limit_static: !input soc_fast_limit
@@ -2352,13 +2355,13 @@ actions:
   # BLOCK 2: Variables ONLY for PI Controller
   # ===========================================
   - variables:
-      # Fresh sensor values at time of PI calculation (kW→W normalized)
+      # Fresh sensor values at time of PI calculation (kW→W normalized, round(3) against scientific notation)
       grid_power_float: >
         {% set v = states(grid_power) | float(0) %}
-        {{ v * 1000 if state_attr(grid_power, 'unit_of_measurement') == 'kW' else v }}
+        {{ ((v * 1000) if state_attr(grid_power, 'unit_of_measurement') == 'kW' else v) | round(3) }}
       solar_power_float: >
         {% set v = states(solar_power) | float(0) %}
-        {{ v * 1000 if state_attr(solar_power, 'unit_of_measurement') == 'kW' else v }}
+        {{ ((v * 1000) if state_attr(solar_power, 'unit_of_measurement') == 'kW' else v) | round(3) }}
 
       # Configuration
       wait_time_int: !input wait_time

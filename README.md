@@ -574,6 +574,7 @@ Typical working range: **0.03–0.08**. For AC Charging, tune separately — kee
 | **Grid power sensor UNKNOWN/UNAVAILABLE** | Meter integration offline/network issue | Check connection — automation skips the cycle instead of proceeding with a false zero reading |
 | **Actual power sensor UNKNOWN/UNAVAILABLE** | Solakon integration offline/Modbus issue | Check connection — automation skips the cycle instead of proceeding with a false zero reading |
 | **TypeError: cannot use 'dict' as a dict key** | Affected blueprint versions before this fix: `surplus_forecast_sensor`/`surplus_lock_sensor` (sections 7/11) left empty | Update the blueprint — both optional fields are now only computed when an entity is set |
+| **TypeError: unsupported operand type(s) for -: 'str' and 'float'** | Affected blueprint versions before this fix: `grid_power_float`/`solar_power_float`/`actual_power_float` could render in scientific notation for values near 0 (e.g. cancelling phases on a summing sensor) and were then used downstream as a string instead of a number | Update the blueprint — the three values are now rounded to 3 decimal places before further use |
 
 ---
 
