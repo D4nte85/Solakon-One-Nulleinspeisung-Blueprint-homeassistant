@@ -179,11 +179,17 @@ flowchart TD
 
         INTEGRAL_DECAY["📉 Integral-Decay   |Integral| > 10 → Integral × 0,95   sonst → kein Update"]
 
+        INTEGRAL_DECAY --> STALL_GATE
+        STALL_GATE{{"Ausgang steht?   At-Max-Limit UND kein AC Laden   UND |Ist − dynamic_max| > 5 % · dynamic_max   UND Ist-Sensor seit > 300 s unverändert (last_updated)   UND Modus seit > 300 s unverändert (last_changed)"}}
+        STALL_GATE -- Nein --> END_OK
+        STALL_GATE -- Ja --> STALL_RECOVER
+        STALL_RECOVER["⚠️ Stillstand — Rückholung   Integral = 0   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0'   → nächster Lauf: Fall D (Timer-Toggle + Modus '1'), PI rampt hoch"]
+        STALL_RECOVER --> END_OK
+
         CALC_SURPLUS --> END_OK([Ende])
         CALC_TARIFF --> END_OK
         CALC_AC --> END_OK
         CALC_NORMAL --> END_OK
-        INTEGRAL_DECAY --> END_OK
 
     end
     style SG_PI fill:none,stroke:#004085,stroke-width:5,stroke-dasharray:6,color:#000
@@ -211,6 +217,7 @@ flowchart TD
     class SAFETY_I,SAFETY_I_Z1,SAFETY_I_Z2 recovery
     class TARIFF_START,TARIFF_END,TARIFF_END_Z1,TARIFF_END_Z2,TARIFF_GATE,CALC_TARIFF tariff
     class TARIFF_MID tarifflock
-    class CALC_NORMAL,DISCHARGE_SET,INTEGRAL_DECAY,NORMAL_GATE pi
+    class CALC_NORMAL,DISCHARGE_SET,INTEGRAL_DECAY,NORMAL_GATE,STALL_GATE pi
+    class STALL_RECOVER recovery
     class END_STOP,END_SKIP,END_OK end_node
 ````
