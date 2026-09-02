@@ -165,6 +165,7 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
   - AC Charging active → PI with `ac_charge_mode=true`, `at_max/at_min` guards disabled
   - Normal → PI only if `|error| > tolerance` AND no at-limit
   - `at_max_limit = false` if `current > dynamic_max` (PV drop) → PI can correct downward
+* **Output stall detection:** When the setpoint sits at the upper limit and the grid error persists in the same direction (`at_max_limit`), the PI stops writing — it cannot raise the setpoint any further. An inverter stalled in exactly that state never receives another command; case D does not apply either, because the mode is still `'1'`. This is detected via the **deviation of actual power from the limit**: more than 5 % deviation while the actual sensor's `last_updated` has been standing still for over 300 s. That timestamp only advances on a value change and therefore means "unchanged since then" — an actual sensor fluctuating around the deviating value does not trigger it. Action: integral = 0, output → 0 W, timer toggle, mode → `'0'`; on the next run **case D** brings the device back (timer toggle + mode `'1'`) and the PI ramps up again. Repeats at most every 300 s, measured on the mode entity's `last_changed`. Applies to normal discharge mode only — Zone 0, tariff charging and AC charging deliberately hold the output below their respective limit.
 
 ---
 
