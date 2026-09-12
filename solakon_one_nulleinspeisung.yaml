@@ -1312,10 +1312,8 @@ variables:
   pv_forecast_enabled_bool: !input pv_forecast_enabled
   pv_forecast_sensor_id: !input pv_forecast_sensor
   pv_forecast_threshold_float: !input pv_forecast_threshold
-  # Auf kWh normalisiert (Wh ÷1000, MWh ×1000), verglichen wird gegen die kWh-Schwelle;
-  # ohne erkannte Energie-Einheit bleibt der Rohwert unverändert. Anders als
-  # surplus_forecast_power_float/surplus_lock_power_float: dort ist der Sensor eine
-  # Leistung (W), hier ein Tagesertrag (kWh).
+  # Tagesertrag auf kWh normalisiert (Wh ÷1000, MWh ×1000); ohne erkannte
+  # Energie-Einheit bleibt der Rohwert unverändert.
   pv_forecast_energy_float: >
     {% if pv_forecast_sensor_id is string and pv_forecast_sensor_id | length > 0 %}
       {% set v = states(pv_forecast_sensor_id) | float(0) %}
