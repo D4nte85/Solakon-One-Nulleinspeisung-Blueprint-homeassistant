@@ -268,7 +268,7 @@ Charges the battery at cheap prices and locks discharge during neutral price pha
 
 Prevents tariff charging (GT) and discharge lock (TM) on sunny days.
 
-* Forecast sensor ≥ threshold → `pv_forecast_suppressed = true` → GT and TM are completely skipped
+* Forecast sensor (expected daily yield in kWh, Wh/MWh normalized automatically) ≥ threshold → `pv_forecast_suppressed = true` → GT and TM are completely skipped
 * Only active when Tariff Arbitrage is also enabled
 * Sensor `unknown`/`unavailable` → suppression inactive, tariff logic applies normally
 
@@ -479,8 +479,8 @@ Prevents oscillation between Case 0A/0B at night with a full battery when PV rea
 | Parameter | Default | Min | Max | Description |
 |:----------|:--------|:----|:----|:------------|
 | **Enable PV Forecast Suppression** | false | — | — | Skips GT and TM when forecast ≥ threshold. |
-| **PV Forecast Sensor** | *(empty)* | — | — | PV yield forecast in W (e.g. Solcast). |
-| **PV Forecast Threshold** | 5000 W | 0 | 20000 W | Minimum forecast value for suppression. |
+| **PV Forecast Sensor** | *(empty)* | — | — | Expected PV daily yield in kWh (e.g. Solcast `energy_production_today`; Wh/MWh normalized automatically). |
+| **PV Forecast Threshold** | 15 kWh | 0 | 50 kWh | Minimum daily yield for suppression. |
 
 ---
 

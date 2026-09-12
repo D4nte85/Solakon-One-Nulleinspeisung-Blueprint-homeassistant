@@ -168,7 +168,7 @@ blueprint:
 
     Prevents tariff charging (GT) and discharge lock (TM) on sunny days.
 
-    - **Sensor:** PV yield forecast in W (e.g. Solcast `energy_production_today`)
+    - **Sensor:** Expected PV daily yield in kWh (e.g. Solcast `energy_production_today`; Wh/MWh normalized automatically)
     - **Condition:** Forecast ≥ threshold → `pv_forecast_suppressed = true`
     - **Effect:** GT and TM are completely skipped — battery can discharge normally
     - **Only active when:** Tariff arbitrage is also enabled
@@ -721,6 +721,8 @@ blueprint:
             name: 🌤️ Surplus Forecast Sensor (Optional)
             description: |
               PV surplus forecast in W (e.g. Solcast sensor; kW is normalized ×1000 automatically).
+              ⚠️ A power, not a daily yield — unlike the PV Forecast sensor of the tariff
+              suppression, which expects kWh. What matters here is the curtailment risk right now.
               ⚠️ Leave empty when Surplus Forecast is not used.
             default: {}
             selector:
@@ -1021,7 +1023,11 @@ blueprint:
           pv_forecast_sensor:
             name: 🌤️ PV Forecast Sensor (Optional)
             description: |
-              PV yield forecast in W (e.g. Solcast sensor).
+              Expected PV daily yield in kWh (e.g. Solcast `energy_production_today`;
+              Wh/MWh are normalized to kWh automatically, a value without a recognized
+              energy unit is taken as kWh unchanged).
+              ⚠️ Not the instantaneous power — tariff charging runs at night, where a power
+              forecast sits at 0 and the suppression would never trigger.
               ⚠️ Leave empty when PV Forecast is not used.
             default: {}
             selector:
@@ -1029,16 +1035,16 @@ blueprint:
                 domain: sensor
 
           pv_forecast_threshold:
-            name: 🌤️ PV Forecast Threshold (W)
+            name: 🌤️ PV Forecast Threshold (kWh)
             description: |
-              Minimum forecast value for tariff suppression.
-            default: 5000
+              Minimum daily yield for tariff suppression.
+            default: 15
             selector:
               number:
                 min: 0
-                max: 20000
-                step: 100
-                unit_of_measurement: W
+                max: 50
+                step: 0.5
+                unit_of_measurement: kWh
 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 🌙 NIGHT SHUTDOWN (Optional)
@@ -1306,11 +1312,23 @@ variables:
   pv_forecast_enabled_bool: !input pv_forecast_enabled
   pv_forecast_sensor_id: !input pv_forecast_sensor
   pv_forecast_threshold_float: !input pv_forecast_threshold
+  # Normalized to kWh (Wh ÷1000, MWh ×1000), compared against the kWh threshold;
+  # without a recognized energy unit the raw value stays unchanged. Unlike
+  # surplus_forecast_power_float/surplus_lock_power_float: there the sensor is a
+  # power (W), here a daily yield (kWh).
+  pv_forecast_energy_float: >
+    {% if pv_forecast_sensor_id is string and pv_forecast_sensor_id | length > 0 %}
+      {% set v = states(pv_forecast_sensor_id) | float(0) %}
+      {% set u = state_attr(pv_forecast_sensor_id, 'unit_of_measurement') %}
+      {{ v / 1000 if u == 'Wh' else (v * 1000 if u == 'MWh' else v) }}
+    {% else %}
+      0
+    {% endif %}
   pv_forecast_suppressed: >
     {{ pv_forecast_enabled_bool | bool(false) and
        pv_forecast_sensor_id is string and pv_forecast_sensor_id | length > 0 and
        states(pv_forecast_sensor_id) not in ['unknown', 'unavailable'] and
-       states(pv_forecast_sensor_id) | float(0) >= pv_forecast_threshold_float | float(0) }}
+       pv_forecast_energy_float | float(0) >= pv_forecast_threshold_float | float(0) }}
 
 triggers:
   # Grid power change
