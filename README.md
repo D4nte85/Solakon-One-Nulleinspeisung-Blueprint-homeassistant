@@ -326,7 +326,7 @@ Verhindert Tarif-Laden und Discharge-Lock an Tagen, an denen die PV-Prognose aus
 
 * **Voraussetzung:** Tarif-Arbitrage muss ebenfalls aktiviert sein.
 * **Funktion:** Wenn der konfigurierte PV-Forecast-Sensor ≥ Schwelle → Fall GT und Fall TM werden übersprungen. Der Akku kann an sonnigen Tagen normal entladen und muss nicht durch Tarifsignale blockiert werden.
-* **Sensor:** Z.B. Solcast `energy_production_today` oder ähnlicher Tages-/Stunden-Forecast in W.
+* **Sensor:** Erwarteter Tagesertrag in kWh, z.B. Solcast `energy_production_today` (Wh/MWh werden automatisch auf kWh normalisiert). Keine Momentanleistung — Tarif-Laden läuft nachts, eine Leistungsprognose liegt dann bei 0 und die Unterdrückung würde nie greifen.
 * **Fallback:** Sensor unavailable/unknown → Unterdrückung inaktiv (Sicherheits-Fallback: Tarif-Logik greift normal).
 
 ### 11. 🌤️ Surplus-Forecast erzwungener Eintritt (Optional)
@@ -487,8 +487,8 @@ Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher, wenn PV d
 | Parameter | Standard | Min | Max | Beschreibung |
 |:----------|:---------|:----|:----|:-------------|
 | **PV-Forecast Unterdrückung aktivieren** | false | — | — | Schalter für die Funktion. Nur wirksam wenn Tarif-Arbitrage aktiv. |
-| **PV-Forecast Sensor** | *(leer)* | — | — | PV-Ertragsprognose in W (z.B. Solcast). Leer lassen wenn nicht genutzt. |
-| **PV-Forecast Schwelle** | 5000 W | 0 | 20000 W | Forecast muss diesen Wert erreichen um GT/TM zu unterdrücken. |
+| **PV-Forecast Sensor** | *(leer)* | — | — | Erwarteter PV-Tagesertrag in kWh (z.B. Solcast `energy_production_today`; Wh/MWh automatisch normalisiert). Leer lassen wenn nicht genutzt. |
+| **PV-Forecast Schwelle** | 15 kWh | 0 | 50 kWh | Tagesertrag muss diesen Wert erreichen um GT/TM zu unterdrücken. |
 
 ---
 
