@@ -1113,6 +1113,9 @@ variables:
   # Toleranz (wird in Fall G benötigt)
   tolerance_int: !input tolerance
 
+  # Wartezeit (Bestätigung der Nullung in Fall B und C)
+  zero_confirm_wait_int: !input wait_time
+
   # Helper-Entitäten
   integral_entity: !input integral_helper
   active_power_entity: !input active_power_number
@@ -1593,6 +1596,33 @@ actions:
               entity_id: !input active_power_number
             data:
               value: 0
+          # Nullung bestätigen: warten bis |Ist| ≤ Toleranz, sonst einmal erneut schreiben
+          - wait_template: "{{ (states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int }}"
+            timeout:
+              seconds: "{{ zero_confirm_wait_int }}"
+            continue_on_timeout: true
+          - if:
+              - condition: template
+                value_template: "{{ not wait.completed }}"
+            then:
+              - action: number.set_value
+                target:
+                  entity_id: !input active_power_number
+                data:
+                  value: 0
+              - wait_template: "{{ (states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int }}"
+                timeout:
+                  seconds: "{{ zero_confirm_wait_int }}"
+                continue_on_timeout: true
+              - if:
+                  - condition: template
+                    value_template: "{{ not wait.completed }}"
+                then:
+                  - action: logbook.log
+                    data:
+                      name: Solakon Sicherheitsstopp
+                      message: "⚠️ Nullung nicht bestätigt — Ist-Leistung {{ states(actual_power_sensor) }} W nach erneutem Schreiben"
+                      entity_id: !input active_power_number
           # 7. Timer-Toggle (3598↔3599)
           - choose:
               - conditions:
@@ -1652,6 +1682,33 @@ actions:
               entity_id: !input active_power_number
             data:
               value: 0
+          # Nullung bestätigen: warten bis |Ist| ≤ Toleranz, sonst einmal erneut schreiben
+          - wait_template: "{{ (states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int }}"
+            timeout:
+              seconds: "{{ zero_confirm_wait_int }}"
+            continue_on_timeout: true
+          - if:
+              - condition: template
+                value_template: "{{ not wait.completed }}"
+            then:
+              - action: number.set_value
+                target:
+                  entity_id: !input active_power_number
+                data:
+                  value: 0
+              - wait_template: "{{ (states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int }}"
+                timeout:
+                  seconds: "{{ zero_confirm_wait_int }}"
+                continue_on_timeout: true
+              - if:
+                  - condition: template
+                    value_template: "{{ not wait.completed }}"
+                then:
+                  - action: logbook.log
+                    data:
+                      name: Solakon Sicherheitsstopp
+                      message: "⚠️ Nullung nicht bestätigt — Ist-Leistung {{ states(actual_power_sensor) }} W nach erneutem Schreiben"
+                      entity_id: !input active_power_number
           # 4. Timer-Toggle (3598↔3599)
           - choose:
               - conditions:

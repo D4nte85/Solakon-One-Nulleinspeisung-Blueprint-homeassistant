@@ -36,10 +36,10 @@ flowchart TD
         Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
 
         %% ── Fall B: Zone 3 (Zyklus on) ──────────────────────────────────
-        Z3_A["🛑 Zone 3 aktivieren   Zyklus = off   Integral = 0   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
+        Z3_A["🛑 Zone 3 aktivieren   Zyklus = off   Integral = 0   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Output → 0 W (bestätigt, 1× Retry)   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
         %% ── Fall C: Zone 3 (Absicherung) ────────────────────────────────
-        Z3_B["🛑 Zone 3 Absicherung   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
+        Z3_B["🛑 Zone 3 Absicherung   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Output → 0 W (bestätigt, 1× Retry)   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
         %% ── Fall D: Recovery ─────────────────────────────────────────────
         RECOVERY["🔄 Recovery — Modus-Reaktivierung   Timer-Toggle (3598↔3599)   AC-Lade-Bool = on ODER Tarif-Lade-Bool = on → Modus '3'   sonst → Modus '1'   (kein Integral-Reset, kein Zonenwechsel)"]
