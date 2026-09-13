@@ -5,6 +5,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [V310] – 2026-09-13
+
 ### Changed
 - Cases B and C confirm zeroing: after the 0 W write the blueprint waits until |actual power| ≤ tolerance (timeout = wait time), otherwise writes once more and logs a still deviating value to the logbook. Ported from the integration (`_confirm_zero_output`)
 - `PI-Controller.yaml`: removed the unused `tolerance` field, the main blueprint no longer passes it. Tolerance remains a deadband in front of the script call. Old and new script versions are compatible in both directions
