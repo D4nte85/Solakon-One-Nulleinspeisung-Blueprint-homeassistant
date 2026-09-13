@@ -24,9 +24,6 @@ fields:
   max_power:
     name: Max Power (Watts)
     description: Inverter limit (hard limit or charge limit)
-  tolerance:
-    name: Tolerance (Watts)
-    description: Deadband within which no correction occurs
   p_factor:
     name: P Factor
   i_factor:
@@ -59,7 +56,6 @@ variables:
   current_float: "{{ current_power | float(0) }}"
   target_float: "{{ target_offset | float(0) }}"
   max_pwr_float: "{{ max_power | float(800) }}"
-  tol_float: "{{ tolerance | float(10) }}"
   p_val: "{{ p_factor | float(1.5) }}"
   i_val: "{{ i_factor | float(0.05) }}"
 

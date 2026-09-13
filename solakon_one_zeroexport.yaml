@@ -2606,7 +2606,6 @@ actions:
               current_power: "{{ current_active_power }}"
               target_offset: "{{ target_offset }}"
               max_power: "{{ dynamic_max_power }}"
-              tolerance: "{{ tolerance_int }}"
               p_factor: "{{ ac_charge_p_factor_float }}"
               i_factor: "{{ ac_charge_i_factor_float }}"
               integral_entity: !input integral_helper
@@ -2643,7 +2642,6 @@ actions:
               current_power: "{{ current_active_power }}"
               target_offset: "{{ target_offset }}"
               max_power: "{{ dynamic_max_power }}"
-              tolerance: "{{ tolerance_int }}"
               p_factor: "{{ regulator_factor_float }}"
               i_factor: "{{ ki_factor_float }}"
               integral_entity: !input integral_helper
