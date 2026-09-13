@@ -1552,7 +1552,7 @@ actions:
           - condition: template
             value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
           - condition: template
-            value_template: "{{ states(soc) | float(0) < soc_conservation_limit_int }}"
+            value_template: "{{ states(soc) | float(0) <= soc_conservation_limit_int }}"
           - condition: state
             entity_id: !input cycle_active_boolean_helper
             state: 'on'
@@ -1625,7 +1625,7 @@ actions:
           - condition: template
             value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
           - condition: template
-            value_template: "{{ states(soc) | float(0) < soc_conservation_limit_int }}"
+            value_template: "{{ states(soc) | float(0) <= soc_conservation_limit_int }}"
           - condition: state
             entity_id: !input cycle_active_boolean_helper
             state: 'off'
@@ -1757,8 +1757,6 @@ actions:
             value_template: "{{ states(solakon_mode) != '3' }}"
           - condition: template
             value_template: "{{ not (surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on')) }}"
-          - condition: template
-            value_template: "{{ not (pv_forecast_suppressed | bool(false)) }}"
         sequence:
           # 1. Logbuch-Eintrag
           - action: logbook.log

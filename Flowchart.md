@@ -91,8 +91,8 @@ flowchart TD
 
     %% ── ZONE_CHECK → Fall-Verzweigungen ──────────────────────────────────
     ZONE_CHECK -- "FALL A   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND NICHT Entladesperre (Preis < teuer)   UND SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
-    ZONE_CHECK -- "FALL B   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND SOC < Zone-3-Schwelle UND Zyklus = on" --> Z3_A
-    ZONE_CHECK -- "FALL C   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND SOC < Zone-3-Schwelle UND Zyklus = off UND Modus ≠ '0'" --> Z3_B
+    ZONE_CHECK -- "FALL B   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND SOC ≤ Zone-3-Schwelle UND Zyklus = on" --> Z3_A
+    ZONE_CHECK -- "FALL C   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND SOC ≤ Zone-3-Schwelle UND Zyklus = off UND Modus ≠ '0'" --> Z3_B
     ZONE_CHECK -- "FALL D   Zyklus = on ODER Lade-Bool = on   UND Modus ∉ {'1','3'} ← '3' explizit ausgenommen!   UND (Lade-Bool = on ODER SOC > Zone-3-Schwelle)" --> RECOVERY
     ZONE_CHECK -- "FALL GT   Tarif-Arbitrage aktiviert   UND Preis < Günstig-Schwelle   UND SOC < Tarif-Ladeziel   UND Modus ≠ '3' ← Guard!   UND NICHT Surplus-Bool = on   UND NICHT PV-Forecast-Suppressed" --> TARIFF_START
     ZONE_CHECK -- "FALL HT   Modus = '3'   UND Tarif-Lade-Bool = on   UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Tarif-Ladeziel)" --> TARIFF_END
