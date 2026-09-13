@@ -118,7 +118,7 @@ Wird von der Leistungsverteilungs-Automation beschrieben und begrenzt den Ausgan
 ### 8. Input Number Helper (Fehler-Anteil) — NUR für Multi-Instancing
 
 Enthält den Anteil des Netzfehlers (0.0–1.0), den diese Instanz über ihren PI-Regler übernimmt.
-Wird von der Leistungsverteilungs-Automation berechnet: `usable_i / Σ usable_j` mit `usable_i = (SOC_i − Min-SOC_i) / 100 × Kap_i`. Ohne Kapazitätssensor gilt `Kap_i = 100` — reine SOC-%-Gewichtung.
+Wird von der Leistungsverteilungs-Automation berechnet: `usable_i / Σ usable_j` mit `usable_i = (SOC_i − Min-SOC_i) / 100 × Kap_i`. Ohne Kapazitätssensor gilt `Kap_i = 100` — reine SOC-%-Gewichtung. Wh wird auf kWh umgerechnet; liefert eine aktive Instanz keinen gültigen Kapazitätswert, gilt für alle `Kap_i = 100` (Logbuch-Warnung).
 Gilt nur für Zone 1/Zone 2 (Nulleinspeisung, Modus '1'). Für AC-Laden siehe Punkt 8b.
 
 1. Gehen Sie zu **Einstellungen** → **Geräte & Dienste** → **Helfer** → **Number**
@@ -664,6 +664,7 @@ error_share_i = usable_i / Σ usable_j
 ```
 
 Ohne Kapazitätssensor gilt `Kap_i = 100` — Gewichtung nach SOC-Prozentpunkten (identisch zum Vorgänger).
+Fehlt der Wert auch nur bei einer aktiven Instanz, gilt das für alle — gemischte Gewichte aus kWh und Ersatzwert entstehen nicht.
 
 Beispiel mit zwei Instanzen (Min-SOC jeweils 20 %, Kapazitäten 10 kWh / 5 kWh):
 
