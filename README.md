@@ -105,7 +105,7 @@ Written by the power distribution automation and dynamically limits the instance
 ### 8. Input Number Helper (Error Share) — MULTI-INSTANCING ONLY
 
 Contains the share of grid error (0.0–1.0) this instance handles via its PI controller.
-Calculated by the power distribution automation: `usable_i / Σ usable_j` with `usable_i = (SOC_i − Min-SOC_i) / 100 × Cap_i`. Without capacity sensor: `Cap_i = 100` — weighting by SOC percentage points.
+Calculated by the power distribution automation: `usable_i / Σ usable_j` with `usable_i = (SOC_i − Min-SOC_i) / 100 × Cap_i`. Without capacity sensor: `Cap_i = 100` — weighting by SOC percentage points. Wh is converted to kWh; if an active instance has no valid capacity value, all use `Cap_i = 100` (logbook warning).
 
 1. Go to **Settings** → **Devices & Services** → **Helpers** → **Number**
 2. Name: e.g. `Solakon Instance 1 Share`
@@ -734,6 +734,7 @@ error_share_i = usable_i / Σ usable_j
 ```
 
 Without capacity sensor: `Cap_i = 100` — weighting by SOC percentage points (equal capacity assumed).
+If the value is missing for even one active instance, this applies to all — no mixed weights from kWh and fallback values.
 
 Example with two instances (Min-SOC 20% each, capacities 10 kWh / 5 kWh):
 

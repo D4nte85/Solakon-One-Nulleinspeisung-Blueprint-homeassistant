@@ -562,15 +562,55 @@ actions:
       total_actual_power_configured: >
         {{ total_actual_power_helper is string and total_actual_power_helper | length > 0 }}
 
-      # Capacity sensors (default 100.0 → weighting by SOC percentage points if not set)
+      # Capacity sensors in kWh (Wh ÷ 1000), −1 = no valid value.
+      # If an active instance has no valid value, all use 100.0 → weighting by SOC percentage points.
       i1_cap_valid: "{{ i1_cap is string and i1_cap | length > 0 }}"
       i2_cap_valid: "{{ i2_cap is string and i2_cap | length > 0 }}"
       i3_cap_valid: "{{ i3_cap is string and i3_cap | length > 0 }}"
       i4_cap_valid: "{{ i4_cap is string and i4_cap | length > 0 }}"
-      cap1: "{{ states(i1_cap) | float(100.0) if i1_cap_valid else 100.0 }}"
-      cap2: "{{ states(i2_cap) | float(100.0) if i2_cap_valid else 100.0 }}"
-      cap3: "{{ states(i3_cap) | float(100.0) if i3_cap_valid else 100.0 }}"
-      cap4: "{{ states(i4_cap) | float(100.0) if i4_cap_valid else 100.0 }}"
+      cap_raw1: >
+        {% if i1_cap_valid and is_number(states(i1_cap)) %}
+          {% set v = states(i1_cap) | float(0) %}
+          {{ v / 1000 if (state_attr(i1_cap, 'unit_of_measurement') or '') | lower == 'wh' else v }}
+        {% else %}
+          {{ -1 }}
+        {% endif %}
+      cap_raw2: >
+        {% if i2_cap_valid and is_number(states(i2_cap)) %}
+          {% set v = states(i2_cap) | float(0) %}
+          {{ v / 1000 if (state_attr(i2_cap, 'unit_of_measurement') or '') | lower == 'wh' else v }}
+        {% else %}
+          {{ -1 }}
+        {% endif %}
+      cap_raw3: >
+        {% if i3_cap_valid and is_number(states(i3_cap)) %}
+          {% set v = states(i3_cap) | float(0) %}
+          {{ v / 1000 if (state_attr(i3_cap, 'unit_of_measurement') or '') | lower == 'wh' else v }}
+        {% else %}
+          {{ -1 }}
+        {% endif %}
+      cap_raw4: >
+        {% if i4_cap_valid and is_number(states(i4_cap)) %}
+          {% set v = states(i4_cap) | float(0) %}
+          {{ v / 1000 if (state_attr(i4_cap, 'unit_of_measurement') or '') | lower == 'wh' else v }}
+        {% else %}
+          {{ -1 }}
+        {% endif %}
+      # Active instances without a valid capacity value, only if any capacity sensor is set at all.
+      degraded_capacity: >
+        {% set ns = namespace(list=[]) %}
+        {% if i1_cap_valid or i2_cap_valid or i3_cap_valid or i4_cap_valid %}
+          {% if i1_active and cap_raw1 | float(-1) < 0 %}{% set ns.list = ns.list + ['1'] %}{% endif %}
+          {% if i2_active and cap_raw2 | float(-1) < 0 %}{% set ns.list = ns.list + ['2'] %}{% endif %}
+          {% if i3_active and cap_raw3 | float(-1) < 0 %}{% set ns.list = ns.list + ['3'] %}{% endif %}
+          {% if i4_active and cap_raw4 | float(-1) < 0 %}{% set ns.list = ns.list + ['4'] %}{% endif %}
+        {% endif %}
+        {{ ns.list }}
+      caps_complete: "{{ (i1_cap_valid or i2_cap_valid or i3_cap_valid or i4_cap_valid) and degraded_capacity | length == 0 }}"
+      cap1: "{{ cap_raw1 | float(100.0) if caps_complete else 100.0 }}"
+      cap2: "{{ cap_raw2 | float(100.0) if caps_complete else 100.0 }}"
+      cap3: "{{ cap_raw3 | float(100.0) if caps_complete else 100.0 }}"
+      cap4: "{{ cap_raw4 | float(100.0) if caps_complete else 100.0 }}"
 
       # Usable energy per instance = (SOC − Min-SOC) / 100 × capacity_kWh
       # Inactive instances receive 0 → no weight.
@@ -763,6 +803,16 @@ actions:
           message: >
             ⚠️ Distribution degraded: SOC sensor instance {{ degraded_instances | join(', ') }}
             unavailable, weight=0
+  - if:
+      - condition: template
+        value_template: "{{ not equal_dist and degraded_capacity | length > 0 }}"
+    then:
+      - action: logbook.log
+        data:
+          name: Solakon Distribution
+          message: >
+            ⚠️ Distribution degraded: capacity sensor instance {{ degraded_capacity | join(', ') }}
+            unavailable, all instances weighted by SOC percentage points
 
   # ── Write ─────────────────────────────────────────────────────────────────
 
