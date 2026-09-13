@@ -5,6 +5,8 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 ## [Unreleased]
 
+## [V310] – 2026-09-13
+
 ### Geändert
 - Fall B und C bestätigen die Nullung: nach dem 0-W-Write wartet der Blueprint bis |Ist-Leistung| ≤ Toleranz (Timeout = Wartezeit), schreibt sonst einmal erneut und meldet einen weiterhin abweichenden Wert im Logbuch. Portiert aus der Integration (`_confirm_zero_output`)
 - `PI-Regler.yaml`: ungenutztes Feld `tolerance` entfernt, der Hauptblueprint übergibt es nicht mehr. Die Toleranz bleibt ein Totband vor dem Scriptaufruf. Alte und neue Script-Versionen sind in beide Richtungen kompatibel
