@@ -82,8 +82,8 @@ variables:
 
   integral_old: "{{ states(integral_entity) | float(0) }}"
 
-  # Hardware-Max der Ziel-Entität (Fallback: max_pwr_float wenn Attribut fehlt)
-  entity_max: "{{ state_attr(output_entity, 'max') | float(max_pwr_float) }}"
+  # Hardware-Max der Ziel-Entität, gedeckelt auf die Gerätegrenze 1200 W (Fallback: max_pwr_float wenn Attribut fehlt)
+  entity_max: "{{ [1200, state_attr(output_entity, 'max') | float(max_pwr_float)] | min }}"
   effective_max: "{{ [max_pwr_float, entity_max] | min }}"
 
   # PI-Korrektur und Endergebnis

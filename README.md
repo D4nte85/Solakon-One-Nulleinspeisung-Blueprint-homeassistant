@@ -217,7 +217,7 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 | **A** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'` |
 | **B** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC < Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Output → 0W, Timer-Toggle, Modus → `'0'` |
 | **C** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Output → 0W, Timer-Toggle, Modus → `'0'` |
-| **D** | Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle | Recovery: Timer-Toggle, Modus → `'3'` wenn AC-Lade-Bool **oder** Tarif-Lade-Bool = `on`, sonst `'1'` |
+| **D** | (Zyklus = `on` ODER AC-Lade-Bool = `on` ODER Tarif-Lade-Bool = `on`) UND Modus ∉ `{'1','3'}` UND (Lade-Bool = `on` ODER SOC > Zone-3-Schwelle) | Recovery: Timer-Toggle, Modus → `'3'` wenn AC-Lade-Bool **oder** Tarif-Lade-Bool = `on`, sonst `'1'` |
 | **GT** | Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel UND **Modus ≠ `'3'`** UND **NICHT Surplus-Bool = `on`** UND **NICHT PV-Forecast-Suppressed** | Tarif-Laden Start: Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'` |
 | **HT** | Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Tarif-Ladeziel) | Tarif-Laden Ende: Tarif-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
 | **TM** | Tarif aktiv UND Günstig ≤ Preis < Teuer-Schwelle UND kein AC/Tarif-Laden UND **NICHT Surplus-Bool = `on`** UND **Modus = `'1'`** UND **NICHT PV-Forecast-Suppressed** | Discharge-Lock: Integral = 0, Zyklus = `off` (wenn aktiv), Output → 0W, Timer-Toggle, Modus → `'0'` |
@@ -325,7 +325,7 @@ Betrifft **nur Zone 2** (Fall F). Zone 1, AC Laden und Überschuss-Einspeisung (
 Verhindert Tarif-Laden und Discharge-Lock an Tagen, an denen die PV-Prognose ausreichend ist.
 
 * **Voraussetzung:** Tarif-Arbitrage muss ebenfalls aktiviert sein.
-* **Funktion:** Wenn der konfigurierte PV-Forecast-Sensor ≥ Schwelle → Fall GT und Fall TM werden übersprungen. Der Akku kann an sonnigen Tagen normal entladen und muss nicht durch Tarifsignale blockiert werden.
+* **Funktion:** Wenn der konfigurierte PV-Forecast-Sensor ≥ Schwelle → Fall GT und Fall TM werden übersprungen, die Entladesperre für Fall A und E entfällt. Der Akku kann an sonnigen Tagen normal entladen und muss nicht durch Tarifsignale blockiert werden.
 * **Sensor:** Erwarteter Tagesertrag in kWh, z.B. Solcast `energy_production_today` (Wh/MWh werden automatisch auf kWh normalisiert). Keine Momentanleistung — Tarif-Laden läuft nachts, eine Leistungsprognose liegt dann bei 0 und die Unterdrückung würde nie greifen.
 * **Fallback:** Sensor unavailable/unknown → Unterdrückung inaktiv (Sicherheits-Fallback: Tarif-Logik greift normal).
 
@@ -488,7 +488,7 @@ Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher, wenn PV d
 |:----------|:---------|:----|:----|:-------------|
 | **PV-Forecast Unterdrückung aktivieren** | false | — | — | Schalter für die Funktion. Nur wirksam wenn Tarif-Arbitrage aktiv. |
 | **PV-Forecast Sensor** | *(leer)* | — | — | Erwarteter PV-Tagesertrag in kWh (z.B. Solcast `energy_production_today`; Wh/MWh automatisch normalisiert). Leer lassen wenn nicht genutzt. |
-| **PV-Forecast Schwelle** | 15 kWh | 0 | 50 kWh | Tagesertrag muss diesen Wert erreichen um GT/TM zu unterdrücken. |
+| **PV-Forecast Schwelle** | 15 kWh | 0 | 50 kWh | Tagesertrag muss diesen Wert erreichen um GT/TM und die Entladesperre zu unterdrücken. |
 
 ---
 
