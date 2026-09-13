@@ -187,7 +187,7 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
 | **A** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND NOT discharge lock AND SOC > Zone 1 threshold AND Cycle = `off` | Zone 1 Start: Cycle = `on`, Integral = 0, reset Surplus/AC-Bool, Timer-Toggle, Mode → `'1'` |
 | **B** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND SOC < Zone 3 threshold AND Cycle = `on` | Zone 3 Stop: Cycle = `off`, Integral = 0, reset Surplus/AC-Bool, Output → 0W, Timer-Toggle, Mode → `'0'` |
 | **C** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND SOC < Zone 3 threshold AND Cycle = `off` AND Mode ≠ `'0'` | Zone 3 Guard: reset Surplus/AC-Bool, Output → 0W, Timer-Toggle, Mode → `'0'` |
-| **D** | Cycle = `on` AND Mode ∉ `{'1','3'}` AND SOC > Zone 3 threshold | Recovery: Timer-Toggle, Mode → `'3'` if AC-Bool or Tariff-Bool = `on`, otherwise `'1'` (no integral reset, no zone change) |
+| **D** | (Cycle = `on` OR AC-Bool = `on` OR Tariff-Bool = `on`) AND Mode ∉ `{'1','3'}` AND (Charge-Bool = `on` OR SOC > Zone 3 threshold) | Recovery: Timer-Toggle, Mode → `'3'` if AC-Bool or Tariff-Bool = `on`, otherwise `'1'` (no integral reset, no zone change) |
 | **GT** | Tariff enabled AND price < cheap threshold AND NOT PV-forecast-suppressed AND SOC < tariff target AND Mode ≠ `'3'` AND NOT Surplus-Bool = `on` | Tariff Charging Start: Tariff-Bool = `on`, Timer-Toggle, Output → charge power (direct), Mode → `'3'` |
 | **HT** | Mode = `'3'` AND Tariff-Bool = `on` AND (price ≥ cheap threshold OR SOC ≥ target) | Tariff Charging End: Integral = 0, Tariff-Bool = `off`, Zone 1 → Timer-Toggle + `'1'` / Zone 2 → `'0'` + 0W |
 | **TM** | Tariff active AND cheap ≤ price < expensive AND NOT PV-forecast-suppressed AND no charging AND NOT Surplus-Bool = `on` AND Mode = `'1'` | Discharge Lock: Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Timer-Toggle, Mode → `'0'` |
@@ -201,7 +201,7 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
 
 #### 🔄 Recovery Mechanism (Case D)
 
-If the inverter mode is externally reset (e.g. by an integration restart) while the discharge cycle is still active (Cycle = `on`), the blueprint automatically detects this and reactivates the mode via Timer-Toggle — without zone change or integral reset. Prerequisite: SOC > Zone 3 threshold AND Mode ∉ `{'1','3'}`.
+If the inverter mode is externally reset (e.g. by an integration restart) while the discharge cycle or a charging session is still active, the blueprint automatically detects this and reactivates the mode via Timer-Toggle — without zone change or integral reset. Prerequisite: Mode ∉ `{'1','3'}` AND SOC > Zone 3 threshold — the SOC condition does not apply while a charging session is active.
 
 The restored mode depends on active charging state: if Tariff-Charge-Bool or AC-Charge-Bool is `on`, Mode `'3'` is set; otherwise Mode `'1'`.
 
@@ -268,7 +268,7 @@ Charges the battery at cheap prices and locks discharge during neutral price pha
 
 Prevents tariff charging (GT) and discharge lock (TM) on sunny days.
 
-* Forecast sensor (expected daily yield in kWh, Wh/MWh normalized automatically) ≥ threshold → `pv_forecast_suppressed = true` → GT and TM are completely skipped
+* Forecast sensor (expected daily yield in kWh, Wh/MWh normalized automatically) ≥ threshold → `pv_forecast_suppressed = true` → GT and TM are completely skipped, the discharge lock for Cases A and E is lifted
 * Only active when Tariff Arbitrage is also enabled
 * Sensor `unknown`/`unavailable` → suppression inactive, tariff logic applies normally
 
@@ -478,7 +478,7 @@ Prevents oscillation between Case 0A/0B at night with a full battery when PV rea
 
 | Parameter | Default | Min | Max | Description |
 |:----------|:--------|:----|:----|:------------|
-| **Enable PV Forecast Suppression** | false | — | — | Skips GT and TM when forecast ≥ threshold. |
+| **Enable PV Forecast Suppression** | false | — | — | Skips GT and TM and lifts the discharge lock when forecast ≥ threshold. |
 | **PV Forecast Sensor** | *(empty)* | — | — | Expected PV daily yield in kWh (e.g. Solcast `energy_production_today`; Wh/MWh normalized automatically). |
 | **PV Forecast Threshold** | 15 kWh | 0 | 50 kWh | Minimum daily yield for suppression. |
 
@@ -638,7 +638,7 @@ Zone 1 (cycle = on):     max_power = Min(hard_limit, inverter_entity_max)
 Zone 2 (cycle = off):    max_power = Min(Max(0, PV - pv_charge_reserve), hard_limit, inverter_entity_max)
 ```
 
-The `inverter_entity_max` reads the `max` attribute of the output power entity — prevents setting values the hardware cannot accept.
+The `inverter_entity_max` reads the `max` attribute of the output power entity, capped at the 1200 W device limit — the Modbus entity reports the register limit, not the device limit.
 
 ### Timer-Toggle Mechanism
 ```
@@ -649,9 +649,9 @@ Otherwise              → write 3599
 
 ### Case D / Recovery — Mode Exclusion and Dual Restore
 ```
-Condition: Cycle = on
+Condition: (Cycle = on OR AC-Charge-Bool = on OR Tariff-Charge-Bool = on)
        AND Mode ∉ {'1', '3'}   ← '3' (charging) explicitly excluded
-       AND SOC > Zone 3 threshold
+       AND (Charge-Bool = on OR SOC > Zone 3 threshold)
 
 Action: Timer-Toggle
         → Tariff-Charge-Bool = on OR AC-Charge-Bool = on: Mode '3'

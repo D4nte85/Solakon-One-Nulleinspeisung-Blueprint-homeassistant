@@ -1242,12 +1242,13 @@ variables:
   price_is_cheap: >
     {{ price_sensor_valid | bool(false) and
        states(price_sensor_entity) | float(999) < cheap_threshold_float | float(0) }}
-  # Discharge lock active? (price < expensive threshold AND sensor valid)
+  # Discharge lock active? (price < expensive threshold AND sensor valid AND no PV forecast suppression)
   # Applies to Zone 1 and Zone 2 — guards in Cases A and E
   price_discharge_locked: >
     {{ tariff_arbitrage_enabled_bool and
        price_sensor_valid | bool(false) and
-       states(price_sensor_entity) | float(999) < expensive_threshold_float | float(0) }}
+       states(price_sensor_entity) | float(999) < expensive_threshold_float | float(0) and
+       not (pv_forecast_suppressed | bool(false)) }}
 
   # Hard Limit (also in BLOCK 1 for surplus forecast entry and Zone 0 path)
   max_active_power_limit_int: !input max_active_power_limit
@@ -1675,16 +1676,22 @@ actions:
             data:
               option: '0'
 
-      # CASE D: Recovery - Mode dropped, cycle still active
+      # CASE D: Recovery - Mode dropped, cycle or charging session still active
       # BEFORE Cases GT/G! Excludes Mode '3' (AC/Tariff charging continues undisturbed).
+      # The SOC condition does not apply while a charging session is active.
       - conditions:
-          - condition: state
-            entity_id: !input cycle_active_boolean_helper
-            state: 'on'
+          - condition: template
+            value_template: >
+              {{ is_state(cycle_active, 'on') or
+                 ac_charge_mode_active | bool(false) or
+                 tariff_charge_mode_active | bool(false) }}
           - condition: template
             value_template: "{{ states(solakon_mode) not in ['1', '3'] }}"
           - condition: template
-            value_template: "{{ states(soc) | float(0) > soc_conservation_limit_int }}"
+            value_template: >
+              {{ ac_charge_mode_active | bool(false) or
+                 tariff_charge_mode_active | bool(false) or
+                 states(soc) | float(0) > soc_conservation_limit_int }}
         sequence:
           # 1. Logbook entry
           - action: logbook.log
@@ -2433,7 +2440,7 @@ actions:
       # Mode '3' (AC Charging) → charge limit as max_power to script
       # Zone 1               → Hard Limit
       # Zone 2               → Min(Hard Limit, Max(0, PV - Reserve))
-      inverter_entity_max: "{{ state_attr(active_power_entity, 'max') | float(9999) }}"
+      inverter_entity_max: "{{ [1200, state_attr(active_power_entity, 'max') | float(1200)] | min }}"
       dynamic_max_power: >
         {% if states(solakon_mode) == '3' %}
           {{ [ac_charge_power_limit_int, inverter_entity_max] | min }}
