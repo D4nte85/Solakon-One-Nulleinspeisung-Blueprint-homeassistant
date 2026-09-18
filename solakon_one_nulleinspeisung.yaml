@@ -40,7 +40,7 @@ blueprint:
       - Normal → PI nur wenn `|Fehler| > Toleranz` UND kein At-Limit
       - `at_max_limit` = false wenn `current > dynamic_max` (PV-Einbruch) → PI kann nach unten korrigieren
     - **Ausgangs-Stillstandserkennung:** Bei `at_max_limit` schreibt der PI nicht mehr — ein in diesem Zustand stehengebliebener Wechselrichter bekäme keinen Befehl mehr, und Fall D greift nicht, da der Modus auf `'1'` steht. Weicht die Ist-Leistung um mehr als 5 % vom Limit ab und steht der Ist-Sensor dabei über 300 s unverändert (`last_updated`), wird Integral = 0, Output → 0 W, Timer-Toggle, Modus → `'0'` gesetzt; im nächsten Lauf holt Fall D das Gerät regulär zurück. Frühestens alle 300 s (gemessen an `last_changed` des Modus).
-    - **Separate P/I-Faktoren für AC Laden:** Wegen langer Hardware-Flanke (~25 s) empfiehlt sich ein kleiner P-Faktor (~0.3–0.5). Der I-Anteil ist wegen der trägen Hardware kaum wirksam — Standardwert 0 belassen.
+    - **Separate P/I-Faktoren für AC Laden:** Die Ladeleistung steigt nur mit etwa 33 W/s, Senken wirkt sofort. Deshalb empfiehlt sich ein kleiner P-Faktor (~0.3–0.5) und I = 0 — sonst legt der PI nach, bevor das Gerät den letzten Sollwert erreicht hat.
 
     </details>
 
@@ -120,7 +120,7 @@ blueprint:
     - **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`
       - Positiver Fehler (Grid zu negativ) → Ladeleistung erhöhen
       - `at_max/at_min`-Guards deaktiviert (Richtung invertiert)
-    - **Separate P/I-Faktoren:** P klein (~0.3–0.5), I auf 0 belassen (Hardware zu träge)
+    - **Separate P/I-Faktoren:** P klein (~0.3–0.5), I auf 0 belassen (Ladeleistung steigt nur mit ~33 W/s)
     - **Rückkehr:**
       - Zone 1 → Integral = 0, AC-Bool = `off`, Output → 0 W, Timer-Toggle, Modus → `'1'`
       - Zone 2 → Integral = 0, AC-Bool = `off`, Output → 0 W, Timer-Toggle, Modus → `'0'`
@@ -870,7 +870,8 @@ blueprint:
             name: 🎛️ P-Faktor AC Laden
             description: |
               Proportional-Verstärkung für den AC-Lade-Modus.
-              Bei langer Hardware-Flanke (~25 s) klein halten → wenig Überschwingen.
+              Klein halten: Die Ladeleistung steigt nur mit ~33 W/s, ein großer
+              Faktor legt nach, bevor das Gerät den letzten Sollwert erreicht hat.
               Empfehlung: 0.3–0.5.
             default: 0.5
             selector:
@@ -883,8 +884,8 @@ blueprint:
             name: 🎛️ I-Faktor AC Laden
             description: |
               Integral-Verstärkung für den AC-Lade-Modus.
-              Wegen der trägen Hardware (~25 s Flanke) ist der I-Anteil
-              kaum wirksam — Standardwert 0 belassen.
+              Standardwert 0 belassen — die Ladeleistung steigt nur mit ~33 W/s,
+              ein I-Anteil summiert während des Anstiegs weiter auf.
             default: 0
             selector:
               number:

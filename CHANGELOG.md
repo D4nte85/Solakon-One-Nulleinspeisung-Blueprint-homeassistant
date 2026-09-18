@@ -5,6 +5,9 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 ## [Unreleased]
 
+### Geändert
+- Doku AC Laden: Die Empfehlung P klein / I = 0 begründet sich mit der gemessenen Laderampe (Ladeleistung steigt nur mit etwa 33 W/s, Senken wirkt sofort), nicht mit einer Hardware-Flanke von ~25 s. Defaults und Logik unverändert
+
 ## [V310] – 2026-09-13
 
 ### Geändert

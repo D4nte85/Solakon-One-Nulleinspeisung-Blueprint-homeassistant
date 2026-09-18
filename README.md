@@ -252,7 +252,7 @@ Laden der Batterie wenn eine externe Einspeisung ins Netz erkannt wird. Eintritt
 
 * **Blockiert durch:** Zone 0 (Überschuss-Bool = `on`) und Tarif-Laden (Tarif-Bool = `on`).
 * **Eintritts-Bedingung (Fall G):** AC Laden aktiviert UND SOC < Ladeziel UND Modus ≠ `'3'` UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + ΣOutput_entladend) < −Hysterese.
-* **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`. Separate P/I-Faktoren. P klein halten (~0.3–0.5), I auf 0 belassen (Hardware zu träge).
+* **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`. Separate P/I-Faktoren. P klein halten (~0.3–0.5), I auf 0 belassen (Ladeleistung steigt nur mit ~33 W/s).
 * **Rückkehr:** Zone 1 → Modus `'1'` (Timer-Toggle) + Integral Reset. Zone 2 → Modus `'0'` (Timer-Toggle) + Output 0W + Integral Reset.
 
 ---
@@ -455,8 +455,8 @@ Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher, wenn PV d
 | **Hysterese Ladeabbruch** | 50 W | 0 | 300 W | Totband für Ein- und Austritt. |
 | **AC Laden Offset (Statisch)** | -50 W | -100 | 100 W | Regelziel im AC-Lade-Modus. Negativ = Einspeisung angestrebt. |
 | **AC Laden Offset (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
-| **AC Laden P-Faktor** | 0.5 | 0.1 | 5.0 | Klein halten wegen langer Hardware-Flanke (~25 s). |
-| **AC Laden I-Faktor** | 0 | 0 | 0.2 | Wegen träger Hardware (~25 s) kaum wirksam — Standardwert 0 belassen. |
+| **AC Laden P-Faktor** | 0.5 | 0.1 | 5.0 | Klein halten: Die Ladeleistung steigt nur mit ~33 W/s, ein großer Faktor legt nach, bevor das Gerät den letzten Sollwert erreicht hat. |
+| **AC Laden I-Faktor** | 0 | 0 | 0.2 | Standardwert 0 belassen — ein I-Anteil summiert während des langsamen Anstiegs weiter auf. |
 
 ---
 
@@ -551,7 +551,7 @@ Schrittweise erhöhen bis System leicht anfängt zu zittern — dann einen Schri
 I-Faktor: 0.02   # Startpunkt
 ```
 
-Typischer Arbeitsbereich: **0.03–0.08**. Für AC Laden separat tunen — P besonders klein halten (~0.3–0.5), I-Faktor auf 0 lassen (Hardware zu träge). Tarif-Laden verwendet keinen PI-Regler.
+Typischer Arbeitsbereich: **0.03–0.08**. Für AC Laden separat tunen — P besonders klein halten (~0.3–0.5), I-Faktor auf 0 lassen: Im AC-Lade-Modus steigt die Ladeleistung des Solakon ONE nur mit etwa 33 W/s (0 → 800 W in rund 25 s), Senken wirkt sofort. Solange das Gerät hochfährt, sieht der PI noch den alten Netzfehler und würde nachlegen. Tarif-Laden verwendet keinen PI-Regler.
 
 ---
 
