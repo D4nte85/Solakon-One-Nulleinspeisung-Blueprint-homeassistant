@@ -244,7 +244,7 @@ Charges the battery when external grid feed-in is detected. Detection is based o
 * **PI Control:** `ac_charge_mode=true` → inverted error: `(target_offset − grid) × error_share`
   - Positive error → increase charge power (Grid too negative → charge more)
   - `at_max/at_min` guards not applied (direction inverted)
-  - **Separate P/I Factors:** P small (~0.3–0.5) due to long hardware response (~25 s); I barely effective — leave at default 0
+  - **Separate P/I Factors:** P small (~0.3–0.5), I at default 0 — charging power rises by only ~33 W/s
 * **Return:**
   - Zone 1 → Mode `'1'` (Timer-Toggle) + Integral Reset
   - Zone 2 → Mode `'0'` (Timer-Toggle) + Output 0W + Integral Reset
@@ -454,8 +454,8 @@ Prevents oscillation between Case 0A/0B at night with a full battery when PV rea
 | **Hysteresis AC Charging** | 50 W | 0 | 300 W | Deadband for entry and exit. Entry: (Grid + Output) < −Hysteresis. Exit: Grid ≥ (Offset + Hysteresis) AND \|Output\| ≤ Tolerance. |
 | **AC Charging Offset (Static)** | -50 W | -100 | 100 W | Control target in AC charging mode. Negative = targeting export → higher charge power. |
 | **AC Charging Offset (Dynamic)** | *(empty)* | — | — | Optional `input_number` entity. Overrides static value. |
-| **AC Charging P Factor** | 0.5 | 0.1 | 5.0 | Proportional gain in AC charging mode. Keep small due to long hardware response (~25 s). |
-| **AC Charging I Factor** | 0 | 0 | 0.2 | Integral gain in AC charging mode. Barely effective due to sluggish hardware (~25 s) — leave at default 0. |
+| **AC Charging P Factor** | 0.5 | 0.1 | 5.0 | Proportional gain in AC charging mode. Keep small: charging power rises by only ~33 W/s, a large factor adds more before the device has reached the last setpoint. |
+| **AC Charging I Factor** | 0 | 0 | 0.2 | Integral gain in AC charging mode. Leave at default 0 — an I-part keeps accumulating during the slow rise. |
 
 ---
 
@@ -560,7 +560,7 @@ I Factor: 0.02  # Starting point
 
 Signs of too high I: system oscillates slowly with a long period. The **Back-Calculation Anti-Windup** resets the integral after every clamped output, preventing runaway accumulation. The **Tolerance Decay** (5%/cycle when error ≤ tolerance) automatically reduces it during stable operation.
 
-Typical working range: **0.03–0.08**. For AC Charging, tune separately — keep P especially small (~0.3–0.5) due to the long hardware response (~25 s); I is barely effective and can be left at 0.
+Typical working range: **0.03–0.08**. For AC Charging, tune separately — keep P especially small (~0.3–0.5) and leave I at 0: in AC charging mode the Solakon ONE raises its charging power by only about 33 W/s (0 → 800 W in roughly 25 s), lowering takes effect immediately. While the device ramps up, the PI still sees the old grid error and would add more.
 
 ---
 
@@ -813,7 +813,7 @@ charging at the same time.
 3. **Grid power sensor:** Correct polarity (positive = import, negative = export)
 4. **Tariff price sensor:** Unit must match thresholds (no conversion in blueprint)
 5. **AC Charging control target:** Its own configurable offset (`ac_charge_offset`), independent of Zone 1/2. Negative value = targeting export → PI increases charge power
-6. **AC Charging P/I tuning:** Keep P factor small (~0.3–0.5) due to long hardware response (~25 s); I barely effective — leave at 0
+6. **AC Charging P/I tuning:** Keep P factor small (~0.3–0.5) and I at 0 — the charging power rises by only about 33 W/s on every increase, even mid-session; lowering takes effect within a few seconds. A large P or I part adds more before the device has reached the last setpoint
 7. **Integral Helper bounds:** −1200 to 1200 (matches effective_max clamping in back-calculation anti-windup)
 8. **Integral Helper:** Managed automatically — do not change manually
 9. **Tolerance Decay:** Prevents integral accumulation during stable operation — 5% reduction when `|Integral| > 10` and error ≤ tolerance

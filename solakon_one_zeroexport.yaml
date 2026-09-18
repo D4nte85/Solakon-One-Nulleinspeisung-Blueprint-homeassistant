@@ -40,7 +40,7 @@ blueprint:
       - Normal → PI only if `|error| > tolerance` AND no at-limit
       - `at_max_limit` = false if `current > dynamic_max` (PV drop) → PI can correct downward
     - **Output stall detection:** At `at_max_limit` the PI no longer writes — an inverter stalled in that state would never receive another command, and case D does not apply because the mode is still `'1'`. If actual power deviates from the limit by more than 5 % while the actual sensor has been unchanged for over 300 s (`last_updated`), the automation sets integral = 0, output → 0 W, timer toggle, mode → `'0'`; on the next run case D brings the device back. Repeats at most every 300 s (measured on the mode entity's `last_changed`).
-    - **Separate P/I Factors for AC Charging:** Due to long hardware response (~25 s) keep P small (~0.3–0.5). I component is barely effective due to sluggish hardware — leave at default 0.
+    - **Separate P/I Factors for AC Charging:** Charging power rises by only about 33 W/s; lowering takes effect immediately. Keep P small (~0.3–0.5) and I at 0 — otherwise the PI adds more before the device has reached the last setpoint.
 
     </details>
 
@@ -120,7 +120,7 @@ blueprint:
     - **PI Control:** `ac_charge_mode=true` → inverted error: `target_offset − grid`
       - Positive error (Grid too negative) → increase charge power
       - `at_max/at_min` guards disabled (direction inverted)
-    - **Separate P/I Factors:** P small (~0.3–0.5) due to long hardware response (~25 s); I barely effective — leave at 0
+    - **Separate P/I Factors:** P small (~0.3–0.5), I at 0 — charging power rises by only ~33 W/s
     - **Return:**
       - Zone 1 → Integral = 0, AC-Bool = `off`, Output → 0 W, Timer-Toggle, Mode → `'1'`
       - Zone 2 → Integral = 0, AC-Bool = `off`, Output → 0 W, Timer-Toggle, Mode → `'0'`
@@ -872,7 +872,8 @@ blueprint:
             name: 🎛️ P Factor AC Charging
             description: |
               Proportional gain for AC charging mode.
-              Keep small due to long hardware response (~25 s) → less overshoot.
+              Keep small: charging power rises by only ~33 W/s, a large factor
+              adds more before the device has reached the last setpoint.
               Recommendation: 0.3–0.5.
             default: 0.5
             selector:
@@ -885,7 +886,8 @@ blueprint:
             name: 🎛️ I Factor AC Charging
             description: |
               Integral gain for AC charging mode.
-              Barely effective due to sluggish hardware (~25 s) — leave at default 0.
+              Leave at default 0 — charging power rises by only ~33 W/s,
+              an I-part keeps accumulating during the rise.
             default: 0
             selector:
               number:
