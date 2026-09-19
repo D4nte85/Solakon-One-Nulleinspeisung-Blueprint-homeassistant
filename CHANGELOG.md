@@ -8,6 +8,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - AC charging docs: the P small / I = 0 recommendation is now explained by the measured charge ramp (charging power rises by only about 33 W/s, lowering takes effect immediately) instead of a ~25 s hardware ramp. Defaults and logic unchanged
 
+### Fixed
+- After a PV drop, zone 2 held an output above `PV − reserve` while the grid error stayed within tolerance: `above_dynamic_max` only lifted `at_max_limit`, the tolerance guard still sent the run to the default branch. The PI now also runs when `current > dynamic_max` and lowers to the limit. Ported from integration v3.0.0
+- In mode `'0'` (zone 3, night shutdown, tariff lock, end of a charging session in zone 2) the discharge current of the previous zone stayed in place, i.e. 0 A coming from zone 2. In mode `'0'` the device leaves remote control and needs its default setting. A new step before the PI gate sets the max value in mode `'0'` without active surplus. Ported from integration v3.0.0
+- The abort check only covered SOC, timeout, grid and actual power and only `unknown`/`unavailable`. PV and the power setpoint were missing, and a text state silently became 0 (PV 0 W triggered night shutdown and a zone 2 limit of 0). Grid, PV, actual power, SOC and setpoint now have to return a number, otherwise the run aborts naming the entity. A PV sensor reporting `unavailable` at night therefore stops every run. Ported from integration v3.0.0
+
 ## [V310] – 2026-09-13
 
 ### Changed

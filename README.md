@@ -163,8 +163,8 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
   - Zone 0 active → PI not called, integral frozen
   - Tariff Charging active → direct power set, no PI
   - AC Charging active → PI with `ac_charge_mode=true`, `at_max/at_min` guards disabled
-  - Normal → PI only if `|error| > tolerance` AND no at-limit
-  - `at_max_limit = false` if `current > dynamic_max` (PV drop) → PI can correct downward
+  - Normal → PI only if (`|error| > tolerance` OR `current > dynamic_max`) AND no at-limit
+  - `at_max_limit = false` if `current > dynamic_max` (PV drop) → PI corrects downward, even with the grid error within tolerance
 * **Output stall detection:** When the setpoint sits at the upper limit and the grid error persists in the same direction (`at_max_limit`), the PI stops writing — it cannot raise the setpoint any further. An inverter stalled in exactly that state never receives another command; case D does not apply either, because the mode is still `'1'`. This is detected via the **deviation of actual power from the limit**: more than 5 % deviation while the actual sensor's `last_updated` has been standing still for over 300 s. That timestamp only advances on a value change and therefore means "unchanged since then" — an actual sensor fluctuating around the deviating value does not trigger it. Action: integral = 0, output → 0 W, timer toggle, mode → `'0'`; on the next run **case D** brings the device back (timer toggle + mode `'1'`) and the PI ramps up again. Repeats at most every 300 s, measured on the mode entity's `last_changed`. Applies to normal discharge mode only — Zone 0, tariff charging and AC charging deliberately hold the output below their respective limit.
 
 ---
@@ -176,7 +176,7 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
 | **0. Surplus Export** | SOC ≥ export threshold AND PV > Output + Grid + PV-Hysteresis | `'1'` | 2 A (stability buffer) | Hard Limit (max W) | **Optional.** Integral frozen. Persistent `input_boolean`. Exit with SOC-Hysteresis + PV-Hysteresis. |
 | **1. Aggressive Discharge** | SOC > Zone 1 threshold | `'1'` | Configured max value (default: 40 A) | 0W + Offset 1 | Runs **until SOC ≤ Zone 3 threshold** (no yo-yo effect). Active at night too. |
 | **2. Battery Conserving** | Zone 3 threshold < SOC ≤ Zone 1 threshold | `'1'` | **0 A** | 0W + Offset 2 | Dynamic limit: `Min(Hard Limit, Max(0, PV − Reserve))`. Optional: Night Shutdown. |
-| **3. Safety Stop** | SOC ≤ Zone 3 threshold | `'0'` (Disabled) | 0 A | — | Output = 0 W. Full battery protection. |
+| **3. Safety Stop** | SOC ≤ Zone 3 threshold | `'0'` (Disabled) | Max value (idle) | — | Output = 0 W. Full battery protection. |
 
 #### Overview of Control Cases (choose block)
 
@@ -397,7 +397,7 @@ Prevents oscillation between Case 0A/0B at night with a full battery when PV rea
 | **Zone 1 Start (Static)** | 50 % | 1 % | 99 % | Exceeding activates Zone 1. Fallback if no dynamic override is set/available. |
 | **Zone 1 Start (Dynamic)** | *(empty)* | — | — | Optional `input_number` entity. Overrides the static value (e.g. via automation lowered in the evening if the battery didn't reach the default threshold on a cloudy day but tomorrow's PV forecast is high). |
 | **Zone 3 Stop** | 20 % | 1 % | 49 % | Falling below stops discharge completely. |
-| **Max. Discharge Current Zone 1** | 40 A | 0 A | 40 A | Zone 2 and AC Charging automatically use 0 A. |
+| **Max. Discharge Current Zone 1** | 40 A | 0 A | 40 A | Zone 2 and AC Charging automatically use 0 A, mode `'0'` (idle) the max value. |
 
 **Important:** Zone 1 threshold must be **greater** than Zone 3 threshold! Blueprint validates this at startup.
 
@@ -570,10 +570,8 @@ Typical working range: **0.03–0.08**. For AC Charging, tune separately — kee
 |:--------|:------|:---------|
 | **SOC limits invalid** | Zone 1 threshold ≤ Zone 3 threshold | Zone 1 (e.g. 50%) > Zone 3 (e.g. 20%) |
 | **SOC limits invalid** | Surplus export enabled AND export threshold ≤ zone-1 threshold | Export threshold (e.g. 90%) > Zone 1 (e.g. 50%) |
-| **SOC sensor UNKNOWN/UNAVAILABLE** | Solakon integration offline | Check connection |
-| **Timeout Countdown UNKNOWN/UNAVAILABLE** | Sensor unavailable | Check Solakon integration |
-| **Grid power sensor UNKNOWN/UNAVAILABLE** | Meter integration offline/network issue | Check connection — automation skips the cycle instead of proceeding with a false zero reading |
-| **Actual power sensor UNKNOWN/UNAVAILABLE** | Solakon integration offline/Modbus issue | Check connection — automation skips the cycle instead of proceeding with a false zero reading |
+| **Core sensor without a numeric value (…)** | Grid, PV, actual power or SOC sensor or the power setpoint returns no number (`unknown`, `unavailable` or text) — the message names the entity | Check the named integration's connection — automation skips the cycle instead of proceeding with a false zero reading. A PV sensor reporting `unavailable` at night therefore stops every run |
+| **Timeout sensor offline** | Timeout Countdown `unknown`/`unavailable` | Check Solakon integration |
 | **TypeError: cannot use 'dict' as a dict key** | Affected blueprint versions before this fix: `surplus_forecast_sensor`/`surplus_lock_sensor` (sections 7/11) left empty | Update the blueprint — both optional fields are now only computed when an entity is set |
 | **TypeError: unsupported operand type(s) for -: 'str' and 'float'** | Affected blueprint versions before this fix: `grid_power_float`/`solar_power_float`/`actual_power_float` could render in scientific notation for values near 0 (e.g. cancelling phases on a summing sensor) and were then used downstream as a string instead of a number | Update the blueprint — the three values are now rounded to 3 decimal places before further use |
 
@@ -713,6 +711,7 @@ TM Lock:
 | Zone 0 (Surplus) | 2 A | Only if different |
 | Zone 1 (Aggressive) | Configured maximum | Only if different, no surplus, no charging mode |
 | Zone 2 / Charging (Mode 3) | 0 A | Only if different |
+| Idle (Mode 0) | Configured maximum | Only if different, no surplus |
 
 ### kW → W Normalization
 
