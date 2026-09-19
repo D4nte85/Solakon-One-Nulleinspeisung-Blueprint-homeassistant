@@ -1120,6 +1120,13 @@ variables:
   # Helper-Entitäten
   integral_entity: !input integral_helper
   active_power_entity: !input active_power_number
+  # Kernsensoren ohne Zahlenwert (Entity-IDs)
+  core_sensors_failed: >
+    {% set ns = namespace(f=[]) %}
+    {% for e in [grid_power, solar_power, actual_power_sensor, soc, active_power_entity] %}
+      {% if not (states(e) | is_number) %}{% set ns.f = ns.f + [e] %}{% endif %}
+    {% endfor %}
+    {{ ns.f }}
   discharge_current_entity: !input max_discharge_current_number
   remote_timeout_set_number: !input remote_timeout_set_number
 
@@ -1368,6 +1375,16 @@ actions:
   # PRÜFUNG: Check auf kritische Fehler
   # -------------------------------------------------------------------------------------------------
   - choose:
+      # Kernsensor ohne Zahlenwert → Abbruch mit Nennung der Entities
+      - conditions:
+          - condition: template
+            value_template: "{{ core_sensors_failed | length > 0 }}"
+        sequence:
+          - action: system_log.write
+            data:
+              level: error
+              message: "Solakon Fehler: Kernsensor ohne Zahlenwert ({{ core_sensors_failed | join(', ') }}). Abbruch."
+          - stop: "Kernsensor ohne Zahlenwert."
       - conditions:
           - condition: or
             conditions:
@@ -1379,16 +1396,13 @@ actions:
                      soc_export_limit_int | float(0) <= soc_fast_limit_int | float(0) }}
               - condition: template
                 value_template: >
-                  {{ is_state(soc, 'unknown') or is_state(soc, 'unavailable') or
-                     is_state(timeout_countdown, 'unknown') or is_state(timeout_countdown, 'unavailable') or
-                     is_state(grid_power, 'unknown') or is_state(grid_power, 'unavailable') or
-                     is_state(actual_power_sensor, 'unknown') or is_state(actual_power_sensor, 'unavailable') }}
+                  {{ is_state(timeout_countdown, 'unknown') or is_state(timeout_countdown, 'unavailable') }}
         sequence:
           # 1. Fehler ins System-Log schreiben
           - action: system_log.write
             data:
               level: error
-              message: "Solakon Fehler: SOC-Limits ungültig (Zone1 > Zone3, Export-Schwelle > Zone1 nötig) oder Entitäten offline. Abbruch."
+              message: "Solakon Fehler: SOC-Limits ungültig (Zone1 > Zone3, Export-Schwelle > Zone1 nötig) oder Timeout-Sensor offline. Abbruch."
           # 2. Automation abbrechen
           - stop: "Kritischer Fehler oder ungültige Konfiguration."
 
@@ -2424,6 +2438,22 @@ actions:
               option: '0'
 
   # -------------------------------------------------------------------------------------------------
+  # RUHE-ENTLADESTROM: Modus '0' → Max-Entladestrom (außer bei aktivem Surplus)
+  # -------------------------------------------------------------------------------------------------
+  - if:
+      - condition: template
+        value_template: >
+          {{ states(solakon_mode) == '0' and
+             not (surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on')) and
+             states(discharge_current_entity) | float(999) | round(2) != discharge_current_max | float(0) | round(2) }}
+    then:
+      - action: number.set_value
+        target:
+          entity_id: !input max_discharge_current_number
+        data:
+          value: "{{ discharge_current_max }}"
+
+  # -------------------------------------------------------------------------------------------------
   # PI-GATE: NUR ausführen wenn Modus '1' oder '3' UND (Zone 1 ODER Tag)
   # -------------------------------------------------------------------------------------------------
   - condition: template
@@ -2689,7 +2719,7 @@ actions:
           - condition: template
             value_template: >
               {{ not (ac_charge_mode_active | bool(false)) and
-                 grid_error_abs > tolerance_int and
+                 (grid_error_abs > tolerance_int or above_dynamic_max | bool(false)) and
                  not at_max_limit | bool(false) and
                  not at_min_limit | bool(false) }}
         sequence:

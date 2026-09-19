@@ -8,6 +8,11 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 ### Geändert
 - Doku AC Laden: Die Empfehlung P klein / I = 0 begründet sich mit der gemessenen Laderampe (Ladeleistung steigt nur mit etwa 33 W/s, Senken wirkt sofort), nicht mit einer Hardware-Flanke von ~25 s. Defaults und Logik unverändert
 
+### Behoben
+- Zone 2 hielt nach einem PV-Einbruch einen Output über `PV − Reserve`, solange der Netzfehler in der Toleranz lag: `above_dynamic_max` hob nur `at_max_limit` auf, der Toleranz-Guard ließ trotzdem den Default-Zweig laufen. Der PI läuft jetzt auch bei `current > dynamic_max` und senkt auf das Limit. Portiert aus der Integration v3.0.0
+- In Modus `'0'` (Zone 3, Nachtabschaltung, Tarif-Sperre, Ende einer Lade-Session in Zone 2) blieb der Entladestrom der vorherigen Zone stehen, aus Zone 2 also 0 A. In Modus `'0'` verlässt das Gerät die Fernsteuerung und braucht seine Standardeinstellung. Ein neuer Schritt vor dem PI-Gate setzt in Modus `'0'` ohne aktiven Surplus den Max-Wert. Portiert aus der Integration v3.0.0
+- Die Abbruchprüfung kannte nur SOC, Timeout, Netz und Ist-Leistung und nur `unknown`/`unavailable`. PV und Leistungssollwert fehlten, ein Textzustand wurde still zu 0 (PV 0 W löste Nachtabschaltung und Zone-2-Limit 0 aus). Netz, PV, Ist-Leistung, SOC und Sollwert müssen jetzt eine Zahl liefern, sonst bricht der Lauf mit Nennung der Entity ab. Ein PV-Sensor, der nachts `unavailable` meldet, stoppt damit jeden Lauf. Portiert aus der Integration v3.0.0
+
 ## [V310] – 2026-09-13
 
 ### Geändert

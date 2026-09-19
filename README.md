@@ -170,7 +170,7 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
 * **I-Anteil:** Summiert Abweichungen über die Zeit auf, eliminiert bleibende Regelabweichungen. Anti-Windup via Back-Calculation: Integral wird nach jedem Eingriff auf den Wert korrigiert, der den tatsächlichen (ggf. geklemmten) Ausgang produziert — Clamp auf ±effective_max, gerundet auf 2 Nachkommastellen. Automatischer Reset bei Zonenwechsel. Toleranz-Decay 5%/Zyklus wenn Fehler ≤ Toleranz und |Integral| > 10. Zone-0-Einfrieren bei aktivem Überschuss.
 * **Fehlerberechnung:** Normal (`ac_charge_mode=false`): `raw_error = (grid − target_offset) × error_share`. AC Laden (`ac_charge_mode=true`): `raw_error = (target_offset − grid) × error_share` (invertiert). `error_share` skaliert den Fehler auf den Anteil dieser Instanz (Standard 1.0 = voller Fehler). Zwei unabhängige Pools im Multi-Instanz-Betrieb: Nulleinspeisung (`error_share_entity`) und AC-Laden (`ac_error_share_entity`) — siehe Multi-Instancing-Abschnitt.
 * **Dynamisches Power-Limit:** Zone 1 → Hard Limit. Zone 2 → `Min(Hard Limit, Max(0, PV − Reserve))`. AC Laden → konfigurierbares Lade-Limit. Tarif-Laden → kein PI (direkter Wert).
-* **PI-Aufruf-Guard:** Zone 0 aktiv → PI nicht aufgerufen, Integral eingefroren. Tarif-Laden aktiv → direkt setzen. AC Laden aktiv → PI mit `ac_charge_mode=true`. Normal → PI nur wenn `|Fehler| > Toleranz` UND kein At-Limit. `at_max_limit` = false wenn `current > dynamic_max` (PV-Einbruch) → PI kann nach unten korrigieren.
+* **PI-Aufruf-Guard:** Zone 0 aktiv → PI nicht aufgerufen, Integral eingefroren. Tarif-Laden aktiv → direkt setzen. AC Laden aktiv → PI mit `ac_charge_mode=true`. Normal → PI nur wenn (`|Fehler| > Toleranz` ODER `current > dynamic_max`) UND kein At-Limit. `at_max_limit` = false wenn `current > dynamic_max` (PV-Einbruch) → PI korrigiert nach unten, auch bei Netzfehler innerhalb der Toleranz.
 * **Ausgangs-Stillstandserkennung:** Steht der Sollwert am oberen Limit und besteht der Netzfehler in dieselbe Richtung fort (`at_max_limit`), schreibt der PI nicht mehr — er kann nicht weiter hochregeln. Bleibt der Wechselrichter in genau diesem Zustand stehen, ohne den Modus zu wechseln, erreicht ihn kein Befehl mehr; auch Fall D greift nicht, da der Modus weiterhin `'1'` ist. Erkannt wird das über die **Abweichung der Ist-Leistung vom Limit**: mehr als 5 % Abweichung bei einem Ist-Sensor, dessen `last_updated` seit über 300 s stillsteht. Der Zeitstempel rückt nur bei einer Wertänderung vor und steht damit für „Wert seit dann unverändert" — ein Ist-Sensor, der um den abweichenden Wert rauscht, löst entsprechend nicht aus. Aktion: Integral = 0, Output → 0 W, Timer-Toggle, Modus → `'0'`; im nächsten Lauf holt **Fall D** das Gerät regulär zurück (Timer-Toggle + Modus `'1'`), der PI rampt wieder hoch. Wiederholt sich frühestens alle 300 s, gemessen an `last_changed` des Modus-Entity. Gilt nur im normalen Entlade-Modus — Zone 0, Tarif-Laden und AC Laden halten den Ausgang bewusst unterhalb ihres jeweiligen Limits.
 
 ---
@@ -182,7 +182,7 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
 | **0 — Überschuss-Einspeisung** | SOC ≥ Export-Schwelle UND PV > Output + Grid + PV-Hysterese | `'1'` | 2 A | Hard Limit | **Optional.** Integral eingefroren. Blockiert GT und G. |
 | **1 — Aggressive Entladung** | SOC > Zone-1-Schwelle | `'1'` | Konfigurierter Max-Wert | 0W + Offset 1 | Läuft **bis SOC ≤ Zone-3-Schwelle**. Auch nachts aktiv. |
 | **2 — Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `'1'` | **0 A** | 0W + Offset 2 | Dynamisches Limit: `Min(Hard Limit, Max(0, PV − Reserve))`. Optional: Nachtabschaltung. |
-| **3 — Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` | 0 A | — | Output = 0 W. Vollständiger Batterieschutz. Absoluter Vorrang. |
+| **3 — Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` | Max-Wert (Ruhe) | — | Output = 0 W. Vollständiger Batterieschutz. Absoluter Vorrang. |
 
 ---
 
@@ -416,7 +416,7 @@ Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher, wenn PV d
 | **Zone 1 Start (Statisch)** | 50 % | 1 % | 99 % | Überschreiten aktiviert Zone 1. Fallback, falls kein dynamischer Override gesetzt/verfügbar. |
 | **Zone 1 Start (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert (z.B. per Automation abends niedriger setzen, wenn Akku an einem wolkigen Tag die Standard-Schwelle nicht erreicht, aber der PV-Forecast für morgen hoch ist). |
 | **Zone 3 Stopp** | 20 % | 1 % | 49 % | Unterschreiten stoppt Entladung komplett. |
-| **Max. Entladestrom Zone 1** | 40 A | 0 A | 40 A | Zone 2 und AC/Tarif-Laden nutzen automatisch 0 A. |
+| **Max. Entladestrom Zone 1** | 40 A | 0 A | 40 A | Zone 2 und AC/Tarif-Laden nutzen automatisch 0 A, Modus `'0'` (Ruhe) den Max-Wert. |
 | **Nullpunkt-Offset 1 (Statisch)** | 30 W | -100 | 100 W | Statischer Fallback für Zone 1. |
 | **Nullpunkt-Offset 1 (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
 | **Nullpunkt-Offset 2 (Statisch)** | 30 W | -100 | 100 W | Statischer Fallback für Zone 2. |
@@ -561,10 +561,8 @@ Typischer Arbeitsbereich: **0.03–0.08**. Für AC Laden separat tunen — P bes
 |:--------|:--------|:-------|
 | **SOC-Limits ungültig** | Zone-1-Schwelle ≤ Zone-3-Schwelle | Zone-1 (z.B. 50%) > Zone-3 (z.B. 20%) |
 | **SOC-Limits ungültig** | Überschuss aktiviert UND Export-Schwelle ≤ Zone-1-Schwelle | Export-Schwelle (z.B. 90%) > Zone-1 (z.B. 50%) |
-| **SOC-Sensor UNKNOWN/UNAVAILABLE** | Solakon Integration offline | Verbindung prüfen |
-| **Timeout Countdown UNKNOWN/UNAVAILABLE** | Sensor nicht verfügbar | Solakon Integration prüfen |
-| **Netzleistungs-Sensor UNKNOWN/UNAVAILABLE** | Zähler-Integration offline/Netzwerkstörung | Verbindung prüfen — Automation überspringt den Zyklus statt mit einem falschen Nullwert weiterzurechnen |
-| **Ist-Leistungs-Sensor UNKNOWN/UNAVAILABLE** | Solakon Integration offline/Modbus-Störung | Verbindung prüfen — Automation überspringt den Zyklus statt mit einem falschen Nullwert weiterzurechnen |
+| **Kernsensor ohne Zahlenwert (…)** | Netz-, PV-, Ist-Leistungs- oder SOC-Sensor bzw. Leistungssollwert liefert keine Zahl (`unknown`, `unavailable` oder Text) — die Meldung nennt die Entity | Verbindung der genannten Integration prüfen — Automation überspringt den Zyklus statt mit einem falschen Nullwert weiterzurechnen. Ein PV-Sensor, der nachts `unavailable` meldet, stoppt damit jeden Lauf |
+| **Timeout-Sensor offline** | Timeout Countdown `unknown`/`unavailable` | Solakon Integration prüfen |
 | **TypeError: cannot use 'dict' as a dict key** | Betraf Blueprint-Versionen vor diesem Fix: `surplus_forecast_sensor`/`surplus_lock_sensor` (Abschnitte 11/12) leer gelassen | Blueprint aktualisieren — seither werden beide optionalen Felder nur noch berechnet, wenn eine Entity gesetzt ist |
 | **TypeError: unsupported operand type(s) for -: 'str' and 'float'** | Betraf Blueprint-Versionen vor diesem Fix: `grid_power_float`/`solar_power_float`/`actual_power_float` konnten bei Werten nahe 0 (z.B. sich aufhebende Phasen eines Summensensors) in wissenschaftlicher Notation gerendert und dadurch als String statt Zahl weiterverrechnet werden | Blueprint aktualisieren — die drei Werte werden seither auf 3 Nachkommastellen gerundet, bevor sie weiterverwendet werden |
 
@@ -647,6 +645,7 @@ Zone 2 (cycle = off):                   Min(Hard Limit, Max(0, PV - pv_charge_re
 | Zone 0 (Überschuss) | 2 A | Nur wenn abweichend |
 | Zone 1 (Aggressiv) | Konfigurierter Maximalwert | Nur wenn abweichend und kein Surplus, kein AC/Tarif-Laden |
 | Zone 2 / AC/Tarif-Laden (Modus 3) | 0 A | Nur wenn abweichend |
+| Ruhe (Modus 0) | Konfigurierter Maximalwert | Nur wenn abweichend und kein Surplus |
 
 ---
 

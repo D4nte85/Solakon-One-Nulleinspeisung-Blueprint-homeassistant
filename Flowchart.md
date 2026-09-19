@@ -4,7 +4,7 @@ flowchart TD
     %% ══════════════════════════════════════════════════════════════════════
     subgraph SG_ENTRY ["⚡ Eintritt & Validierung"]
         START([⚡ Trigger Grid / PV / SOC / Modus]) --> VAL
-        VAL{{"🛡️ Validierung SOC-Limits & Entitäten"}}
+        VAL{{"🛡️ Validierung Kernsensoren (Netz, PV, Ist, SOC, Sollwert = Zahl?), SOC-Limits & Timeout-Sensor"}}
         VAL -- Fehler --> STOP([🛑 Stop + Log-Eintrag])
     end
     style SG_ENTRY fill:none,stroke:#aaaaaa,stroke-width:5,stroke-dasharray:6,color:#000
@@ -102,7 +102,7 @@ flowchart TD
     ZONE_CHECK -- "FALL I   Modus = '3'   UND NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on" --> SAFETY_I
     ZONE_CHECK -- "FALL E   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND NICHT Entladesperre (Preis < teuer)   UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = '0' UND NICHT Nacht" --> Z2_START
     ZONE_CHECK -- "FALL F   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND NICHT Surplus-Bool = on   UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = off UND Modus aktiv" --> NIGHT
-    ZONE_CHECK -- "Kein Zonenwechsel" --> PI_GATE
+    ZONE_CHECK -- "Kein Zonenwechsel" --> REST_CURRENT
 
     TARIFF_END -- "Zyklus = on (Zone 1)" --> TARIFF_END_Z1
     TARIFF_END -- "Zyklus = off (Zone 2)" --> TARIFF_END_Z2
@@ -111,27 +111,31 @@ flowchart TD
     SAFETY_I -- "Zyklus = on (Zone 1)" --> SAFETY_I_Z1
     SAFETY_I -- "Zyklus = off (Zone 2)" --> SAFETY_I_Z2
 
-    Z1_START --> PI_GATE
-    Z2_START --> PI_GATE
-    RECOVERY --> PI_GATE
+    Z1_START --> REST_CURRENT
+    Z2_START --> REST_CURRENT
+    RECOVERY --> REST_CURRENT
 
-    Z3_A --> END_STOP([Ende])
-    Z3_B --> END_STOP
-    NIGHT --> END_STOP
-    TARIFF_START --> END_STOP
+    Z3_A --> REST_CURRENT
+    Z3_B --> REST_CURRENT
+    NIGHT --> REST_CURRENT
+    TARIFF_START --> END_STOP([Ende])
     TARIFF_END_Z1 --> END_STOP
-    TARIFF_END_Z2 --> END_STOP
-    TARIFF_MID --> END_STOP
+    TARIFF_END_Z2 --> REST_CURRENT
+    TARIFF_MID --> REST_CURRENT
     AC_START --> END_STOP
     AC_END_Z1 --> END_STOP
-    AC_END_Z2 --> END_STOP
+    AC_END_Z2 --> REST_CURRENT
     SAFETY_I_Z1 --> END_STOP
-    SAFETY_I_Z2 --> END_STOP
+    SAFETY_I_Z2 --> REST_CURRENT
 
     %% ══════════════════════════════════════════════════════════════════════
     subgraph SG_PI ["🧠 PI-Regler Betrieb"]
 
         %% ── PI-Regler Gate ───────────────────────────────────────────────
+        REST_CURRENT{{"Modus = '0' UND Surplus NICHT aktiv?"}}
+        REST_CURRENT -- "Ja → Max-Entladestrom   (nur wenn abweichend)" --> PI_GATE
+        REST_CURRENT -- Nein --> PI_GATE
+
         PI_GATE{{"Modus ∈ {'1','3'}?   UND (Zyklus = on ODER Nacht-Sperre inaktiv ODER PV ≥ Reserve)"}}
         PI_GATE -- Nein --> END_SKIP([Ende — kein Output])
         PI_GATE -- Ja --> DISCHARGE_SET
@@ -171,7 +175,7 @@ flowchart TD
         CALC_AC["⚡ AC Laden — PI-Script (ac_charge_mode=true)   raw_error = (ac_charge_offset − grid) × error_share   error_share (Pool 2, AC-Laden): usable_i / Σ(usable_j) — nur unter gleichzeitig AC-ladenden Instanzen, von Leistungsverteilung gesetzt (Standard 1.0)   unabhängig von Pool 1 (Nulleinspeisung) — verhindert error_share=0-Einfrieren wenn Instanz nicht in Modus '1' steht   usable_i = (SOC_i−Min-SOC_i)/100 × Kap_i   (Kap_i = Kap-Sensor kWh oder 100 wenn nicht gesetzt)   max_power = ac_charge_power_limit   Kapazitäts-Clamping   Korrektur = P·error + I·integral_candidate   (separate ac_charge_p/i_factor)   new_power = current + Korrektur   clamp(0, Lade-Limit) → Output → WR   Anti-Windup: integral = (final − current − P·error) / I → clamp(±effective_max) → round(2)   Wartezeit   (at_max / at_min Guards NICHT angewendet)"]
 
         %% ── Normaler PI-Pfad ─────────────────────────────────────────────
-        NORMAL_GATE{{"Fehler > Toleranz?   UND kein At-Max / At-Min-Limit?   (at_max = false wenn current > dynamic_max — PI korrigiert nach unten)"}}
+        NORMAL_GATE{{"(Fehler > Toleranz ODER current > dynamic_max)?   UND kein At-Max / At-Min-Limit?   (at_max = false wenn current > dynamic_max — PI korrigiert nach unten)"}}
         NORMAL_GATE -- Ja --> CALC_NORMAL
         NORMAL_GATE -- Nein --> INTEGRAL_DECAY
 
