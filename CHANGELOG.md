@@ -5,6 +5,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [V311] – 2026-09-19
+
 ### Changed
 - AC charging docs: the P small / I = 0 recommendation is now explained by the measured charge ramp (charging power rises by only about 33 W/s, lowering takes effect immediately) instead of a ~25 s hardware ramp. Defaults and logic unchanged
 
