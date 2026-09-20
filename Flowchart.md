@@ -42,7 +42,7 @@ flowchart TD
         Z3_B["🛑 Zone 3 Absicherung   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Output → 0 W (bestätigt, 1× Retry)   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
         %% ── Fall D: Recovery ─────────────────────────────────────────────
-        RECOVERY["🔄 Recovery — Modus-Reaktivierung   Timer-Toggle (3598↔3599)   AC-Lade-Bool = on ODER Tarif-Lade-Bool = on → Modus '3'   sonst → Modus '1'   (kein Integral-Reset, kein Zonenwechsel)"]
+        RECOVERY["🔄 Recovery — Modus-Reaktivierung   Timer-Toggle (3598↔3599)   Ladegrund gilt (AC-Option an bzw. Preis günstig) → Modus '3'   sonst → Modus '1'   (kein Integral-Reset, kein Zonenwechsel)"]
 
         %% ── Fall E: Zone 2 ───────────────────────────────────────────────
         Z2_START["🔋 Zone 2 aktivieren   Integral = 0   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
@@ -81,6 +81,9 @@ flowchart TD
         AC_END_Z1["⚡ AC Laden beenden (Zone 1)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
         AC_END_Z2["⚡ AC Laden beenden (Zone 2)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
+        %% ── Fall I: Safety — Lade-Session ohne Modus '3' ────────────────
+        SAFETY_I_SESSION["⚠️ Safety — Lade-Session geräumt   Integral = 0   betroffene Lade-Bools → off   Modus und Output unverändert"]
+
         %% ── Fall I: Safety — Modus '3' ohne aktive Lade-Session ─────────
         SAFETY_I{{"Integral = 0   Aktuelle Zone?"}}
         SAFETY_I_Z1["⚠️ Safety (Zone 1)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
@@ -93,12 +96,13 @@ flowchart TD
     ZONE_CHECK -- "FALL A   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND NICHT Entladesperre (Preis < teuer)   UND SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
     ZONE_CHECK -- "FALL B   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND SOC ≤ Zone-3-Schwelle UND Zyklus = on" --> Z3_A
     ZONE_CHECK -- "FALL C   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND SOC ≤ Zone-3-Schwelle UND Zyklus = off UND Modus ≠ '0'" --> Z3_B
-    ZONE_CHECK -- "FALL D   Zyklus = on ODER Lade-Bool = on   UND Modus ∉ {'1','3'} ← '3' explizit ausgenommen!   UND (Lade-Bool = on ODER SOC > Zone-3-Schwelle)   UND (keine Entladesperre ODER Lade-Bool = on)" --> RECOVERY
-    ZONE_CHECK -- "FALL GT   Tarif-Arbitrage aktiviert   UND Preis < Günstig-Schwelle   UND SOC < Tarif-Ladeziel   UND Modus ≠ '3' ← Guard!   UND NICHT Surplus-Bool = on   UND NICHT PV-Forecast-Suppressed" --> TARIFF_START
-    ZONE_CHECK -- "FALL HT   Modus = '3'   UND Tarif-Lade-Bool = on   UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Tarif-Ladeziel)" --> TARIFF_END
+    ZONE_CHECK -- "FALL D   Zyklus = on ODER Ladegrund gilt   UND Modus ∉ {'1','3'} ← '3' explizit ausgenommen!   UND (Ladegrund gilt ODER SOC > Zone-3-Schwelle)   UND (keine Entladesperre ODER Lade-Bool = on)" --> RECOVERY
+    ZONE_CHECK -- "FALL GT   Tarif-Arbitrage aktiviert   UND Preis < Günstig-Schwelle   UND SOC < Tarif-Ladeziel   UND Modus ≠ '3' ← Guard!   UND NICHT AC-Lade-Bool = on   UND NICHT Surplus-Bool = on   UND NICHT PV-Forecast-Suppressed" --> TARIFF_START
+    ZONE_CHECK -- "FALL HT   Tarif-Lade-Bool = on   UND (keine Günstig-Aussage ODER SOC ≥ Tarif-Ladeziel)   keine Günstig-Aussage = Tarif aus, Preissensor unlesbar, PV-Forecast-Suppressed oder Preis ≥ Günstig-Schwelle" --> TARIFF_END
     ZONE_CHECK -- "FALL TM   Tarif aktiv   UND Preis < Teuer   UND kein AC/Tarif-Laden   UND NICHT Surplus-Bool = on   UND Modus = '1'   UND NICHT PV-Forecast-Suppressed" --> TARIFF_MID
     ZONE_CHECK -- "FALL G   AC Laden aktiviert   UND SOC < Ladeziel   UND Modus ≠ '3' ← Guard!   UND NICHT Tarif-Lade-Bool = on   UND NICHT Surplus-Bool = on   UND (Grid + ΣOutput_entladend) < −Hysterese" --> AC_START
-    ZONE_CHECK -- "FALL H   Modus = '3'   UND (SOC ≥ Ladeziel ODER (Grid ≥ AC-Offset + Hysterese UND |eigener Output| ≤ Toleranz))" --> AC_END
+    ZONE_CHECK -- "FALL H   Modus = '3'   UND AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND (AC Laden deaktiviert ODER SOC ≥ Ladeziel ODER (Grid ≥ AC-Offset + Hysterese UND |eigener Output| ≤ Toleranz))" --> AC_END
+    ZONE_CHECK -- "FALL I   Lade-Bool = on   UND (Modus ≠ '3' ODER beide Lade-Bools = on)" --> SAFETY_I_SESSION
     ZONE_CHECK -- "FALL I   Modus = '3'   UND NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on" --> SAFETY_I
     ZONE_CHECK -- "FALL E   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND NICHT Entladesperre (Preis < teuer)   UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = '0' UND NICHT Nacht" --> Z2_START
     ZONE_CHECK -- "FALL F   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND NICHT Surplus-Bool = on   UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = off UND Modus aktiv" --> NIGHT
@@ -110,6 +114,7 @@ flowchart TD
     AC_END -- "Zyklus = off (Zone 2)" --> AC_END_Z2
     SAFETY_I -- "Zyklus = on (Zone 1)" --> SAFETY_I_Z1
     SAFETY_I -- "Zyklus = off (Zone 2)" --> SAFETY_I_Z2
+    SAFETY_I_SESSION --> REST_CURRENT
 
     Z1_START --> REST_CURRENT
     Z2_START --> REST_CURRENT
@@ -218,7 +223,7 @@ flowchart TD
     class NIGHT night
     class RECOVERY recovery
     class AC_START,AC_END,AC_END_Z1,AC_END_Z2,AC_GATE,CALC_AC accharge
-    class SAFETY_I,SAFETY_I_Z1,SAFETY_I_Z2 recovery
+    class SAFETY_I,SAFETY_I_SESSION,SAFETY_I_Z1,SAFETY_I_Z2 recovery
     class TARIFF_START,TARIFF_END,TARIFF_END_Z1,TARIFF_END_Z2,TARIFF_GATE,CALC_TARIFF tariff
     class TARIFF_MID tarifflock
     class CALC_NORMAL,DISCHARGE_SET,INTEGRAL_DECAY,NORMAL_GATE,STALL_GATE pi

@@ -5,6 +5,15 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 ## [Unreleased]
 
+### Behoben
+- Eine Lade-Session überlebte jede Lage, die sie hätte beenden müssen: Wurde die AC- oder Tarif-Option abgeschaltet, während der Lade-Helfer `on` war, wurden `ac_charge_mode_active` und `tariff_charge_mode_active` `false` — die laufende Session war für alle Bedingungen unsichtbar, Austritt und Safety-Korrektur konnten nicht mehr greifen. Neue Variablen `ac_charge_session_on` und `tariff_charge_session_on` lesen den Helfer ohne die Option; Fall HT, H und I prüfen jetzt diese rohe Session. Fall I fängt zusätzlich „Lade-Session ohne Modus `'3'`" und „beide Lade-Bools zugleich" und räumt dort die Session, ohne Modus oder Output anzufassen. Portiert aus der Integration v3.1.1 (Issue #40)
+- Fall HT beendete das Tarif-Laden nur bei validem Preissensor und Modus `'3'`. Beide Guards sind entfallen: die Session endet jetzt, sobald keine günstige Preisaussage mehr vorliegt — abgeschalteter Tarif, PV-Forecast-Unterdrückung oder unlesbarer Preissensor zählen dazu. Fall H beendet das AC-Laden entsprechend auch bei abgeschalteter Option
+- Fall D holte eine Lade-Session auch dann zurück, wenn ihr Ladegrund nicht mehr galt. Recovery folgt ihr jetzt nur noch bei eingeschalteter AC-Option bzw. weiter günstigem Preis; die Entladesperre prüft unverändert die rohe Session
+- Fall GT startete das Tarif-Laden auch bei offener AC-Lade-Session — spiegelbildlich zu Fall G fehlte der Guard
+
+### Geändert
+- Die PV-Forecast-Unterdrückung gehört jetzt zur Günstig-Aussage (neue Variable `tariff_cheap_effective`) und beendet dadurch auch eine bereits laufende Tarif-Ladung, nicht nur den Eintritt. Deckungsgleich mit `below_cheap` der Integration
+
 ## [V312] – 2026-09-20
 
 ### Behoben

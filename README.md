@@ -222,12 +222,13 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 | **A** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'` |
 | **B** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC ≤ Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Output → 0W (bestätigt über Ist-Leistung, 1× Retry), Timer-Toggle, Modus → `'0'` |
 | **C** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC ≤ Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Output → 0W (bestätigt über Ist-Leistung, 1× Retry), Timer-Toggle, Modus → `'0'` |
-| **D** | (Zyklus = `on` ODER AC-Lade-Bool = `on` ODER Tarif-Lade-Bool = `on`) UND Modus ∉ `{'1','3'}` UND (Lade-Bool = `on` ODER SOC > Zone-3-Schwelle) UND (**keine Entladesperre** ODER Lade-Bool = `on`) | Recovery: Timer-Toggle, Modus → `'3'` wenn AC-Lade-Bool **oder** Tarif-Lade-Bool = `on`, sonst `'1'` |
-| **GT** | Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel UND **Modus ≠ `'3'`** UND **NICHT Surplus-Bool = `on`** UND **NICHT PV-Forecast-Suppressed** | Tarif-Laden Start: Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'` |
-| **HT** | Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Tarif-Ladeziel) | Tarif-Laden Ende: Tarif-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
+| **D** | (Zyklus = `on` ODER **Ladegrund gilt**) UND Modus ∉ `{'1','3'}` UND (**Ladegrund gilt** ODER SOC > Zone-3-Schwelle) UND (**keine Entladesperre** ODER Lade-Bool = `on`) | Recovery: Timer-Toggle, Modus → `'3'` wenn der Ladegrund gilt, sonst `'1'` |
+| **GT** | Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel UND **Modus ≠ `'3'`** UND **NICHT AC-Lade-Bool = `on`** UND **NICHT Surplus-Bool = `on`** UND **NICHT PV-Forecast-Suppressed** | Tarif-Laden Start: Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'` |
+| **HT** | Tarif-Bool = `on` UND (**keine Günstig-Aussage** ODER SOC ≥ Tarif-Ladeziel) | Tarif-Laden Ende: Tarif-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
 | **TM** | Tarif aktiv UND Preis < Teuer-Schwelle UND kein AC/Tarif-Laden UND **NICHT Surplus-Bool = `on`** UND **Modus = `'1'`** UND **NICHT PV-Forecast-Suppressed** | Discharge-Lock: Integral = 0, Zyklus = `off` (wenn aktiv), Output → 0W, Timer-Toggle, Modus → `'0'` |
 | **G** | AC aktiv UND SOC < Ladeziel UND **Modus ≠ `'3'`** UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + ΣOutput_entladend) < −Hysterese | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
-| **H** | Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ `ac_charge_offset + Hysterese` UND \|eigener Output\| ≤ Toleranz)) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
+| **H** | Modus = `'3'` UND AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND (**AC Laden deaktiviert** ODER SOC ≥ Ladeziel ODER (Grid ≥ `ac_charge_offset + Hysterese` UND \|eigener Output\| ≤ Toleranz)) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
+| **I** | Lade-Bool = `on` UND (Modus ≠ `'3'` ODER **beide** Lade-Bools = `on`) | Safety-Korrektur: Integral = 0, betroffene Lade-Bools → `off`; Modus und Output bleiben unverändert |
 | **I** | Modus = `'3'` UND NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` | Safety-Korrektur: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W (Timer-Toggle) |
 | **E** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Output → 0W, Timer-Toggle, Modus → `'1'` |
 | **F** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Surplus-Bool = `on` UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Output → 0W, Timer-Toggle, Modus → `'0'` |
@@ -257,6 +258,7 @@ Laden der Batterie wenn eine externe Einspeisung ins Netz erkannt wird. Eintritt
 
 * **Blockiert durch:** Zone 0 (Überschuss-Bool = `on`) und Tarif-Laden (Tarif-Bool = `on`).
 * **Eintritts-Bedingung (Fall G):** AC Laden aktiviert UND SOC < Ladeziel UND Modus ≠ `'3'` UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + ΣOutput_entladend) < −Hysterese.
+* **Abbruch (Fall H):** AC Laden deaktiviert **ODER** SOC ≥ Ladeziel **ODER** (Grid ≥ Offset + Hysterese UND \|eigener Output\| ≤ Toleranz). Das Abschalten der Option beendet also eine laufende Ladung — geprüft wird dafür der Lade-Helfer selbst, nicht die Option.
 * **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`. Separate P/I-Faktoren. P klein halten (~0.3–0.5), I auf 0 belassen (Ladeleistung steigt nur mit ~33 W/s).
 * **Rückkehr:** Zone 1 → Modus `'1'` (Timer-Toggle) + Integral Reset. Zone 2 → Modus `'0'` (Timer-Toggle) + Output 0W + Integral Reset.
 
@@ -285,9 +287,9 @@ Du kannst für beide Schwellenwerte entweder feste Zahlenwerte nutzen oder **dyn
 
 #### Tarif-Laden (Fall GT)
 
-* **Eintritts-Bedingung:** Tarif-Arbitrage aktiviert **UND** Preis < Günstig-Schwelle **UND** SOC < Ziel-SOC **UND** Modus ≠ `'3'` **UND** kein Überschuss-Laden aktiv.
+* **Eintritts-Bedingung:** Tarif-Arbitrage aktiviert **UND** Preis < Günstig-Schwelle **UND** SOC < Ziel-SOC **UND** Modus ≠ `'3'` **UND** kein AC-Laden aktiv **UND** kein Überschuss-Laden aktiv.
 * **Verhalten:** Setzt die konfigurierte Ladeleistung (`tariff_charge_power`) — kein PI-Regler, kein Toleranz-Check.
-* **Abbruch:** Preis steigt über Günstig-Schwelle **ODER** SOC-Ladeziel erreicht.
+* **Abbruch:** keine günstige Preisaussage mehr **ODER** SOC-Ladeziel erreicht. Keine Preisaussage heißt: Preis ≥ Günstig-Schwelle, Tarif-Arbitrage abgeschaltet, PV-Forecast-Suppressed oder Preissensor unlesbar. Ein einzelner Zyklus ohne Preisaussage beendet die Ladung; sie startet über Fall GT neu, sobald wieder ein günstiger Preis ausgewiesen ist.
 * **Rückkehr:** Zone 1 → Timer-Toggle + Modus `'1'` / Zone 2 → Timer-Toggle + Modus `'0'` + Output 0W.
 * **Priorität:** Tarif-Laden (GT) liegt vor AC-Laden (G) im choose-Block.
 
@@ -588,6 +590,7 @@ Eintritts-Bedingung (Fall GT):
   tariff_arbitrage_enabled UND Preis < cheap_threshold
   UND soc < tariff_soc_charge_target
   UND Modus ≠ '3' ← Guard: verhindert Re-Eintritt
+  UND NICHT ac_charge_session ← Guard: keine AC-Ladung offen
   UND NICHT surplus_active ← Guard: Zone 0 hat Vorrang
   → tariff_charge_state_helper = on
   → Output = tariff_charge_power (direkt, kein PI)
@@ -599,8 +602,10 @@ Direktes Setzen (Zweig BT, jeder Trigger):
   → delay wait_time
 
 Abbruch-Bedingung (Fall HT):
-  Modus = '3' UND tariff_charge_bool = on
-  UND (soc >= tariff_soc_charge_target ODER Preis >= cheap_threshold)
+  tariff_charge_bool = on   ← roher Helfer, ohne Modus- und ohne Options-Guard
+  UND (soc >= tariff_soc_charge_target ODER keine günstige Preisaussage)
+  keine Preisaussage = Preis >= cheap_threshold, Tarif aus,
+                       PV-Forecast-Suppressed oder Preissensor unlesbar
   → tariff_charge_state_helper = off, integral = 0
   → Zone 1: Timer-Toggle + Modus '1'
   → Zone 2: Modus '0' + Output 0W
@@ -632,6 +637,16 @@ Eintritts-Bedingung (Fall G):
   UND (grid + total_actual_power) < -hysteresis ← Σ über alle Instanzen im Entlademodus (Einzelbetrieb: eigener Output)
   → ac_charge_state_helper = on
   → Modus = '3', Output = 0W, Timer-Toggle
+
+Abbruch-Bedingung (Fall H):
+  ac_charge_state_helper = on   ← roher Helfer, nicht die Option
+  UND Modus = '3' UND NICHT tariff_charge_session
+  UND (NICHT ac_charge_enabled
+       ODER soc >= soc_ac_charge_limit
+       ODER (grid >= offset + hysteresis UND |eigener Output| <= tolerance))
+  → ac_charge_state_helper = off, integral = 0
+  → Zone 1: Timer-Toggle + Modus '1'
+  → Zone 2: Modus '0' + Output 0W
 ```
 
 ### Dynamisches Power-Limit

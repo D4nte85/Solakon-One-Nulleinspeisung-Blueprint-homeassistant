@@ -115,7 +115,8 @@ blueprint:
       - Guard `Modus ≠ '3'` verhindert Re-Eintritt wenn AC Laden bereits läuft
       - Multi-Instanz: `ΣOutput_entladend` verhindert, dass die Entladung einer Schwester-Instanz als externer Netzüberschuss gewertet wird (optionaler Helfer `total_actual_power_entity`, geschrieben von der Leistungsverteilungs-Automation)
     - **Verbleib:** Modus `'3'` solange SOC < Ladeziel UND Grid < (Offset + Hysterese)
-    - **Abbruch (Fall H):** SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND |eigener Output| ≤ Toleranz)
+    - **Abbruch (Fall H):** AC Laden deaktiviert ODER SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND |eigener Output| ≤ Toleranz)
+      - Abschalten der Option beendet eine laufende Lade-Session; geprüft wird dafür der Lade-Helfer selbst, nicht die Option
       - `|Output| ≤ Toleranz`-Guard verhindert Fehlauslösung während PI noch regelt (bezieht sich stets auf den eigenen Output dieser Instanz); Output folgt derselben Vorzeichenkonvention wie Grid (negativ = ladend) und ist während aktivem Laden durchgehend deutlich negativ, nicht nur Rauschen nahe 0 — Toleranzband verlangt echte Konvergenz gegen null statt bloß eines beliebigen negativen (= noch aktiv ladenden) Werts, nutzt dieselbe `tolerance`-Einstellung wie die PI-Konvergenzprüfung
     - **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`
       - Positiver Fehler (Grid zu negativ) → Ladeleistung erhöhen
@@ -143,6 +144,7 @@ blueprint:
 
     #### Logik-Details
     - **Fall GT (Preis < Günstig):** Lädt mit `tariff_charge_power` bis SOC-Ziel. Priorität vor AC-Laden. Rückkehr zu Zone 1 (Timer-Toggle) oder Zone 2 (Timer-Toggle, 0W). **Wird übersprungen wenn PV-Forecast-Suppressed.**
+    - **Fall HT (Austritt):** endet, sobald keine günstige Preisaussage mehr vorliegt — abgeschalteter Tarif, PV-Forecast-Suppressed, unlesbarer Preissensor oder Preis ≥ Günstig-Schwelle — oder das SOC-Ladeziel erreicht ist.
     - **Fall TM (Preis < Teuer):** Stoppt Zone 1 & 2 sofort (Modus `'0'`). Setzt Zyklus-Helper zurück. Schont Akku für teure Spitzen. **Wird übersprungen wenn PV-Forecast-Suppressed.**
     - **Normalbetrieb (Preis ≥ Teuer):** Entladesperre aufgehoben, Standard-Zonenregelung (Fall A/E) übernimmt wieder.
 
@@ -1168,6 +1170,12 @@ variables:
        states(ac_charge_state_entity) not in ['unknown', 'unavailable'] }}
   # AC-Lade-Modus aktiv? Aus persistentem Helper lesen.
   ac_charge_mode_active: "{{ ac_charge_entity_valid | bool(false) and is_state(ac_charge_state_entity, 'on') }}"
+  # Rohe Lade-Session: Helfer ohne die Option gelesen. Die Option kann während einer
+  # laufenden Session abgeschaltet werden, ac_charge_mode_active wird dann false.
+  ac_charge_session_on: >
+    {{ ac_charge_state_entity is string and
+       ac_charge_state_entity | length > 0 and
+       is_state(ac_charge_state_entity, 'on') }}
   ac_charge_offset_static: !input ac_charge_offset
   ac_charge_offset_entity_id: !input ac_charge_offset_entity
   ac_charge_offset_int: >
@@ -1232,6 +1240,11 @@ variables:
        states(tariff_charge_state_entity) not in ['unknown', 'unavailable'] }}
   # Tarif-Lade-Modus aktiv? Aus persistentem Helper lesen.
   tariff_charge_mode_active: "{{ tariff_charge_entity_valid | bool(false) and is_state(tariff_charge_state_entity, 'on') }}"
+  # Rohe Lade-Session, siehe ac_charge_session_on
+  tariff_charge_session_on: >
+    {{ tariff_charge_state_entity is string and
+       tariff_charge_state_entity | length > 0 and
+       is_state(tariff_charge_state_entity, 'on') }}
   # Preis-Sensor gültig (verfügbar und Tarif-Arbitrage aktiv)?
   price_sensor_valid: >
     {{ tariff_arbitrage_enabled_bool and
@@ -1339,6 +1352,17 @@ variables:
        pv_forecast_sensor_id is string and pv_forecast_sensor_id | length > 0 and
        states(pv_forecast_sensor_id) not in ['unknown', 'unavailable'] and
        pv_forecast_energy_float | float(0) >= pv_forecast_threshold_float | float(0) }}
+  # Wirksame Günstig-Aussage: Preis günstig UND keine Prognose-Unterdrückung.
+  # Trägt Eintritt und Austritt des Tarif-Ladens sowie die Tarif-Recovery in Fall D.
+  # Steht hinter pv_forecast_suppressed, weil Variablen der Reihe nach gerendert werden.
+  tariff_cheap_effective: >
+    {{ (price_is_cheap | bool(false)) and
+       not (pv_forecast_suppressed | bool(false)) }}
+  # Ladegrund einer laufenden Session gilt noch: AC-Option an bzw. Preis weiter günstig
+  recovery_session_active: >
+    {{ (ac_charge_mode_active | bool(false)) or
+       ((tariff_charge_mode_active | bool(false)) and
+        (tariff_cheap_effective | bool(false))) }}
 
 triggers:
   # Grid-Leistungsänderung
@@ -1751,26 +1775,26 @@ actions:
       # FALL D: Recovery - Modus fiel ab, Zyklus oder Lade-Session noch aktiv
       # VOR Fall GT/G! Schließt Modus '3' aus (AC/Tarif-Laden laufen ungestört weiter).
       # Bei aktiver Lade-Session entfällt die SOC-Bedingung.
+      # Recovery folgt einer Lade-Session nur solange deren Ladegrund gilt
+      # (recovery_session_active) - eine Session ohne Grund beenden HT, H und I.
       # Guard: Entladesperre - dieselbe Breite wie Fall TM, sonst stellt D die Entladung
-      # wieder her, die TM im nächsten Lauf erneut stoppt. Recovery einer laufenden
-      # Lade-Session bleibt erlaubt.
+      # wieder her, die TM im nächsten Lauf erneut stoppt. Der Guard liest die rohe
+      # Session, nicht den Ladegrund: eine laufende Ladung hebt die Sperre auf.
       - conditions:
           - condition: template
             value_template: >
               {{ is_state(cycle_active, 'on') or
-                 ac_charge_mode_active | bool(false) or
-                 tariff_charge_mode_active | bool(false) }}
+                 recovery_session_active | bool(false) }}
           - condition: template
             value_template: >
               {{ not (price_discharge_locked | bool(false)) or
-                 ac_charge_mode_active | bool(false) or
-                 tariff_charge_mode_active | bool(false) }}
+                 ac_charge_session_on | bool(false) or
+                 tariff_charge_session_on | bool(false) }}
           - condition: template
             value_template: "{{ states(solakon_mode) not in ['1', '3'] }}"
           - condition: template
             value_template: >
-              {{ ac_charge_mode_active | bool(false) or
-                 tariff_charge_mode_active | bool(false) or
+              {{ recovery_session_active | bool(false) or
                  states(soc) | float(0) > soc_conservation_limit_int }}
         sequence:
           # 1. Logbuch-Eintrag
@@ -1796,15 +1820,11 @@ actions:
                   entity_id: !input remote_timeout_set_number
                 data:
                   value: 3599
-          # 3. Modus wiederherstellen: '3' wenn AC Laden ODER Tarif-Laden aktiv, sonst '1'
+          # 3. Modus wiederherstellen: '3' wenn der Ladegrund noch gilt, sonst '1'
           - choose:
               - conditions:
                   - condition: template
-                    value_template: >
-                      {{ (ac_charge_entity_valid | bool(false) and
-                          is_state(ac_charge_state_entity, 'on')) or
-                         (tariff_charge_entity_valid | bool(false) and
-                          is_state(tariff_charge_state_entity, 'on')) }}
+                    value_template: "{{ recovery_session_active | bool(false) }}"
                 sequence:
                   - action: select.select_option
                     target:
@@ -1821,16 +1841,18 @@ actions:
       # FALL GT: TARIF-LADEN — Eintritt
       # Guard: Modus ≠ '3' — verhindert Re-Eintritt wenn Tarif-Laden bereits aktiv
       # Guard: NICHT Surplus-Bool = on — Zone 0 blockiert Laden
-      # Guard: pv_forecast_suppressed — sonnige Tage überspringen Laden
+      # Guard: NICHT AC-Lade-Session — spiegelbildlich zu Fall G
+      # tariff_cheap_effective enthält die Prognose-Unterdrückung: sonnige Tage
+      # überspringen das Laden
       - conditions:
           - condition: template
             value_template: "{{ tariff_arbitrage_enabled_bool }}"
           - condition: template
             value_template: "{{ tariff_charge_entity_valid | bool(false) }}"
           - condition: template
-            value_template: "{{ price_is_cheap | bool(false) }}"
+            value_template: "{{ tariff_cheap_effective | bool(false) }}"
           - condition: template
-            value_template: "{{ not (pv_forecast_suppressed | bool(false)) }}"
+            value_template: "{{ not (ac_charge_session_on | bool(false)) }}"
           - condition: template
             value_template: "{{ states(soc) | float(0) < tariff_soc_charge_target_int }}"
           - condition: template
@@ -1883,17 +1905,17 @@ actions:
           - stop: ""
 
       # FALL HT: TARIF-LADEN BEENDEN
-      # Stoppbedingung Preis: NUR wenn Sensor valide — Sensor-Ausfall stoppt NICHT
+      # Prüft die rohe Lade-Session, ohne Options- und ohne Modus-Guard: der Austritt
+      # greift auch nach abgeschalteter Option und bei einem Modus außerhalb '3'.
+      # Stoppbedingung Preis: keine wirksame Günstig-Aussage mehr — das umfasst
+      # abgeschalteten Tarif, Prognose-Unterdrückung und unlesbaren Preissensor.
       - conditions:
           - condition: template
-            value_template: >
-              {{ tariff_arbitrage_enabled_bool and
-                 states(solakon_mode) == '3' and
-                 (tariff_charge_mode_active | bool(false)) }}
+            value_template: "{{ tariff_charge_session_on | bool(false) }}"
           - condition: template
             value_template: >
               {{ states(soc) | float(0) >= tariff_soc_charge_target_int or
-                 ((price_sensor_valid | bool(false)) and not (price_is_cheap | bool(false))) }}
+                 not (tariff_cheap_effective | bool(false)) }}
         sequence:
           # 1. Logbuch-Eintrag
           - action: logbook.log
@@ -2064,7 +2086,7 @@ actions:
           - condition: template
             value_template: "{{ ac_charge_entity_valid | bool(false) }}"
           - condition: template
-            value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
+            value_template: "{{ not (tariff_charge_session_on | bool(false)) }}"
           - condition: template
             value_template: "{{ not (surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on')) }}"
           - condition: template
@@ -2120,15 +2142,18 @@ actions:
 
 
       # FALL H: AC LADEN BEENDEN
-      # Guard: ac_charge_mode_active (nicht nur enabled) UND kein Tarif-Laden aktiv
+      # Guard: rohe AC-Lade-Session (nicht die Option) UND kein Tarif-Laden aktiv —
+      # sonst entfiele der Austritt genau dann, wenn die Option während des Ladens
+      # abgeschaltet wird. Abgeschaltete Option ist selbst eine Stoppbedingung.
       - conditions:
           - condition: template
-            value_template: "{{ ac_charge_enabled_bool and (ac_charge_mode_active | bool(false)) and states(solakon_mode) == '3' }}"
+            value_template: "{{ (ac_charge_session_on | bool(false)) and states(solakon_mode) == '3' }}"
           - condition: template
-            value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
+            value_template: "{{ not (tariff_charge_session_on | bool(false)) }}"
           - condition: template
             value_template: >
-              {{ states(soc) | float(0) >= soc_ac_charge_limit_int or
+              {{ not ac_charge_enabled_bool or
+                 states(soc) | float(0) >= soc_ac_charge_limit_int or
                  (grid_power_float >= (ac_charge_offset_int | float(0) + ac_charge_hysteresis_int | float(0)) and ((actual_power_float | float(0)) | abs <= tolerance_int))}}
         sequence:
           # 1. Logbuch-Eintrag
@@ -2215,6 +2240,68 @@ actions:
                 data:
                   option: '0'
 
+      # FALL I: Safety — Lade-Session ohne Modus '3', oder beide Lade-Bools zugleich
+      # Räumt die Session, lässt Modus und Output unangetastet: der Widerspruch liegt
+      # im Zustandsrest, nicht am Gerät. Je Richtung ein eigener Logbuchtext.
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ ((ac_charge_session_on | bool(false)) and
+                  (tariff_charge_session_on | bool(false))) or
+                 (((ac_charge_session_on | bool(false)) or
+                   (tariff_charge_session_on | bool(false))) and
+                  states(solakon_mode) != '3') }}
+        sequence:
+          # 1. Logbuch-Eintrag — getrennter Text je Richtung
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ (ac_charge_session_on | bool(false)) and
+                         (tariff_charge_session_on | bool(false)) }}
+                sequence:
+                  - action: logbook.log
+                    data:
+                      name: Solakon Safety
+                      message: >
+                        ⚠️ Fall I — AC- und Tarif-Laden gleichzeitig aktiv. Beide Sessions beendet.
+                        Zone {{ '1' if is_state(cycle_active, 'on') else '2' }}
+                        — SOC: {{ states(soc) }}%
+                      entity_id: !input mode_select
+            default:
+              - action: logbook.log
+                data:
+                  name: Solakon Safety
+                  message: >
+                    ⚠️ Fall I — Lade-Session ohne Modus '3' (Modus: {{ states(solakon_mode) }}).
+                    Session beendet, Modus unverändert.
+                    Zone {{ '1' if is_state(cycle_active, 'on') else '2' }}
+                    — SOC: {{ states(soc) }}%
+                  entity_id: !input mode_select
+          # 2. Integral zurücksetzen
+          - action: input_number.set_value
+            target:
+              entity_id: !input integral_helper
+            data:
+              value: 0
+          # 3. Lade-Zustände → off, je Helfer nur wenn gesetzt
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ ac_charge_session_on | bool(false) }}"
+                sequence:
+                  - action: input_boolean.turn_off
+                    target:
+                      entity_id: !input ac_charge_state_helper
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ tariff_charge_session_on | bool(false) }}"
+                sequence:
+                  - action: input_boolean.turn_off
+                    target:
+                      entity_id: !input tariff_charge_state_helper
+
       # FALL I: Safety — Modus '3' aber weder AC Laden noch Tarif-Laden aktiv
       # Fängt externe Modussetzung auf '3' ab wenn kein Laden aktiv oder Helper off
       - conditions:
@@ -2222,11 +2309,8 @@ actions:
             value_template: "{{ states(solakon_mode) == '3' }}"
           - condition: template
             value_template: >
-              {{ not ac_charge_enabled_bool or
-                 not (ac_charge_entity_valid | bool(false)) or
-                 not is_state(ac_charge_state_entity, 'on') }}
-          - condition: template
-            value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
+              {{ not (ac_charge_session_on | bool(false)) and
+                 not (tariff_charge_session_on | bool(false)) }}
         sequence:
           # 1. Logbuch-Eintrag
           - action: logbook.log
