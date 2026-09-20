@@ -5,6 +5,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [V312] – 2026-09-20
+
+### Fixed
+- The AC charging pool of the power distribution weighted by `(SOC − Min-SOC) × capacity` like the discharge pool, so the fuller instance received the larger charging share. The basis is now `(charge target − SOC) × capacity`. Ported from integration v3.0.0
+- Case TM stopped a running discharge only in the mid-price band. After tariff charging (case HT at the charge target), Zone 1 discharged the battery that had just been charged as long as the price stayed below the cheap threshold. TM now locks the whole band below the expensive threshold, like cases A and E. Ported from the integration (issue #6)
+- Case D (recovery) restored mode `'1'` without a price check; with a discharge lock in place, TM stopped it again on the next run and mode and timer flickered. D now checks the lock at the width of TM, recovery of a running charging session stays allowed. Ported from the integration (`0f59a9f`)
+
+### Changed
+- The power distribution has a new input per instance: "SOC Charge Target AC Charging (%)", default 90. **The value must match the charge target of the respective instance automation** — otherwise the AC charging pool weights against a wrong target
+
 ## [V311] – 2026-09-19
 
 ### Changed
