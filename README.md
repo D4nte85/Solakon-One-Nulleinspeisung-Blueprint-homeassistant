@@ -1,5 +1,8 @@
 # ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V312
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/d4nte85)
+
 Dieser Home Assistant Blueprint implementiert eine **dynamische Nulleinspeisung** für den Solakon ONE Wechselrichter, basierend auf einem **PI-Regler (Proportional-Integral-Regler)** und einer intelligenten **SOC-Zonen-Logik** mit optionaler **Überschuss-Einspeisung bei vollem Akku**, optionalem **AC Laden aus externer Einspeisung** und optionaler **Tarif-Arbitrage** (günstig laden, Entladesperre bei niedrigem Tarif).
 
 Ziel dieses Blueprints ist es, PV-Energie direkt auszugeben ohne den Umweg über die Batterie.
@@ -766,3 +769,15 @@ gleichzeitig laden.
 > **Hinweis Tarif-Trigger:** Ein separater Preis-Trigger ist in Blueprint-Automationen mit optionalen Entitäten nicht sauber realisierbar. Die Tarif-Logik greift beim nächsten regulären Grid/PV-Trigger. Da diese bei aktiver PV sehr häufig feuern, ist die Reaktionsverzögerung bei Preisübergängen vernachlässigbar.
 
 > **Hinweis dynamische Zone-1-Schwelle:** `soc_high` triggert nur am statischen Fallback-Wert, da HA-Trigger keine Templates erlauben. Ist ein Override per `input_number` gesetzt, wird die Zone-1-Schwelle beim nächsten Grid-/PV-Trigger korrekt ausgewertet — dieselbe Verzögerungslogik wie beim Tarif-Trigger.
+
+---
+
+## Lizenz
+
+MIT — siehe [LICENSE](LICENSE)
+
+---
+
+## Autor
+
+[@D4nte85](https://github.com/D4nte85)
