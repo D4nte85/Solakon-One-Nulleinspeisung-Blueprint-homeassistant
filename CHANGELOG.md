@@ -5,6 +5,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- A charging session survived every situation that should have ended it: switching the AC or tariff option off while the charge helper was `on` turned `ac_charge_mode_active` and `tariff_charge_mode_active` false — the running session became invisible to every condition, so neither the exit nor the safety correction could act. New variables `ac_charge_session_on` and `tariff_charge_session_on` read the helper without the option; Cases HT, H and I now check this raw session. Case I additionally catches "charging session without Mode `'3'`" and "both charge bools at once" and clears the session there without touching mode or output. Ported from integration v3.1.1 (issue #40)
+- Case HT ended tariff charging only with a valid price sensor and Mode `'3'`. Both guards are gone: the session now ends as soon as no cheap-price statement is left — a disabled tariff, PV forecast suppression or an unreadable price sensor count as such. Case H ends AC charging accordingly when the option is switched off
+- Case D restored a charging session even when its charging reason no longer held. Recovery now follows it only with the AC option enabled resp. a still cheap price; the discharge lock keeps checking the raw session
+- Case GT started tariff charging even with an open AC charging session — the guard was missing, mirror image of Case G
+
+### Changed
+- PV forecast suppression is now part of the cheap-price statement (new variable `tariff_cheap_effective`) and therefore also ends a tariff charge already running, not just the entry. Matches `below_cheap` of the integration
+
 ## [V312] – 2026-09-20
 
 ### Fixed
