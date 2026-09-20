@@ -135,7 +135,9 @@ Eigener Fehler-Anteil-Pool für AC-Laden (Modus '3'), getrennt vom Helper aus Pu
 weil eine ladende Instanz nicht in Modus '1' steht und im Nulleinspeisungs-Pool sonst
 `error_share = 0` bekäme — das würde den AC-Lade-PI auf 0 W einfrieren, obwohl aktiv Ladebedarf
 besteht. Die Leistungsverteilungs-Automation berechnet den Anteil nur unter den gerade
-gleichzeitig AC-ladenden Instanzen (eigener Pool, unabhängig von Punkt 8).
+gleichzeitig AC-ladenden Instanzen (eigener Pool, unabhängig von Punkt 8). Gewichtet wird nach
+der fehlenden Energie bis zum Ladeziel: `missing_i = (Ladeziel_i − SOC_i) / 100 × Kap_i` — die
+leerere Instanz bekommt den größeren Ladeanteil.
 
 1. Gehen Sie zu **Einstellungen** → **Geräte & Dienste** → **Helfer** → **Number**
 2. Name: z.B. `Solakon Instanz 1 AC Share`
@@ -689,13 +691,16 @@ Die Verteilung läuft über **zwei unabhängige Pools**, nicht einen gemeinsamen
   Leistungslimit als auch `error_share_entity`.
 - **Pool 2 (AC-Laden):** nur Instanzen mit aktivem AC-Lade-Zustand-Helfer (Modus `'3'`). Bestimmt
   nur `ac_error_share_entity` — kein eigenes Leistungslimit, das AC-Ladelimit bleibt unabhängig.
+  Gewichtet nach `missing_i = (Ladeziel_i − SOC_i) / 100 × Kap_i`.
 
 Grund für die Trennung: Eine Instanz, die gerade per AC lädt, steht in Modus `'3'` und zählt damit
 nicht zu Pool 1. Gäbe es nur einen gemeinsamen Fehler-Anteil, bekäme sie dort `error_share = 0`
 zugewiesen — und genau dieser Wert würde auch ihrem AC-Lade-PI übergeben, der dadurch bei aktivem
 Ladebedarf auf 0 W einfriert. Mit zwei getrennten Pools bekommt jede Instanz für jeden Modus einen
-eigenen, korrekt berechneten Anteil. Beide Pools verwenden dieselbe Gewichtungslogik
-(Gleichverteilung oder SOC-gewichtet, je nach globalem Umschalter).
+eigenen, korrekt berechneten Anteil. Beide Pools verwenden dieselbe Struktur (Gleichverteilung
+oder SOC-gewichtet, je nach globalem Umschalter), aber die entgegengesetzte Basis: Pool 1
+gewichtet nach der nutzbaren Energie über dem Min-SOC, Pool 2 nach der fehlenden Energie bis
+zum Ladeziel. So entlädt die vollere Instanz stärker und lädt die leerere stärker.
 
 Die beiden Pools überschneiden sich nie — eine Instanz ist zu jedem Zeitpunkt entweder in Pool 1,
 in Pool 2 oder in keinem von beiden (z. B. Zone 3 gestoppt, Tarif-Laden).
@@ -730,7 +735,8 @@ gleichzeitig laden.
    - Min-SOC pro Instanz eintragen — identisch mit dem Wert „Zone 3 Stopp" der jeweiligen Instanz
    - `limit`- und `share`-Helper pro Instanz zuordnen
    - Optional: Kapazitätssensor der Solakon-ONE-Integration pro Instanz eintragen — empfohlen bei unterschiedlichen Batteriekapazitäten
-   - Bei AC-Laden zusätzlich: AC-Lade-Zustand-Helfer und `ac_share`-Helfer pro ladender Instanz zuordnen
+   - Bei AC-Laden zusätzlich: AC-Lade-Zustand-Helfer und `ac_share`-Helfer pro ladender Instanz zuordnen,
+     dazu das SOC-Ladeziel pro Instanz eintragen — identisch mit dem Wert „SOC-Ladeziel" der jeweiligen Instanz
    - Empfohlen (verhindert Batterie-zu-Batterie-Umpumpen bei Fall G): pro Instanz den Ist-Leistungssensor eintragen, dazu einen gemeinsamen `total_actual_power`-Helfer anlegen und in jeder Instanz-Automation als „Σ-Ausgangsleistung entladend — Dynamisch" (`total_actual_power_entity`) eintragen
 
 ---

@@ -146,6 +146,20 @@ blueprint:
               max: 49
               unit_of_measurement: "%"
 
+        inst1_ac_target_soc:
+          name: 🔋 Instanz 1 — SOC-Ladeziel AC-Laden (%)
+          description: |
+            SOC-Ladeziel aus den Blueprint-Einstellungen der Instanz 1 („🔋 SOC-Ladeziel (%)").
+            Wird zur Gewichtung des AC-Lade-Pools verwendet:
+            fehlend = Ladeziel − SOC (die leerere Instanz bekommt den größeren Anteil).
+            ⚠️ Muss mit dem Ladeziel der Instanz-Automation übereinstimmen.
+          default: 90
+          selector:
+            number:
+              min: 10
+              max: 99
+              unit_of_measurement: "%"
+
         inst1_capacity_sensor:
           name: 🔋 Instanz 1 — Batteriekapazität in kWh (Optional)
           description: |
@@ -246,6 +260,20 @@ blueprint:
               max: 49
               unit_of_measurement: "%"
 
+        inst2_ac_target_soc:
+          name: 🔋 Instanz 2 — SOC-Ladeziel AC-Laden (%)
+          description: |
+            SOC-Ladeziel aus den Blueprint-Einstellungen der Instanz 2 („🔋 SOC-Ladeziel (%)").
+            Wird zur Gewichtung des AC-Lade-Pools verwendet:
+            fehlend = Ladeziel − SOC (die leerere Instanz bekommt den größeren Anteil).
+            ⚠️ Muss mit dem Ladeziel der Instanz-Automation übereinstimmen.
+          default: 90
+          selector:
+            number:
+              min: 10
+              max: 99
+              unit_of_measurement: "%"
+
         inst2_capacity_sensor:
           name: 🔋 Instanz 2 — Batteriekapazität in kWh (Optional)
           description: Siehe Instanz 1 — Kapazitätssensor der Solakon-ONE-Integration.
@@ -320,6 +348,20 @@ blueprint:
             number:
               min: 0
               max: 49
+              unit_of_measurement: "%"
+
+        inst3_ac_target_soc:
+          name: 🔋 Instanz 3 — SOC-Ladeziel AC-Laden (%)
+          description: |
+            SOC-Ladeziel aus den Blueprint-Einstellungen der Instanz 3 („🔋 SOC-Ladeziel (%)").
+            Wird zur Gewichtung des AC-Lade-Pools verwendet:
+            fehlend = Ladeziel − SOC (die leerere Instanz bekommt den größeren Anteil).
+            ⚠️ Muss mit dem Ladeziel der Instanz-Automation übereinstimmen.
+          default: 90
+          selector:
+            number:
+              min: 10
+              max: 99
               unit_of_measurement: "%"
 
         inst3_capacity_sensor:
@@ -400,6 +442,20 @@ blueprint:
               max: 49
               unit_of_measurement: "%"
 
+        inst4_ac_target_soc:
+          name: 🔋 Instanz 4 — SOC-Ladeziel AC-Laden (%)
+          description: |
+            SOC-Ladeziel aus den Blueprint-Einstellungen der Instanz 4 („🔋 SOC-Ladeziel (%)").
+            Wird zur Gewichtung des AC-Lade-Pools verwendet:
+            fehlend = Ladeziel − SOC (die leerere Instanz bekommt den größeren Anteil).
+            ⚠️ Muss mit dem Ladeziel der Instanz-Automation übereinstimmen.
+          default: 90
+          selector:
+            number:
+              min: 10
+              max: 99
+              unit_of_measurement: "%"
+
         inst4_capacity_sensor:
           name: 🔋 Instanz 4 — Batteriekapazität in kWh (Optional)
           description: Siehe Instanz 1 — Kapazitätssensor der Solakon-ONE-Integration.
@@ -464,6 +520,7 @@ variables:
   i1_limit:      !input inst1_limit_number
   i1_share:      !input inst1_share_number
   i1_min_soc:    !input inst1_min_soc
+  i1_ac_target:  !input inst1_ac_target_soc
   i1_cap:        !input inst1_capacity_sensor
   i1_actual:     !input inst1_actual_power_sensor
   i1_ac_helper:  !input inst1_ac_charge_helper
@@ -473,6 +530,7 @@ variables:
   i2_limit:      !input inst2_limit_number
   i2_share:      !input inst2_share_number
   i2_min_soc:    !input inst2_min_soc
+  i2_ac_target:  !input inst2_ac_target_soc
   i2_cap:        !input inst2_capacity_sensor
   i2_actual:     !input inst2_actual_power_sensor
   i2_ac_helper:  !input inst2_ac_charge_helper
@@ -482,6 +540,7 @@ variables:
   i3_limit:      !input inst3_limit_number
   i3_share:      !input inst3_share_number
   i3_min_soc:    !input inst3_min_soc
+  i3_ac_target:  !input inst3_ac_target_soc
   i3_cap:        !input inst3_capacity_sensor
   i3_actual:     !input inst3_actual_power_sensor
   i3_ac_helper:  !input inst3_ac_charge_helper
@@ -491,6 +550,7 @@ variables:
   i4_limit:      !input inst4_limit_number
   i4_share:      !input inst4_share_number
   i4_min_soc:    !input inst4_min_soc
+  i4_ac_target:  !input inst4_ac_target_soc
   i4_cap:        !input inst4_capacity_sensor
   i4_actual:     !input inst4_actual_power_sensor
   i4_ac_helper:  !input inst4_ac_charge_helper
@@ -729,32 +789,34 @@ actions:
       ac3_active: "{{ ac3_configured and is_state(i3_ac_helper, 'on') }}"
       ac4_active: "{{ ac4_configured and is_state(i4_ac_helper, 'on') }}"
 
-      # Nutzbare Energie — identische Formel wie soc1–4, aber auf AC-aktive Instanzen gegated.
+      # Fehlende Energie bis zum Ladeziel, auf AC-aktive Instanzen gegated. Gegenstück zu
+      # soc1–4: Pool 1 gewichtet nach dem, was entladen werden kann, Pool 2 nach dem, was
+      # noch fehlt — die leerere Instanz bekommt den größeren Ladeanteil.
       ac_soc1: >
         {% if ac1_active %}
-          {% set usable = [states(i1_soc) | float(0) - i1_min_soc | float(0), 0] | max %}
-          {{ usable / 100 * cap1 }}
+          {% set missing = [i1_ac_target | float(0) - states(i1_soc) | float(0), 0] | max %}
+          {{ missing / 100 * cap1 }}
         {% else %}
           {{ 0 }}
         {% endif %}
       ac_soc2: >
         {% if ac2_active %}
-          {% set usable = [states(i2_soc) | float(0) - i2_min_soc | float(0), 0] | max %}
-          {{ usable / 100 * cap2 }}
+          {% set missing = [i2_ac_target | float(0) - states(i2_soc) | float(0), 0] | max %}
+          {{ missing / 100 * cap2 }}
         {% else %}
           {{ 0 }}
         {% endif %}
       ac_soc3: >
         {% if ac3_active and i3_soc is string and i3_soc | length > 0 %}
-          {% set usable = [states(i3_soc) | float(0) - i3_min_soc | float(0), 0] | max %}
-          {{ usable / 100 * cap3 }}
+          {% set missing = [i3_ac_target | float(0) - states(i3_soc) | float(0), 0] | max %}
+          {{ missing / 100 * cap3 }}
         {% else %}
           {{ 0 }}
         {% endif %}
       ac_soc4: >
         {% if ac4_active and i4_soc is string and i4_soc | length > 0 %}
-          {% set usable = [states(i4_soc) | float(0) - i4_min_soc | float(0), 0] | max %}
-          {{ usable / 100 * cap4 }}
+          {% set missing = [i4_ac_target | float(0) - states(i4_soc) | float(0), 0] | max %}
+          {{ missing / 100 * cap4 }}
         {% else %}
           {{ 0 }}
         {% endif %}
