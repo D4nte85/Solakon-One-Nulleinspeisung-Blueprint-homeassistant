@@ -60,7 +60,7 @@ blueprint:
     - **A** — Zone 1 Start: SOC > Zone-1-Schwelle UND Zyklus = `off` UND kein AC/Tarif-Laden UND keine Entladesperre → Integral = 0, Zyklus = `on`, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'`
     - **B** — Zone 3 Stop: SOC < Zone-3-Schwelle UND Zyklus = `on` UND kein AC/Tarif-Laden → Integral = 0, Zyklus = `off`, Surplus/AC-Bool zurücksetzen, Output → 0W, Timer-Toggle, Modus → `'0'`
     - **C** — Zone 3 Absicherung: SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` UND kein AC/Tarif-Laden → Surplus/AC-Bool zurücksetzen, Output → 0W, Timer-Toggle, Modus → `'0'`
-    - **D** — Recovery: Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle → Timer-Toggle, Modus → `'3'` wenn AC- **oder** Tarif-Lade-Bool = `on`, sonst `'1'` (kein Integral-Reset, kein Zonenwechsel)
+    - **D** — Recovery: Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle UND (keine Entladesperre ODER Lade-Session aktiv) → Timer-Toggle, Modus → `'3'` wenn AC- **oder** Tarif-Lade-Bool = `on`, sonst `'1'` (kein Integral-Reset, kein Zonenwechsel)
     - **GT** — Tarif-Laden Start: Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel UND Modus ≠ `'3'` UND kein Überschuss UND **NICHT PV-Forecast-Suppressed** → Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'`
     - **HT** — Tarif-Laden Ende: Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Ladeziel) → Integral = 0, Tarif-Bool = `off`, Zone 1: Timer-Toggle + Modus `'1'` / Zone 2: Timer-Toggle + Modus `'0'` + 0W
     - **TM** — Entladesperre: Tarif aktiv UND Preis < Teuer UND kein Laden UND kein Überschuss UND Modus = `'1'` UND **NICHT PV-Forecast-Suppressed** → Integral = 0, Zyklus = `off` (wenn Zone 1), Output → 0W, Timer-Toggle, Modus → `'0'`
@@ -1751,10 +1751,18 @@ actions:
       # FALL D: Recovery - Modus fiel ab, Zyklus oder Lade-Session noch aktiv
       # VOR Fall GT/G! Schließt Modus '3' aus (AC/Tarif-Laden laufen ungestört weiter).
       # Bei aktiver Lade-Session entfällt die SOC-Bedingung.
+      # Guard: Entladesperre - dieselbe Breite wie Fall TM, sonst stellt D die Entladung
+      # wieder her, die TM im nächsten Lauf erneut stoppt. Recovery einer laufenden
+      # Lade-Session bleibt erlaubt.
       - conditions:
           - condition: template
             value_template: >
               {{ is_state(cycle_active, 'on') or
+                 ac_charge_mode_active | bool(false) or
+                 tariff_charge_mode_active | bool(false) }}
+          - condition: template
+            value_template: >
+              {{ not (price_discharge_locked | bool(false)) or
                  ac_charge_mode_active | bool(false) or
                  tariff_charge_mode_active | bool(false) }}
           - condition: template
