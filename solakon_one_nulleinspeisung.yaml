@@ -63,7 +63,7 @@ blueprint:
     - **D** — Recovery: Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle → Timer-Toggle, Modus → `'3'` wenn AC- **oder** Tarif-Lade-Bool = `on`, sonst `'1'` (kein Integral-Reset, kein Zonenwechsel)
     - **GT** — Tarif-Laden Start: Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel UND Modus ≠ `'3'` UND kein Überschuss UND **NICHT PV-Forecast-Suppressed** → Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'`
     - **HT** — Tarif-Laden Ende: Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Ladeziel) → Integral = 0, Tarif-Bool = `off`, Zone 1: Timer-Toggle + Modus `'1'` / Zone 2: Timer-Toggle + Modus `'0'` + 0W
-    - **TM** — Entladesperre (Mittelpreis): Tarif aktiv UND Günstig ≤ Preis < Teuer UND kein Laden UND kein Überschuss UND Modus = `'1'` UND **NICHT PV-Forecast-Suppressed** → Integral = 0, Zyklus = `off` (wenn Zone 1), Output → 0W, Timer-Toggle, Modus → `'0'`
+    - **TM** — Entladesperre: Tarif aktiv UND Preis < Teuer UND kein Laden UND kein Überschuss UND Modus = `'1'` UND **NICHT PV-Forecast-Suppressed** → Integral = 0, Zyklus = `off` (wenn Zone 1), Output → 0W, Timer-Toggle, Modus → `'0'`
     - **G** — AC Laden Start: AC aktiv UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + ΣOutput_entladend) < −Hysterese UND kein Tarif-Laden UND kein Überschuss → AC-Bool = `on`, Timer-Toggle, Output → 0W, Modus → `'3'`. ΣOutput_entladend: Einzelbetrieb = eigener Output, Multi-Instanz = Summe aller Instanzen im Entlademodus (verhindert, dass die Entladung einer Schwester-Instanz als externer Netzüberschuss gewertet wird)
     - **H** — AC Laden Ende: Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND |eigener Output| ≤ Toleranz)) → Integral = 0, AC-Bool = `off`, Zone 1: Output → 0W, Timer-Toggle, Modus → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Modus → `'0'`
     - **I** — Safety: Modus = `'3'` ohne aktive AC- oder Tarif-Lade-Session → Integral = 0, Zone 1: Output → 0W, Timer-Toggle, Modus → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Modus → `'0'`
@@ -143,7 +143,7 @@ blueprint:
 
     #### Logik-Details
     - **Fall GT (Preis < Günstig):** Lädt mit `tariff_charge_power` bis SOC-Ziel. Priorität vor AC-Laden. Rückkehr zu Zone 1 (Timer-Toggle) oder Zone 2 (Timer-Toggle, 0W). **Wird übersprungen wenn PV-Forecast-Suppressed.**
-    - **Fall TM (Günstig ≤ Preis < Teuer):** Stoppt Zone 1 & 2 sofort (Modus `'0'`). Setzt Zyklus-Helper zurück. Schont Akku für teure Spitzen. **Wird übersprungen wenn PV-Forecast-Suppressed.**
+    - **Fall TM (Preis < Teuer):** Stoppt Zone 1 & 2 sofort (Modus `'0'`). Setzt Zyklus-Helper zurück. Schont Akku für teure Spitzen. **Wird übersprungen wenn PV-Forecast-Suppressed.**
     - **Normalbetrieb (Preis ≥ Teuer):** Entladesperre aufgehoben, Standard-Zonenregelung (Fall A/E) übernimmt wieder.
 
     #### ⚠️ Sensor & Einheiten
@@ -1971,11 +1971,10 @@ actions:
                 data:
                   option: '0'
 
-      # FALL TM: TARIF DISCHARGE-LOCK — Mittlere Preiszone (günstig ≤ Preis < teuer)
-      # Stoppt laufende Entladung (Zone 1 UND Zone 2) wenn Preis zwischen günstig und teuer liegt.
+      # FALL TM: TARIF DISCHARGE-LOCK — alles unter der Teuer-Schwelle
+      # Stoppt laufende Entladung (Zone 1 UND Zone 2) wenn der Preis unter der Teuer-Schwelle liegt.
       # Guard: kein AC/Tarif-Laden aktiv, Modus = '1' (Entladung läuft)
       # Guard: pv_forecast_suppressed — sonnige Tage überspringen Discharge-Lock
-      # Guard: not price_is_cheap — explizit nur mittlere Zone (günstig ≤ Preis < teuer)
       # Guard: kein aktiver Überschuss — Zone 0 hat Vorrang vor dem Discharge-Lock
       - conditions:
           - condition: template
@@ -1986,8 +1985,6 @@ actions:
             value_template: "{{ price_sensor_valid | bool(false) }}"
           - condition: template
             value_template: "{{ price_discharge_locked | bool(false) }}"
-          - condition: template
-            value_template: "{{ not (price_is_cheap | bool(false)) }}"
           - condition: template
             value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
           - condition: template
@@ -2002,7 +1999,7 @@ actions:
             data:
               name: Solakon Tarif-Arbitrage
               message: >
-                🔒 Discharge-Lock: Preis {{ states(price_sensor_entity) }} im mittleren Bereich.
+                🔒 Discharge-Lock: Preis {{ states(price_sensor_entity) }} unter der Teuer-Schwelle.
                 Zone {{ '1' if is_state(cycle_active, 'on') else '2' }} deaktiviert.
               entity_id: !input soc_sensor
           # 2. Integral zurücksetzen
