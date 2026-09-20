@@ -190,7 +190,7 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
 | **D** | (Cycle = `on` OR AC-Bool = `on` OR Tariff-Bool = `on`) AND Mode ∉ `{'1','3'}` AND (Charge-Bool = `on` OR SOC > Zone 3 threshold) | Recovery: Timer-Toggle, Mode → `'3'` if AC-Bool or Tariff-Bool = `on`, otherwise `'1'` (no integral reset, no zone change) |
 | **GT** | Tariff enabled AND price < cheap threshold AND NOT PV-forecast-suppressed AND SOC < tariff target AND Mode ≠ `'3'` AND NOT Surplus-Bool = `on` | Tariff Charging Start: Tariff-Bool = `on`, Timer-Toggle, Output → charge power (direct), Mode → `'3'` |
 | **HT** | Mode = `'3'` AND Tariff-Bool = `on` AND (price ≥ cheap threshold OR SOC ≥ target) | Tariff Charging End: Integral = 0, Tariff-Bool = `off`, Zone 1 → Timer-Toggle + `'1'` / Zone 2 → `'0'` + 0W |
-| **TM** | Tariff active AND cheap ≤ price < expensive AND NOT PV-forecast-suppressed AND no charging AND NOT Surplus-Bool = `on` AND Mode = `'1'` | Discharge Lock: Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Timer-Toggle, Mode → `'0'` |
+| **TM** | Tariff active AND price < expensive AND NOT PV-forecast-suppressed AND no charging AND NOT Surplus-Bool = `on` AND Mode = `'1'` | Discharge Lock: Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Timer-Toggle, Mode → `'0'` |
 | **G** | AC active AND SOC < charge target AND **Mode ≠ `'3'`** AND NOT Tariff-Bool = `on` AND NOT Surplus-Bool = `on` AND (Grid + ΣOutput_discharging) < −Hysteresis | AC Charging Start: AC-Bool = `on`, Timer-Toggle, Mode → `'3'`, Output → 0W |
 | **H** | Mode = `'3'` AND NOT Tariff-Bool = `on` AND (SOC ≥ charge target OR (Grid ≥ `ac_charge_offset + Hysteresis` AND \|Output\| ≤ Tolerance)) | AC Charging End: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
 | **I** | Mode = `'3'` AND NOT AC-Bool = `on` AND NOT Tariff-Bool = `on` | Safety correction: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
@@ -257,7 +257,7 @@ Charges the battery when external grid feed-in is detected. Detection is based o
 Charges the battery at cheap prices and locks discharge during neutral price phases.
 
 * **Case GT (price < cheap threshold):** Charges with `tariff_charge_power` directly (no PI) until SOC target. Returns to Zone 1 (Timer-Toggle) or Zone 2 (Timer-Toggle, 0W). **Skipped when PV-forecast-suppressed.**
-* **Case TM (cheap ≤ price < expensive):** Stops Zone 1 & 2 immediately (Mode `'0'`). Resets cycle helper. Preserves battery for expensive peaks. **Skipped when PV-forecast-suppressed and while surplus export (Zone 0) is active.**
+* **Case TM (price < expensive):** Stops Zone 1 & 2 immediately (Mode `'0'`). Resets cycle helper. Preserves battery for expensive peaks. **Skipped when PV-forecast-suppressed and while surplus export (Zone 0) is active.**
 * **Normal operation (price ≥ expensive):** Discharge lock lifted, standard zone logic (Cases A/E) takes over.
 * **Dynamic thresholds:** Both cheap and expensive thresholds can be overridden by `input_number` entities.
 * **⚠️ Sensor unit must match thresholds** — no conversion in blueprint (e.g. all in EUR/kWh).

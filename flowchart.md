@@ -96,7 +96,7 @@ flowchart TD
     ZONE_CHECK -- "CASE D   Cycle = on OR Charge-Bool = on   AND Mode ∉ {'1','3'} ← '3' explicitly excluded!   AND (Charge-Bool = on OR SOC > Zone 3 threshold)" --> RECOVERY
     ZONE_CHECK -- "CASE GT   Tariff Arbitrage enabled   AND price < cheap threshold   AND SOC < tariff charge target   AND Mode ≠ '3' ← Guard!   AND NOT Surplus-Bool = on   AND NOT PV-Forecast-Suppressed" --> TARIFF_START
     ZONE_CHECK -- "CASE HT   Mode = '3'   AND Tariff-Charge-Bool = on   AND (price ≥ cheap threshold OR SOC ≥ tariff charge target)" --> TARIFF_END
-    ZONE_CHECK -- "CASE TM   Tariff active   AND cheap ≤ price < expensive   AND no AC/Tariff charging   AND NOT Surplus-Bool = on   AND Mode = '1'   AND NOT PV-Forecast-Suppressed" --> TARIFF_MID
+    ZONE_CHECK -- "CASE TM   Tariff active   AND price < expensive   AND no AC/Tariff charging   AND NOT Surplus-Bool = on   AND Mode = '1'   AND NOT PV-Forecast-Suppressed" --> TARIFF_MID
     ZONE_CHECK -- "CASE G   AC Charging enabled   AND SOC < charge target   AND Mode ≠ '3' ← Guard!   AND NOT Tariff-Charge-Bool = on   AND NOT Surplus-Bool = on   AND (Grid + ΣOutput_discharging) < −Hysteresis" --> AC_START
     ZONE_CHECK -- "CASE H   Mode = '3'   AND (SOC ≥ charge target OR (Grid ≥ AC-Offset + Hysteresis AND |Output| ≤ Tolerance))" --> AC_END
     ZONE_CHECK -- "CASE I   Mode = '3'   AND NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on" --> SAFETY_I

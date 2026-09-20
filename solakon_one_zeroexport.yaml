@@ -63,7 +63,7 @@ blueprint:
     - **D** — Recovery: Cycle = `on` AND Mode ∉ `{'1','3'}` AND SOC > Zone 3 threshold → Timer-Toggle, Mode → `'3'` if AC or Tariff-Charge-Bool = `on`, otherwise `'1'` (no integral reset, no zone change)
     - **GT** — Tariff Charging Start: Tariff arbitrage active AND price < cheap threshold AND SOC < tariff charge target AND Mode ≠ `'3'` AND no surplus AND **NOT PV-forecast-suppressed** → Tariff-Bool = `on`, Timer-Toggle, Output → charge power (direct), Mode → `'3'`
     - **HT** — Tariff Charging End: Mode = `'3'` AND Tariff-Bool = `on` AND (price ≥ cheap threshold OR SOC ≥ target) → Integral = 0, Tariff-Bool = `off`, Zone 1: Timer-Toggle + Mode `'1'` / Zone 2: Timer-Toggle + Mode `'0'` + 0W
-    - **TM** — Discharge Lock (mid-price): Tariff active AND cheap ≤ price < expensive AND no charging AND no surplus AND Mode = `'1'` AND **NOT PV-forecast-suppressed** → Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Timer-Toggle, Mode → `'0'`
+    - **TM** — Discharge Lock: Tariff active AND price < expensive AND no charging AND no surplus AND Mode = `'1'` AND **NOT PV-forecast-suppressed** → Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Timer-Toggle, Mode → `'0'`
     - **G** — AC Charging Start: AC active AND SOC < charge target AND Mode ≠ `'3'` AND (Grid + Output) < −Hysteresis AND no Tariff charging AND no surplus → AC-Bool = `on`, Timer-Toggle, Output → 0W, Mode → `'3'`
     - **H** — AC Charging End: Mode = `'3'` AND (SOC ≥ charge target OR (Grid ≥ Offset + Hysteresis AND |Output| ≤ Tolerance)) → Integral = 0, AC-Bool = `off`, Zone 1: Output → 0W, Timer-Toggle, Mode → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Mode → `'0'`
     - **I** — Safety: Mode = `'3'` without active AC or Tariff charging session → Integral = 0, Zone 1: Output → 0W, Timer-Toggle, Mode → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Mode → `'0'`
@@ -143,7 +143,7 @@ blueprint:
 
     #### Logic Details
     - **Case GT (price < cheap):** Charges with `tariff_charge_power` until SOC target. Priority over AC charging. Returns to Zone 1 (Timer-Toggle) or Zone 2 (Timer-Toggle, 0W). **Skipped when PV-forecast-suppressed.**
-    - **Case TM (cheap ≤ price < expensive):** Stops Zone 1 & 2 immediately (Mode `'0'`). Resets cycle helper. Preserves battery for expensive peaks. **Skipped when PV-forecast-suppressed.**
+    - **Case TM (price < expensive):** Stops Zone 1 & 2 immediately (Mode `'0'`). Resets cycle helper. Preserves battery for expensive peaks. **Skipped when PV-forecast-suppressed.**
     - **Normal operation (price ≥ expensive):** Discharge lock lifted, standard zone logic (Cases A/E) takes over.
 
     #### ⚠️ Sensor & Units
@@ -1972,11 +1972,10 @@ actions:
                 data:
                   option: '0'
 
-      # CASE TM: TARIFF DISCHARGE LOCK — Mid-price zone (cheap ≤ price < expensive)
-      # Stops active discharge (Zone 1 AND Zone 2) when price is between cheap and expensive.
+      # CASE TM: TARIFF DISCHARGE LOCK — everything below the expensive threshold
+      # Stops active discharge (Zone 1 AND Zone 2) when the price is below the expensive threshold.
       # Guard: no AC/Tariff charging active, Mode = '1' (discharge running)
       # Guard: pv_forecast_suppressed — sunny days skip discharge lock
-      # Guard: not price_is_cheap — explicitly only mid zone (cheap ≤ price < expensive)
       # Guard: no active surplus — Zone 0 takes priority over the discharge lock
       - conditions:
           - condition: template
@@ -1987,8 +1986,6 @@ actions:
             value_template: "{{ price_sensor_valid | bool(false) }}"
           - condition: template
             value_template: "{{ price_discharge_locked | bool(false) }}"
-          - condition: template
-            value_template: "{{ not (price_is_cheap | bool(false)) }}"
           - condition: template
             value_template: "{{ not (tariff_charge_mode_active | bool(false)) }}"
           - condition: template
@@ -2003,7 +2000,7 @@ actions:
             data:
               name: Solakon Tariff Arbitrage
               message: >
-                🔒 Discharge Lock: Price {{ states(price_sensor_entity) }} in mid-price zone.
+                🔒 Discharge Lock: Price {{ states(price_sensor_entity) }} below the expensive threshold.
                 Zone {{ '1' if is_state(cycle_active, 'on') else '2' }} deactivated.
               entity_id: !input soc_sensor
           # 2. Reset integral
