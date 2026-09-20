@@ -187,7 +187,7 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
 | **A** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND NOT discharge lock AND SOC > Zone 1 threshold AND Cycle = `off` | Zone 1 Start: Cycle = `on`, Integral = 0, reset Surplus/AC-Bool, Timer-Toggle, Mode → `'1'` |
 | **B** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND SOC ≤ Zone 3 threshold AND Cycle = `on` | Zone 3 Stop: Cycle = `off`, Integral = 0, reset Surplus/AC-Bool, Output → 0W (confirmed via actual power, 1× retry), Timer-Toggle, Mode → `'0'` |
 | **C** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND SOC ≤ Zone 3 threshold AND Cycle = `off` AND Mode ≠ `'0'` | Zone 3 Guard: reset Surplus/AC-Bool, Output → 0W (confirmed via actual power, 1× retry), Timer-Toggle, Mode → `'0'` |
-| **D** | (Cycle = `on` OR AC-Bool = `on` OR Tariff-Bool = `on`) AND Mode ∉ `{'1','3'}` AND (Charge-Bool = `on` OR SOC > Zone 3 threshold) | Recovery: Timer-Toggle, Mode → `'3'` if AC-Bool or Tariff-Bool = `on`, otherwise `'1'` (no integral reset, no zone change) |
+| **D** | (Cycle = `on` OR AC-Bool = `on` OR Tariff-Bool = `on`) AND Mode ∉ `{'1','3'}` AND (Charge-Bool = `on` OR SOC > Zone 3 threshold) AND (**no discharge lock** OR Charge-Bool = `on`) | Recovery: Timer-Toggle, Mode → `'3'` if AC-Bool or Tariff-Bool = `on`, otherwise `'1'` (no integral reset, no zone change) |
 | **GT** | Tariff enabled AND price < cheap threshold AND NOT PV-forecast-suppressed AND SOC < tariff target AND Mode ≠ `'3'` AND NOT Surplus-Bool = `on` | Tariff Charging Start: Tariff-Bool = `on`, Timer-Toggle, Output → charge power (direct), Mode → `'3'` |
 | **HT** | Mode = `'3'` AND Tariff-Bool = `on` AND (price ≥ cheap threshold OR SOC ≥ target) | Tariff Charging End: Integral = 0, Tariff-Bool = `off`, Zone 1 → Timer-Toggle + `'1'` / Zone 2 → `'0'` + 0W |
 | **TM** | Tariff active AND price < expensive AND NOT PV-forecast-suppressed AND no charging AND NOT Surplus-Bool = `on` AND Mode = `'1'` | Discharge Lock: Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Timer-Toggle, Mode → `'0'` |
@@ -650,6 +650,7 @@ Otherwise              → write 3599
 Condition: (Cycle = on OR AC-Charge-Bool = on OR Tariff-Charge-Bool = on)
        AND Mode ∉ {'1', '3'}   ← '3' (charging) explicitly excluded
        AND (Charge-Bool = on OR SOC > Zone 3 threshold)
+       AND (NOT price_discharge_locked OR Charge-Bool = on)   ← same width as Case TM
 
 Action: Timer-Toggle
         → Tariff-Charge-Bool = on OR AC-Charge-Bool = on: Mode '3'
