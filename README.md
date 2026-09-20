@@ -1,5 +1,8 @@
 # ⚡ Solakon ONE Zero Export Blueprint (EN) - V312
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/d4nte85)
+
 This Home Assistant Blueprint implements **dynamic zero export** for the Solakon ONE inverter, based on a **PI controller (Proportional-Integral Controller)** with back-calculation anti-windup and an intelligent **SOC zone logic** with optional **surplus export** (incl. surplus forecast entry), optional **AC charging** from external feed-in, optional **tariff arbitrage** (incl. PV forecast suppression), and **multi-instancing** support.
 
 The goal of this blueprint is to deliver PV energy directly to loads, bypassing the battery wherever possible.
@@ -840,3 +843,15 @@ charging at the same time.
 | Mode Change | `mode_change` | Reacts to external mode changes, triggers Recovery (Case D) or Safety correction (Case I) if applicable |
 
 > **Note on the dynamic Zone 1 threshold:** `soc_high` only triggers on the static fallback value, since HA triggers don't support templates. If an override is set via `input_number`, the Zone 1 threshold is evaluated correctly on the next grid/PV trigger — the same delay pattern as the tariff logic.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE)
+
+---
+
+## Author
+
+[@D4nte85](https://github.com/D4nte85)
