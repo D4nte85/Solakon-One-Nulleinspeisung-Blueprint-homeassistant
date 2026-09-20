@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V311)
+  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V312)
   description: |
     Dynamische Nulleinspeisung für den Solakon ONE Wechselrichter mit PI-Regler, SOC-Zonenlogik,
     optionaler Überschuss-Einspeisung (inkl. Surplus-Forecast-Eintritt), optionalem AC Laden,

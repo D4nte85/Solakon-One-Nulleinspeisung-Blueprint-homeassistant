@@ -5,6 +5,16 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 ## [Unreleased]
 
+## [V312] – 2026-09-20
+
+### Behoben
+- Der AC-Lade-Pool der Leistungsverteilung gewichtete mit `(SOC − Min-SOC) × Kapazität` wie der Entlade-Pool, dadurch bekam die vollere Instanz den größeren Ladeanteil. Basis ist jetzt `(Ladeziel − SOC) × Kapazität`. Portiert aus der Integration v3.0.0
+- Fall TM stoppte eine laufende Entladung nur im mittleren Preisband. Nach dem Tarif-Laden (Fall HT bei erreichtem Ladeziel) entlud Zone 1 den gerade geladenen Akku, solange der Preis unter der Günstig-Schwelle lag. TM sperrt jetzt das ganze Band unter der Teuer-Schwelle, wie die Falls A und E. Portiert aus der Integration (Issue #6)
+- Fall D (Recovery) stellte Modus `'1'` ohne Preisprüfung wieder her; bei anliegender Entladesperre stoppte TM im nächsten Lauf erneut, Modus und Timer flackerten. D prüft die Sperre jetzt in der Breite von TM, die Recovery einer laufenden Lade-Session bleibt erlaubt. Portiert aus der Integration (`0f59a9f`)
+
+### Geändert
+- Die Leistungsverteilung hat ein neues Input je Instanz: „SOC-Ladeziel AC-Laden (%)", Standard 90. **Der Wert muss mit dem Ladeziel der jeweiligen Instanz-Automation übereinstimmen** — sonst gewichtet der AC-Lade-Pool gegen ein falsches Ziel
+
 ## [V311] – 2026-09-19
 
 ### Geändert
