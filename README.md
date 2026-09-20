@@ -422,7 +422,7 @@ Prevents oscillation between Case 0A/0B at night with a full battery when PV rea
 | **Max. Output Power (Hard Limit)** | 800 W | 0 | 1200 W | Hard Limit in Zone 0 and Zone 1. Overridable by `max_power_entity` for multi-instancing. |
 | **Max. Output Power — Dynamic** | *(empty)* | — | — | Optional `input_number` entity for multi-instancing. Overrides static Hard Limit when set. |
 | **Error Share Helper** | *(empty)* | — | — | Optional `input_number` (0.0–1.0) for multi-instancing, Pool 1 (Zero-Export). Leave empty in single-instance operation. |
-| **AC Charge Error Share Helper** | *(empty)* | — | — | Optional `input_number` (0.0–1.0) for multi-instancing, Pool 2 (AC charging) — independent from the helper above. Leave empty unless using AC charging with multi-instancing. |
+| **AC Charge Error Share Helper** | *(empty)* | — | — | Optional `input_number` (0.0–1.0) for multi-instancing, Pool 2 (AC charging) — independent from the helper above, weighted by the energy missing until the charge target. Leave empty unless using AC charging with multi-instancing. |
 
 ---
 
@@ -759,14 +759,16 @@ Distribution runs across **two independent pools**, not one shared pool:
   power limit and `error_share_entity`.
 - **Pool 2 (AC Charging):** only instances with an active AC charge state helper (mode `'3'`).
   Determines only `ac_error_share_entity` — no power limit of its own, the AC charge limit
-  stays independent.
+  stays independent. Weighted by `missing_i = (charge target_i − SOC_i) / 100 × Cap_i`.
 
 Reason for the split: an instance currently AC charging is in mode `'3'` and therefore does
 not count toward Pool 1. With a single shared error share, it would be assigned
 `error_share = 0` there — and that same value would be handed to its AC-charge PI, freezing
 it at 0 W despite active charging demand. With two separate pools, every instance gets a
-correctly calculated share for whichever mode it's in. Both pools use the same weighting
-logic (equal split or SOC-weighted, per the global toggle).
+correctly calculated share for whichever mode it's in. Both pools use the same structure
+(equal split or SOC-weighted, per the global toggle), but the opposite basis: Pool 1 weights
+by the usable energy above Min-SOC, Pool 2 by the energy missing until the charge target. The
+fuller instance therefore discharges more, the emptier one charges more.
 
 The two pools never overlap — an instance is at any time either in Pool 1, in Pool 2, or in
 neither (e.g. Zone 3 stopped, tariff charging).
@@ -800,7 +802,8 @@ charging at the same time.
    - Enter Min-SOC per instance — identical to the "Zone 3 Stop" value of the respective instance
    - Assign `limit` and `share` helpers per instance
    - Optional: enter the capacity sensor from the Solakon ONE integration per instance — recommended for different battery capacities
-   - For AC charging: additionally assign the AC charge state helper and `ac_share` helper per charging instance
+   - For AC charging: additionally assign the AC charge state helper and `ac_share` helper per charging instance,
+     plus enter the SOC charge target per instance — identical to the "SOC Charge Target" value of the respective instance
    - Recommended (prevents battery-to-battery pumping in Case G): enter the actual-power sensor per instance, plus create a shared `total_actual_power` helper and enter it in each instance automation as "Σ Output Discharging — Dynamic" (`total_actual_power_entity`)
 
 ---
