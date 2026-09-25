@@ -191,7 +191,7 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
 | **B** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND SOC ≤ Zone 3 threshold AND Cycle = `on` | Zone 3 Stop: Cycle = `off`, Integral = 0, reset Surplus/AC-Bool, Output → 0W (confirmed via actual power, 1× retry), Timer-Toggle, Mode → `'0'` |
 | **C** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND SOC ≤ Zone 3 threshold AND Cycle = `off` AND Mode ≠ `'0'` | Zone 3 Guard: reset Surplus/AC-Bool, Output → 0W (confirmed via actual power, 1× retry), Timer-Toggle, Mode → `'0'` |
 | **D** | (Cycle = `on` OR **charging reason holds**) AND Mode ∉ `{'1','3'}` AND (**charging reason holds** OR SOC > Zone 3 threshold) AND (**no discharge lock** OR Charge-Bool = `on`) | Recovery: Timer-Toggle, Mode → `'3'` if the charging reason holds, otherwise `'1'` (no integral reset, no zone change) |
-| **GT** | Tariff enabled AND price < cheap threshold AND NOT PV-forecast-suppressed AND SOC < tariff target AND Mode ≠ `'3'` AND **NOT AC-Bool = `on`** AND NOT Surplus-Bool = `on` | Tariff Charging Start: Tariff-Bool = `on`, Timer-Toggle, Output → charge power (direct), Mode → `'3'` |
+| **GT** | Tariff enabled AND price < cheap threshold AND NOT PV-forecast-suppressed AND SOC < tariff target − SOC hysteresis AND Mode ≠ `'3'` AND **NOT AC-Bool = `on`** AND NOT Surplus-Bool = `on` | Tariff Charging Start: Tariff-Bool = `on`, Timer-Toggle, Output → charge power (direct), Mode → `'3'` |
 | **HT** | Tariff-Bool = `on` AND (**no cheap-price statement** OR SOC ≥ target) | Tariff Charging End: Integral = 0, Tariff-Bool = `off`, Zone 1 → Timer-Toggle + `'1'` / Zone 2 → `'0'` + 0W |
 | **TM** | Tariff active AND price < expensive AND NOT PV-forecast-suppressed AND no charging AND NOT Surplus-Bool = `on` AND Mode = `'1'` | Discharge Lock: Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Timer-Toggle, Mode → `'0'` |
 | **G** | AC active AND SOC < charge target AND **Mode ≠ `'3'`** AND NOT Tariff-Bool = `on` AND NOT Surplus-Bool = `on` AND (Grid + ΣOutput_discharging) < −Hysteresis | AC Charging Start: AC-Bool = `on`, Timer-Toggle, Mode → `'3'`, Output → 0W |
@@ -260,7 +260,7 @@ Charges the battery when external grid feed-in is detected. Detection is based o
 
 Charges the battery at cheap prices and locks discharge during neutral price phases.
 
-* **Case GT (price < cheap threshold):** Charges with `tariff_charge_power` directly (no PI) until SOC target. Returns to Zone 1 (Timer-Toggle) or Zone 2 (Timer-Toggle, 0W). **Skipped when PV-forecast-suppressed** and while an AC charging session is open.
+* **Case GT (price < cheap threshold):** Charges with `tariff_charge_power` directly (no PI) until SOC target; starts only below SOC target − `tariff_soc_hysteresis`. Returns to Zone 1 (Timer-Toggle) or Zone 2 (Timer-Toggle, 0W). **Skipped when PV-forecast-suppressed** and while an AC charging session is open.
 * **Case HT (exit):** ends as soon as no cheap-price statement is left — price ≥ cheap threshold, tariff arbitrage disabled, PV-forecast-suppressed or an unreadable price sensor — or the SOC charge target is reached. A single cycle without a cheap-price statement ends the charge; Case GT restarts it once a cheap price is stated again.
 * **Case TM (price < expensive):** Stops Zone 1 & 2 immediately (Mode `'0'`). Resets cycle helper. Preserves battery for expensive peaks. **Skipped when PV-forecast-suppressed and while surplus export (Zone 0) is active.**
 * **Normal operation (price ≥ expensive):** Discharge lock lifted, standard zone logic (Cases A/E) takes over.
@@ -475,6 +475,7 @@ Prevents oscillation between Case 0A/0B at night with a full battery when PV rea
 | **Expensive Threshold (Static)** | 0.25 | 0 | 1 | Below this price discharge is locked. |
 | **Expensive Threshold (Dynamic)** | *(empty)* | — | — | Optional `input_number` override. |
 | **Tariff Charging SOC Target** | 90 % | 10 % | 99 % | Charging stops at this SOC. |
+| **Tariff Charging SOC Hysteresis** | 3 % | 0 % | 20 % | Tariff charging starts only below target − hysteresis. Prevents oscillating with the discharge lock at the target. 0 = start right below the target. |
 | **Tariff Charge Power** | 1200 W | 50 | 1200 W | Direct charge power (no PI). |
 
 ---
@@ -691,7 +692,7 @@ Condition: ac_charge_state_helper = on   ← raw helper, not the option
 GT Entry:
   tariff_arbitrage_enabled AND price < cheap_threshold
   AND NOT pv_forecast_suppressed
-  AND soc < tariff_soc_charge_target AND Mode ≠ '3'
+  AND soc < tariff_soc_charge_target − tariff_soc_hysteresis AND Mode ≠ '3'
   AND NOT ac_charge_session
   AND NOT surplus_active
   → Tariff-Bool = on, Timer-Toggle, Output = tariff_charge_power, Mode '3'

@@ -13,6 +13,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `price_discharge_locked` never took PV forecast suppression into account: the variable referred to `pv_forecast_suppressed`, which is defined later, is undefined at that point and became `false` via `bool(false)`. On days with a high forecast the discharge lock therefore kept blocking Cases A, D and E. The PV forecast suppression block now precedes `price_discharge_locked`
 
 ### Changed
+- New input `tariff_soc_hysteresis` (default 3 %, 0–20 %): Case GT starts tariff charging only below SOC target − hysteresis, the end in Case HT stays at the SOC target. At the target an instance under the discharge lock otherwise oscillated between tariff charging and the lock with every SOC point. 0 restores the previous behaviour. Ported from integration v3.1.3 (issue #43)
 - PV forecast suppression is now part of the cheap-price statement (new variable `tariff_cheap_effective`) and therefore also ends a tariff charge already running, not just the entry. Matches `below_cheap` of the integration
 
 ## [V312] – 2026-09-20
