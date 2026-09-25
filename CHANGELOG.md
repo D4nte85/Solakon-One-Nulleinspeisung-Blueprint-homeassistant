@@ -10,6 +10,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 - Fall HT beendete das Tarif-Laden nur bei validem Preissensor und Modus `'3'`. Beide Guards sind entfallen: die Session endet jetzt, sobald keine günstige Preisaussage mehr vorliegt — abgeschalteter Tarif, PV-Forecast-Unterdrückung oder unlesbarer Preissensor zählen dazu. Fall H beendet das AC-Laden entsprechend auch bei abgeschalteter Option
 - Fall D holte eine Lade-Session auch dann zurück, wenn ihr Ladegrund nicht mehr galt. Recovery folgt ihr jetzt nur noch bei eingeschalteter AC-Option bzw. weiter günstigem Preis; die Entladesperre prüft unverändert die rohe Session
 - Fall GT startete das Tarif-Laden auch bei offener AC-Lade-Session — spiegelbildlich zu Fall G fehlte der Guard
+- `price_discharge_locked` rechnete die PV-Forecast-Unterdrückung nie ein: die Variable bezog sich auf das erst später definierte `pv_forecast_suppressed`, das an dieser Stelle undefiniert ist und über `bool(false)` zu `false` wurde. An Tagen mit hoher Prognose blockierte der Discharge-Lock dadurch weiter Fall A, D und E. Der Block der PV-Forecast-Unterdrückung steht jetzt vor `price_discharge_locked`
 
 ### Geändert
 - Die PV-Forecast-Unterdrückung gehört jetzt zur Günstig-Aussage (neue Variable `tariff_cheap_effective`) und beendet dadurch auch eine bereits laufende Tarif-Ladung, nicht nur den Eintritt. Deckungsgleich mit `below_cheap` der Integration
