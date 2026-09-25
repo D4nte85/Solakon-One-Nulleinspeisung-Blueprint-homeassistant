@@ -223,7 +223,7 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 | **B** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC ≤ Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Output → 0W (bestätigt über Ist-Leistung, 1× Retry), Timer-Toggle, Modus → `'0'` |
 | **C** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC ≤ Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Output → 0W (bestätigt über Ist-Leistung, 1× Retry), Timer-Toggle, Modus → `'0'` |
 | **D** | (Zyklus = `on` ODER **Ladegrund gilt**) UND Modus ∉ `{'1','3'}` UND (**Ladegrund gilt** ODER SOC > Zone-3-Schwelle) UND (**keine Entladesperre** ODER Lade-Bool = `on`) | Recovery: Timer-Toggle, Modus → `'3'` wenn der Ladegrund gilt, sonst `'1'` |
-| **GT** | Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel UND **Modus ≠ `'3'`** UND **NICHT AC-Lade-Bool = `on`** UND **NICHT Surplus-Bool = `on`** UND **NICHT PV-Forecast-Suppressed** | Tarif-Laden Start: Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'` |
+| **GT** | Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel − SOC-Hysterese UND **Modus ≠ `'3'`** UND **NICHT AC-Lade-Bool = `on`** UND **NICHT Surplus-Bool = `on`** UND **NICHT PV-Forecast-Suppressed** | Tarif-Laden Start: Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'` |
 | **HT** | Tarif-Bool = `on` UND (**keine Günstig-Aussage** ODER SOC ≥ Tarif-Ladeziel) | Tarif-Laden Ende: Tarif-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
 | **TM** | Tarif aktiv UND Preis < Teuer-Schwelle UND kein AC/Tarif-Laden UND **NICHT Surplus-Bool = `on`** UND **Modus = `'1'`** UND **NICHT PV-Forecast-Suppressed** | Discharge-Lock: Integral = 0, Zyklus = `off` (wenn aktiv), Output → 0W, Timer-Toggle, Modus → `'0'` |
 | **G** | AC aktiv UND SOC < Ladeziel UND **Modus ≠ `'3'`** UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + ΣOutput_entladend) < −Hysterese | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
@@ -287,7 +287,7 @@ Du kannst für beide Schwellenwerte entweder feste Zahlenwerte nutzen oder **dyn
 
 #### Tarif-Laden (Fall GT)
 
-* **Eintritts-Bedingung:** Tarif-Arbitrage aktiviert **UND** Preis < Günstig-Schwelle **UND** SOC < Ziel-SOC **UND** Modus ≠ `'3'` **UND** kein AC-Laden aktiv **UND** kein Überschuss-Laden aktiv.
+* **Eintritts-Bedingung:** Tarif-Arbitrage aktiviert **UND** Preis < Günstig-Schwelle **UND** SOC < Ziel-SOC − SOC-Hysterese **UND** Modus ≠ `'3'` **UND** kein AC-Laden aktiv **UND** kein Überschuss-Laden aktiv.
 * **Verhalten:** Setzt die konfigurierte Ladeleistung (`tariff_charge_power`) — kein PI-Regler, kein Toleranz-Check.
 * **Abbruch:** keine günstige Preisaussage mehr **ODER** SOC-Ladeziel erreicht. Keine Preisaussage heißt: Preis ≥ Günstig-Schwelle, Tarif-Arbitrage abgeschaltet, PV-Forecast-Suppressed oder Preissensor unlesbar. Ein einzelner Zyklus ohne Preisaussage beendet die Ladung; sie startet über Fall GT neu, sobald wieder ein günstiger Preis ausgewiesen ist.
 * **Rückkehr:** Zone 1 → Timer-Toggle + Modus `'1'` / Zone 2 → Timer-Toggle + Modus `'0'` + Output 0W.
@@ -476,6 +476,7 @@ Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher, wenn PV d
 | **Günstig-Schwelle** | 0.20 | 0 | 1 | Unter diesem Wert: Laden + Entladesperre (Zone 1 und Zone 2). |
 | **Teuer-Schwelle** | 0.25 | 0 | 1 | Ab diesem Wert: Entladesperre aufgehoben, normale SOC-Logik. |
 | **SOC-Ladeziel Tarif-Laden** | 90 % | 10 % | 99 % | Tarif-Laden stoppt bei diesem SOC. Unabhängig vom AC-Laden-Ladeziel. |
+| **SOC-Hysterese Tarif-Laden** | 3 % | 0 % | 20 % | Tarif-Laden startet erst unter Ladeziel − Hysterese. Verhindert das Pendeln mit dem Discharge-Lock am Ladeziel. 0 = Start direkt unter dem Ladeziel. |
 | **Ladeleistung Tarif-Laden** | 800 W | 50 | 1200 W | Direkt gesetzter Wert — kein PI-Regler. |
 
 ---
@@ -588,7 +589,7 @@ Typischer Arbeitsbereich: **0.03–0.08**. Für AC Laden separat tunen — P bes
 ```
 Eintritts-Bedingung (Fall GT):
   tariff_arbitrage_enabled UND Preis < cheap_threshold
-  UND soc < tariff_soc_charge_target
+  UND soc < tariff_soc_charge_target − tariff_soc_hysteresis
   UND Modus ≠ '3' ← Guard: verhindert Re-Eintritt
   UND NICHT ac_charge_session ← Guard: keine AC-Ladung offen
   UND NICHT surplus_active ← Guard: Zone 0 hat Vorrang

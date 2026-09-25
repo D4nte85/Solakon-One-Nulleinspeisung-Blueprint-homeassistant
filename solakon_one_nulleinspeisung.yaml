@@ -61,7 +61,7 @@ blueprint:
     - **B** — Zone 3 Stop: SOC < Zone-3-Schwelle UND Zyklus = `on` UND kein AC/Tarif-Laden → Integral = 0, Zyklus = `off`, Surplus/AC-Bool zurücksetzen, Output → 0W, Timer-Toggle, Modus → `'0'`
     - **C** — Zone 3 Absicherung: SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` UND kein AC/Tarif-Laden → Surplus/AC-Bool zurücksetzen, Output → 0W, Timer-Toggle, Modus → `'0'`
     - **D** — Recovery: Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle UND (keine Entladesperre ODER Lade-Session aktiv) → Timer-Toggle, Modus → `'3'` wenn AC- **oder** Tarif-Lade-Bool = `on`, sonst `'1'` (kein Integral-Reset, kein Zonenwechsel)
-    - **GT** — Tarif-Laden Start: Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel UND Modus ≠ `'3'` UND kein Überschuss UND **NICHT PV-Forecast-Suppressed** → Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'`
+    - **GT** — Tarif-Laden Start: Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel − SOC-Hysterese UND Modus ≠ `'3'` UND kein Überschuss UND **NICHT PV-Forecast-Suppressed** → Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'`
     - **HT** — Tarif-Laden Ende: Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Ladeziel) → Integral = 0, Tarif-Bool = `off`, Zone 1: Timer-Toggle + Modus `'1'` / Zone 2: Timer-Toggle + Modus `'0'` + 0W
     - **TM** — Entladesperre: Tarif aktiv UND Preis < Teuer UND kein Laden UND kein Überschuss UND Modus = `'1'` UND **NICHT PV-Forecast-Suppressed** → Integral = 0, Zyklus = `off` (wenn Zone 1), Output → 0W, Timer-Toggle, Modus → `'0'`
     - **G** — AC Laden Start: AC aktiv UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + ΣOutput_entladend) < −Hysterese UND kein Tarif-Laden UND kein Überschuss → AC-Bool = `on`, Timer-Toggle, Output → 0W, Modus → `'3'`. ΣOutput_entladend: Einzelbetrieb = eigener Output, Multi-Instanz = Summe aller Instanzen im Entlademodus (verhindert, dass die Entladung einer Schwester-Instanz als externer Netzüberschuss gewertet wird)
@@ -143,7 +143,7 @@ blueprint:
     | **Teuer** | **Entladesperre (Fall TM)** — Akku passiv | `input_number` |
 
     #### Logik-Details
-    - **Fall GT (Preis < Günstig):** Lädt mit `tariff_charge_power` bis SOC-Ziel. Priorität vor AC-Laden. Rückkehr zu Zone 1 (Timer-Toggle) oder Zone 2 (Timer-Toggle, 0W). **Wird übersprungen wenn PV-Forecast-Suppressed.**
+    - **Fall GT (Preis < Günstig):** Lädt mit `tariff_charge_power` bis SOC-Ziel, Start erst unter SOC-Ziel − `tariff_soc_hysteresis`. Priorität vor AC-Laden. Rückkehr zu Zone 1 (Timer-Toggle) oder Zone 2 (Timer-Toggle, 0W). **Wird übersprungen wenn PV-Forecast-Suppressed.**
     - **Fall HT (Austritt):** endet, sobald keine günstige Preisaussage mehr vorliegt — abgeschalteter Tarif, PV-Forecast-Suppressed, unlesbarer Preissensor oder Preis ≥ Günstig-Schwelle — oder das SOC-Ladeziel erreicht ist.
     - **Fall TM (Preis < Teuer):** Stoppt Zone 1 & 2 sofort (Modus `'0'`). Setzt Zyklus-Helper zurück. Schont Akku für teure Spitzen. **Wird übersprungen wenn PV-Forecast-Suppressed.**
     - **Normalbetrieb (Preis ≥ Teuer):** Entladesperre aufgehoben, Standard-Zonenregelung (Fall A/E) übernimmt wieder.
@@ -981,6 +981,20 @@ blueprint:
                 max: 99
                 unit_of_measurement: "%"
 
+          tariff_soc_hysteresis:
+            name: 🔋 Tarif-Laden SOC-Hysterese (%)
+            description: |
+              Tarif-Laden startet erst, wenn SOC < (SOC-Ziel − Hysterese). Das Ende bleibt beim SOC-Ziel.
+              Verhindert das Pendeln zwischen Tarif-Laden und Discharge-Lock am SOC-Ziel.
+              0 = Start direkt unter dem SOC-Ziel.
+            default: 3
+            selector:
+              number:
+                min: 0
+                max: 20
+                step: 1
+                unit_of_measurement: "%"
+
           tariff_charge_power:
             name: ⚡ Tarif-Ladeleistung (W)
             description: |
@@ -1209,6 +1223,7 @@ variables:
   tariff_arbitrage_enabled_bool: !input tariff_arbitrage_enabled
   price_sensor_entity: !input price_sensor
   tariff_soc_charge_target_int: !input tariff_soc_charge_target
+  tariff_soc_hysteresis_int: !input tariff_soc_hysteresis
   tariff_charge_power_int: !input tariff_charge_power
   
   # === GÜNSTIG-SCHWELLE LOGIK ===
@@ -1854,7 +1869,7 @@ actions:
           - condition: template
             value_template: "{{ not (ac_charge_session_on | bool(false)) }}"
           - condition: template
-            value_template: "{{ states(soc) | float(0) < tariff_soc_charge_target_int }}"
+            value_template: "{{ states(soc) | float(0) < tariff_soc_charge_target_int - tariff_soc_hysteresis_int }}"
           - condition: template
             value_template: "{{ states(solakon_mode) != '3' }}"
           - condition: template

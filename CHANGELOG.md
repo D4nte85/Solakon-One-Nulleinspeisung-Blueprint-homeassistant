@@ -13,6 +13,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 - `price_discharge_locked` rechnete die PV-Forecast-Unterdrückung nie ein: die Variable bezog sich auf das erst später definierte `pv_forecast_suppressed`, das an dieser Stelle undefiniert ist und über `bool(false)` zu `false` wurde. An Tagen mit hoher Prognose blockierte der Discharge-Lock dadurch weiter Fall A, D und E. Der Block der PV-Forecast-Unterdrückung steht jetzt vor `price_discharge_locked`
 
 ### Geändert
+- Neues Input `tariff_soc_hysteresis` (Standard 3 %, 0–20 %): Fall GT startet das Tarif-Laden erst unter SOC-Ziel − Hysterese, das Ende in Fall HT bleibt beim SOC-Ziel. Am Ziel pendelte eine Instanz unter dem Discharge-Lock sonst bei jedem SOC-Punkt zwischen Tarif-Laden und Sperre. 0 stellt das bisherige Verhalten her. Portiert aus der Integration v3.1.3 (Issue #43)
 - Die PV-Forecast-Unterdrückung gehört jetzt zur Günstig-Aussage (neue Variable `tariff_cheap_effective`) und beendet dadurch auch eine bereits laufende Tarif-Ladung, nicht nur den Eintritt. Deckungsgleich mit `below_cheap` der Integration
 
 ## [V312] – 2026-09-20
