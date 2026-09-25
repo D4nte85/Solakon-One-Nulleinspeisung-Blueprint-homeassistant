@@ -10,6 +10,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Case HT ended tariff charging only with a valid price sensor and Mode `'3'`. Both guards are gone: the session now ends as soon as no cheap-price statement is left — a disabled tariff, PV forecast suppression or an unreadable price sensor count as such. Case H ends AC charging accordingly when the option is switched off
 - Case D restored a charging session even when its charging reason no longer held. Recovery now follows it only with the AC option enabled resp. a still cheap price; the discharge lock keeps checking the raw session
 - Case GT started tariff charging even with an open AC charging session — the guard was missing, mirror image of Case G
+- `price_discharge_locked` never took PV forecast suppression into account: the variable referred to `pv_forecast_suppressed`, which is defined later, is undefined at that point and became `false` via `bool(false)`. On days with a high forecast the discharge lock therefore kept blocking Cases A, D and E. The PV forecast suppression block now precedes `price_discharge_locked`
 
 ### Changed
 - PV forecast suppression is now part of the cheap-price statement (new variable `tariff_cheap_effective`) and therefore also ends a tariff charge already running, not just the entry. Matches `below_cheap` of the integration

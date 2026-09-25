@@ -1267,6 +1267,25 @@ variables:
   price_is_cheap: >
     {{ price_sensor_valid | bool(false) and
        states(price_sensor_entity) | float(999) < cheap_threshold_float | float(0) }}
+  # PV forecast tariff suppression
+  pv_forecast_enabled_bool: !input pv_forecast_enabled
+  pv_forecast_sensor_id: !input pv_forecast_sensor
+  pv_forecast_threshold_float: !input pv_forecast_threshold
+  # Daily yield normalized to kWh (Wh ÷1000, MWh ×1000); without a recognized
+  # energy unit the raw value stays unchanged.
+  pv_forecast_energy_float: >
+    {% if pv_forecast_sensor_id is string and pv_forecast_sensor_id | length > 0 %}
+      {% set v = states(pv_forecast_sensor_id) | float(0) %}
+      {% set u = state_attr(pv_forecast_sensor_id, 'unit_of_measurement') %}
+      {{ v / 1000 if u == 'Wh' else (v * 1000 if u == 'MWh' else v) }}
+    {% else %}
+      0
+    {% endif %}
+  pv_forecast_suppressed: >
+    {{ pv_forecast_enabled_bool | bool(false) and
+       pv_forecast_sensor_id is string and pv_forecast_sensor_id | length > 0 and
+       states(pv_forecast_sensor_id) not in ['unknown', 'unavailable'] and
+       pv_forecast_energy_float | float(0) >= pv_forecast_threshold_float | float(0) }}
   # Discharge lock active? (price < expensive threshold AND sensor valid AND no PV forecast suppression)
   # Applies to Zone 1 and Zone 2 — guards in Cases A and E
   price_discharge_locked: >
@@ -1334,25 +1353,6 @@ variables:
        surplus_lock_power_float >= (surplus_lock_factor_float | float(1.5)) * hard_limit_int and
        states(soc) | float(0) > soc_conservation_limit_int | float(0) }}
 
-  # PV forecast tariff suppression
-  pv_forecast_enabled_bool: !input pv_forecast_enabled
-  pv_forecast_sensor_id: !input pv_forecast_sensor
-  pv_forecast_threshold_float: !input pv_forecast_threshold
-  # Daily yield normalized to kWh (Wh ÷1000, MWh ×1000); without a recognized
-  # energy unit the raw value stays unchanged.
-  pv_forecast_energy_float: >
-    {% if pv_forecast_sensor_id is string and pv_forecast_sensor_id | length > 0 %}
-      {% set v = states(pv_forecast_sensor_id) | float(0) %}
-      {% set u = state_attr(pv_forecast_sensor_id, 'unit_of_measurement') %}
-      {{ v / 1000 if u == 'Wh' else (v * 1000 if u == 'MWh' else v) }}
-    {% else %}
-      0
-    {% endif %}
-  pv_forecast_suppressed: >
-    {{ pv_forecast_enabled_bool | bool(false) and
-       pv_forecast_sensor_id is string and pv_forecast_sensor_id | length > 0 and
-       states(pv_forecast_sensor_id) not in ['unknown', 'unavailable'] and
-       pv_forecast_energy_float | float(0) >= pv_forecast_threshold_float | float(0) }}
   # Effective cheap-price statement: price cheap AND no forecast suppression.
   # Carries tariff charging entry and exit as well as the tariff recovery in Case D.
   # Placed after pv_forecast_suppressed because variables render in order.
