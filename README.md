@@ -413,7 +413,7 @@ Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher, wenn PV d
 | **I-Faktor** | 0.05 | 0.01 | 0.2 | Integral-Verstärkung. Höher = schnellere Fehlerkorrektur, aber instabiler. |
 | **Toleranzbereich** | 25 W | 0 | 200 W | Totband um Regelziel. Keine PI-Korrektur innerhalb (stattdessen Integral-Decay). |
 | **Wartezeit** | 3 s | 0 | 30 s | Wartezeit nach Leistungsänderung. Ist "Adaptive Wartezeit" aktiviert, gilt der Wert nur als Timeout. |
-| **Adaptive Wartezeit** | Aus | – | – | Bricht die Wartezeit früh ab wenn Ist-Leistung ≈ Sollwert ± Toleranz. Vorsicht bei langsamen externen Netzmesswerten (z.B. IR-Lesekopf) — kann zu verfrühtem Reglereingriff führen. |
+| **Adaptive Wartezeit** | Aus | – | – | Bricht die Wartezeit früh ab wenn Ist-Leistung ≈ Sollwert ± Toleranz (beim Laden: −Ist-Leistung, weil die Ist-Leistung dann negativ ist). Vorsicht bei langsamen externen Netzmesswerten (z.B. IR-Lesekopf) — kann zu verfrühtem Reglereingriff führen. |
 
 > **Hinweis:** P- und I-Faktor gelten für Zone 1 und Zone 2. Für den AC-Lade-Modus werden separate Faktoren verwendet.
 

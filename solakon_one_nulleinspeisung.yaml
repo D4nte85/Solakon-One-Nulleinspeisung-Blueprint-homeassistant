@@ -411,7 +411,7 @@ blueprint:
           adaptive_wait_time:
             name: 🧠 Adaptive Wartezeit
             description: |
-              Bricht die Wartezeit früh ab, sobald Ist-Leistung ≈ Sollwert ± Toleranz, statt immer die
+              Bricht die Wartezeit früh ab, sobald Ist-Leistung ≈ Sollwert ± Toleranz (beim Laden: −Ist-Leistung), statt immer die
               volle Wartezeit auszuschöpfen. Vorsicht bei externen Netzmesswerten mit hoher Latenz
               (z.B. IR-Lesekopf am Zähler) — dort kann der Regelzyklus dann kürzer sein als die
               Aktualisierungsrate der Netzmessung, was zu verfrühtem Reglereingriff führt.
@@ -2795,7 +2795,7 @@ actions:
                 value_template: "{{ adaptive_wait_bool }}"
             then:
               - wait_template: >
-                  {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+                  {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
                 timeout:
                   seconds: "{{ wait_time_int }}"
                 continue_on_timeout: true
@@ -2815,13 +2815,13 @@ actions:
               entity_id: !input active_power_number
             data:
               value: "{{ tariff_charge_power_int }}"
-          # Wartezeit — adaptiv (falls aktiviert) bis Ist-Leistung ≈ Sollwert oder Timeout, sonst fest
+          # Wartezeit — adaptiv (falls aktiviert) bis Ladeleistung (−Ist) ≈ Sollwert oder Timeout, sonst fest
           - if:
               - condition: template
                 value_template: "{{ adaptive_wait_bool }}"
             then:
               - wait_template: >
-                  {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+                  {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) + states(active_power_entity) | float(0)) | abs <= tolerance_int }}
                 timeout:
                   seconds: "{{ wait_time_int }}"
                 continue_on_timeout: true
@@ -2844,13 +2844,13 @@ actions:
                   entity_id: !input active_power_number
                 data:
                   value: "{{ ac_setpoint | int }}"
-              # Wartezeit — adaptiv (falls aktiviert) bis Ist-Leistung ≈ Sollwert oder Timeout, sonst fest
+              # Wartezeit — adaptiv (falls aktiviert) bis Ladeleistung (−Ist) ≈ Sollwert oder Timeout, sonst fest
               - if:
                   - condition: template
                     value_template: "{{ adaptive_wait_bool }}"
                 then:
                   - wait_template: >
-                      {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+                      {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) + states(active_power_entity) | float(0)) | abs <= tolerance_int }}
                     timeout:
                       seconds: "{{ wait_time_int }}"
                     continue_on_timeout: true
@@ -2886,7 +2886,7 @@ actions:
                 value_template: "{{ adaptive_wait_bool }}"
             then:
               - wait_template: >
-                  {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+                  {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
                 timeout:
                   seconds: "{{ wait_time_int }}"
                 continue_on_timeout: true
