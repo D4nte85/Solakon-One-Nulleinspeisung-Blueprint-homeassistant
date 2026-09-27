@@ -101,7 +101,7 @@ flowchart TD
     ZONE_CHECK -- "FALL HT   Tarif-Lade-Bool = on   UND (keine Günstig-Aussage ODER SOC ≥ Tarif-Ladeziel)   keine Günstig-Aussage = Tarif aus, Preissensor unlesbar, PV-Forecast-Suppressed oder Preis ≥ Günstig-Schwelle" --> TARIFF_END
     ZONE_CHECK -- "FALL TM   Tarif aktiv   UND Preis < Teuer   UND kein AC/Tarif-Laden   UND NICHT Surplus-Bool = on   UND Modus = '1'   UND NICHT PV-Forecast-Suppressed" --> TARIFF_MID
     ZONE_CHECK -- "FALL G   AC Laden aktiviert   UND SOC < Ladeziel   UND Modus ≠ '3' ← Guard!   UND NICHT Tarif-Lade-Bool = on   UND NICHT Surplus-Bool = on   UND (Grid + ΣOutput_entladend) < −Hysterese" --> AC_START
-    ZONE_CHECK -- "FALL H   Modus = '3'   UND AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND (AC Laden deaktiviert ODER SOC ≥ Ladeziel ODER (Grid ≥ AC-Offset + Hysterese UND |eigener Output| ≤ Toleranz))" --> AC_END
+    ZONE_CHECK -- "FALL H   Modus = '3'   UND AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND (AC Laden deaktiviert ODER SOC ≥ Ladeziel ODER (Grid ≥ AC-Offset + Hysterese UND eigener Output = 0 W))" --> AC_END
     ZONE_CHECK -- "FALL I   Lade-Bool = on   UND (Modus ≠ '3' ODER beide Lade-Bools = on)" --> SAFETY_I_SESSION
     ZONE_CHECK -- "FALL I   Modus = '3'   UND NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on" --> SAFETY_I
     ZONE_CHECK -- "FALL E   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND NICHT Entladesperre (Preis < teuer)   UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = '0' UND NICHT Nacht" --> Z2_START

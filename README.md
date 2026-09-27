@@ -227,7 +227,7 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 | **HT** | Tarif-Bool = `on` UND (**keine Günstig-Aussage** ODER SOC ≥ Tarif-Ladeziel) | Tarif-Laden Ende: Tarif-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
 | **TM** | Tarif aktiv UND Preis < Teuer-Schwelle UND kein AC/Tarif-Laden UND **NICHT Surplus-Bool = `on`** UND **Modus = `'1'`** UND **NICHT PV-Forecast-Suppressed** | Discharge-Lock: Integral = 0, Zyklus = `off` (wenn aktiv), Output → 0W, Timer-Toggle, Modus → `'0'` |
 | **G** | AC aktiv UND SOC < Ladeziel UND **Modus ≠ `'3'`** UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + ΣOutput_entladend) < −Hysterese | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
-| **H** | Modus = `'3'` UND AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND (**AC Laden deaktiviert** ODER SOC ≥ Ladeziel ODER (Grid ≥ `ac_charge_offset + Hysterese` UND \|eigener Output\| ≤ Toleranz)) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
+| **H** | Modus = `'3'` UND AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND (**AC Laden deaktiviert** ODER SOC ≥ Ladeziel ODER (Grid ≥ `ac_charge_offset + Hysterese` UND eigener Output = 0 W)) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
 | **I** | Lade-Bool = `on` UND (Modus ≠ `'3'` ODER **beide** Lade-Bools = `on`) | Safety-Korrektur: Integral = 0, betroffene Lade-Bools → `off`; Modus und Output bleiben unverändert |
 | **I** | Modus = `'3'` UND NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` | Safety-Korrektur: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W (Timer-Toggle) |
 | **E** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Output → 0W, Timer-Toggle, Modus → `'1'` |
@@ -258,7 +258,7 @@ Laden der Batterie wenn eine externe Einspeisung ins Netz erkannt wird. Eintritt
 
 * **Blockiert durch:** Zone 0 (Überschuss-Bool = `on`) und Tarif-Laden (Tarif-Bool = `on`).
 * **Eintritts-Bedingung (Fall G):** AC Laden aktiviert UND SOC < Ladeziel UND Modus ≠ `'3'` UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + ΣOutput_entladend) < −Hysterese.
-* **Abbruch (Fall H):** AC Laden deaktiviert **ODER** SOC ≥ Ladeziel **ODER** (Grid ≥ Offset + Hysterese UND \|eigener Output\| ≤ Toleranz). Das Abschalten der Option beendet also eine laufende Ladung — geprüft wird dafür der Lade-Helfer selbst, nicht die Option.
+* **Abbruch (Fall H):** AC Laden deaktiviert **ODER** SOC ≥ Ladeziel **ODER** (Grid ≥ Offset + Hysterese UND eigener Output = 0 W). Das Abschalten der Option beendet also eine laufende Ladung — geprüft wird dafür der Lade-Helfer selbst, nicht die Option.
 * **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`. Separate P/I-Faktoren. P klein halten (~0.3–0.5), I auf 0 belassen (Ladeleistung steigt nur mit ~33 W/s).
 * **Rückkehr:** Zone 1 → Modus `'1'` (Timer-Toggle) + Integral Reset. Zone 2 → Modus `'0'` (Timer-Toggle) + Output 0W + Integral Reset.
 
