@@ -194,7 +194,7 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
 | **GT** | Tariff enabled AND price < cheap threshold AND NOT PV-forecast-suppressed AND SOC < tariff target − SOC hysteresis AND Mode ≠ `'3'` AND **NOT AC-Bool = `on`** AND NOT Surplus-Bool = `on` | Tariff Charging Start: Tariff-Bool = `on`, Timer-Toggle, Output → charge power (direct), Mode → `'3'` |
 | **HT** | Tariff-Bool = `on` AND (**no cheap-price statement** OR SOC ≥ target) | Tariff Charging End: Integral = 0, Tariff-Bool = `off`, Zone 1 → Timer-Toggle + `'1'` / Zone 2 → `'0'` + 0W |
 | **TM** | Tariff active AND price < expensive AND NOT PV-forecast-suppressed AND no charging AND NOT Surplus-Bool = `on` AND Mode = `'1'` | Discharge Lock: Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Timer-Toggle, Mode → `'0'` |
-| **G** | AC active AND SOC < charge target AND **Mode ≠ `'3'`** AND NOT Tariff-Bool = `on` AND NOT Surplus-Bool = `on` AND (Grid + ΣOutput_discharging) < −Hysteresis | AC Charging Start: AC-Bool = `on`, Timer-Toggle, Mode → `'3'`, Output → 0W |
+| **G** | AC active AND SOC < charge target AND **Mode ≠ `'3'`** AND NOT Tariff-Bool = `on` AND NOT Surplus-Bool = `on` AND (Grid + ΣOutput_discharging) < min(Offset, 0) − Hysteresis | AC Charging Start: AC-Bool = `on`, Timer-Toggle, Mode → `'3'`, Output → 0W |
 | **H** | Mode = `'3'` AND AC-Bool = `on` AND NOT Tariff-Bool = `on` AND (**AC Charging disabled** OR SOC ≥ charge target OR (Grid ≥ `ac_charge_offset + Hysteresis` AND Output = 0 W)) | AC Charging End: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
 | **I** | Charge-Bool = `on` AND (Mode ≠ `'3'` OR **both** Charge-Bools = `on`) | Safety correction: Integral = 0, affected Charge-Bools → `off`; mode and output stay unchanged |
 | **I** | Mode = `'3'` AND NOT AC-Bool = `on` AND NOT Tariff-Bool = `on` | Safety correction: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W |
@@ -234,14 +234,14 @@ Enables active export of PV surplus when the battery is full. SOC and PV hystere
 
 ### 4. ⚡ AC Charging (Optional)
 
-Charges the battery when external grid feed-in is detected. Detection is based on `(Grid + ΣOutput_discharging) < −Hysteresis` — i.e. after subtracting the Solakon's contribution, surplus still remains — single-instance: own output power, multi-instance: sum across all instances in discharge mode (prevents a sibling instance's discharge from being read as external grid surplus — see `total_actual_power_entity` in the Multi-Instancing section). Typical use case: external PV system feeds surplus into the grid.
+Charges the battery when external grid feed-in is detected. Detection is based on `(Grid + ΣOutput_discharging) < min(Offset, 0) − Hysteresis` — i.e. after subtracting the Solakon's contribution, surplus still remains — single-instance: own output power, multi-instance: sum across all instances in discharge mode (prevents a sibling instance's discharge from being read as external grid surplus — see `total_actual_power_entity` in the Multi-Instancing section). Typical use case: external PV system feeds surplus into the grid.
 
 * **Entry condition (Case G):**
   - AC Charging enabled AND SOC < charge target
   - **Mode must not be `'3'`** (guard prevents re-entry when AC Charging already active)
   - NOT Tariff charging active (Tariff has priority)
   - NOT Surplus-Bool = `on` (Zone 0 blocks charging)
-  - (Grid + Output) < −Hysteresis
+  - (Grid + Output) < min(Offset, 0) − Hysteresis
 * **Stay condition:** Mode stays `'3'` while SOC < charge target AND Grid < (ac_charge_offset + Hysteresis)
 * **Exit condition (Case H):** AC Charging disabled OR SOC ≥ charge target OR (Grid ≥ ac_charge_offset + Hysteresis AND Output = 0 W) — switching the option off ends a running charging session; what is checked for this is the charge helper itself, not the option
   - `Output = 0 W` guard prevents false trigger while PI is still actively controlling; output follows the same sign convention as grid (negative = charging) and stays clearly negative throughout active charging — the exact comparison requires genuine convergence to zero instead of merely any negative (= still charging) value
@@ -456,7 +456,7 @@ Prevents oscillation between Case 0A/0B at night with a full battery when PV rea
 | **Enable AC Charging** | false | — | — | Toggle for AC Charging. |
 | **SOC Charge Target** | 90 % | 10 % | 99 % | Charging stops at this SOC. |
 | **Max. Charge Power** | 800 W | 50 | 1200 W | Upper limit of AC charge power (`max_power` to script). |
-| **Hysteresis AC Charging** | 50 W | 0 | 300 W | Deadband for entry and exit. Entry: (Grid + Output) < −Hysteresis. Exit: Grid ≥ (Offset + Hysteresis) AND Output = 0 W. |
+| **Hysteresis AC Charging** | 50 W | 0 | 300 W | Deadband for entry and exit. Entry: (Grid + Output) < min(Offset, 0) − Hysteresis. Exit: Grid ≥ (Offset + Hysteresis) AND Output = 0 W. |
 | **AC Charging Offset (Static)** | -50 W | -100 | 100 W | Control target in AC charging mode. Negative = targeting export → higher charge power. |
 | **AC Charging Offset (Dynamic)** | *(empty)* | — | — | Optional `input_number` entity. Overrides static value. |
 | **AC Charging P Factor** | 0.5 | 0.1 | 5.0 | Proportional gain in AC charging mode. Keep small: charging power rises by only ~33 W/s, a large factor adds more before the device has reached the last setpoint. |

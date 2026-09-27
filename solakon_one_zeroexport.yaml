@@ -64,7 +64,7 @@ blueprint:
     - **GT** — Tariff Charging Start: Tariff arbitrage active AND price < cheap threshold AND SOC < tariff charge target − SOC hysteresis AND Mode ≠ `'3'` AND no surplus AND **NOT PV-forecast-suppressed** → Tariff-Bool = `on`, Timer-Toggle, Output → charge power (direct), Mode → `'3'`
     - **HT** — Tariff Charging End: Mode = `'3'` AND Tariff-Bool = `on` AND (price ≥ cheap threshold OR SOC ≥ target) → Integral = 0, Tariff-Bool = `off`, Zone 1: Timer-Toggle + Mode `'1'` / Zone 2: Timer-Toggle + Mode `'0'` + 0W
     - **TM** — Discharge Lock: Tariff active AND price < expensive AND no charging AND no surplus AND Mode = `'1'` AND **NOT PV-forecast-suppressed** → Integral = 0, Cycle = `off` (if Zone 1), Output → 0W, Timer-Toggle, Mode → `'0'`
-    - **G** — AC Charging Start: AC active AND SOC < charge target AND Mode ≠ `'3'` AND (Grid + Output) < −Hysteresis AND no Tariff charging AND no surplus → AC-Bool = `on`, Timer-Toggle, Output → 0W, Mode → `'3'`
+    - **G** — AC Charging Start: AC active AND SOC < charge target AND Mode ≠ `'3'` AND (Grid + Output) < min(Offset, 0) − Hysteresis AND no Tariff charging AND no surplus → AC-Bool = `on`, Timer-Toggle, Output → 0W, Mode → `'3'`
     - **H** — AC Charging End: Mode = `'3'` AND (SOC ≥ charge target OR (Grid ≥ Offset + Hysteresis AND Output = 0 W)) → Integral = 0, AC-Bool = `off`, Zone 1: Output → 0W, Timer-Toggle, Mode → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Mode → `'0'`
     - **I** — Safety: Mode = `'3'` without active AC or Tariff charging session → Integral = 0, Zone 1: Output → 0W, Timer-Toggle, Mode → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Mode → `'0'`
     - **E** — Zone 2 Start: Zone 3 < SOC ≤ Zone 1 AND Cycle = `off` AND Mode = `'0'` AND NOT night AND no discharge lock → Integral = 0, Timer-Toggle, Mode → `'1'`
@@ -107,11 +107,11 @@ blueprint:
     <summary><b>⚡ AC Charging (Optional)</b> 👈</summary>
 
     Charges the battery when external grid feed-in is detected.
-    Detection: `(Grid + ΣOutput_discharging) < −Hysteresis` — i.e. after subtracting the Solakon's contribution, surplus remains.
+    Detection: `(Grid + ΣOutput_discharging) < min(Offset, 0) − Hysteresis` — i.e. after subtracting the Solakon's contribution, surplus remains.
     ΣOutput_discharging: single-instance = own output power, multi-instance = sum of all instances in discharge mode.
     Typical use case: external PV system feeds surplus into the grid.
 
-    - **Entry (Case G):** AC Charging enabled AND SOC < charge target AND Mode ≠ `'3'` AND (Grid + ΣOutput_discharging) < −Hysteresis AND no Tariff charging AND no surplus
+    - **Entry (Case G):** AC Charging enabled AND SOC < charge target AND Mode ≠ `'3'` AND (Grid + ΣOutput_discharging) < min(Offset, 0) − Hysteresis AND no Tariff charging AND no surplus
       - Guard `Mode ≠ '3'` prevents re-entry when AC Charging is already active
       - Multi-instance: `ΣOutput_discharging` prevents a sibling instance's discharge from being read as external grid surplus (optional helper `total_actual_power_entity`, written by the power distribution automation)
     - **Stay:** Mode `'3'` while SOC < charge target AND Grid < (Offset + Hysteresis)
@@ -788,14 +788,14 @@ blueprint:
       ac_charge_parameter:
         name: "⚡ AC CHARGING (Optional):"
         description: |
-          Charge the battery when external grid feed-in is detected (Grid + Output < −Hysteresis).
+          Charge the battery when external grid feed-in is detected (Grid + Output < min(Offset, 0) − Hysteresis).
           Active in Zone 1 and Zone 2. SOC protection (Zone 3) remains fully active.
         collapsed: true
         input:
           ac_charge_enabled:
             name: ⚡ Enable AC Charging
             description: |
-              ✅ ON: SOC < charge target AND Mode ≠ '3' AND (Grid + Output) < −Hysteresis → Mode 3 (INV Charge PV Priority)
+              ✅ ON: SOC < charge target AND Mode ≠ '3' AND (Grid + Output) < min(Offset, 0) − Hysteresis → Mode 3 (INV Charge PV Priority)
               ❌ OFF: Feature disabled
             default: false
             selector:
@@ -827,7 +827,7 @@ blueprint:
             name: 📏 Hysteresis AC Charging (W)
             description: |
               Deadband for entry and exit.
-              Entry: (Grid + Output) < −Hysteresis.
+              Entry: (Grid + Output) < min(Offset, 0) − Hysteresis.
               Exit: Grid ≥ (Offset + Hysteresis) AND Output = 0 W.
               Prevents flickering with varying feed-in (e.g. 50 W).
             default: 50
@@ -2109,7 +2109,7 @@ actions:
           - condition: template
             value_template: "{{ states(solakon_mode) != '3' }}"
           - condition: template
-            value_template: "{{ (grid_power_float + total_actual_power_float) < (-1 * (ac_charge_hysteresis_int | float(0))) }}"
+            value_template: "{{ (grid_power_float + total_actual_power_float) < ([ac_charge_offset_int | float(0), 0] | min) - (ac_charge_hysteresis_int | float(0)) }}"
         sequence:
           # 1. Logbook entry
           - action: logbook.log
