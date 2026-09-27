@@ -143,7 +143,12 @@ flowchart TD
 
         PI_GATE{{"Modus ∈ {'1','3'}?   UND (Zyklus = on ODER Nacht-Sperre inaktiv ODER PV ≥ Reserve)"}}
         PI_GATE -- Nein --> END_SKIP([Ende — kein Output])
-        PI_GATE -- Ja --> DISCHARGE_SET
+        PI_GATE -- Ja --> REREAD
+
+        %% ── Zweitlesung ──────────────────────────────────────────────────
+        REREAD{{"Zweitlesung: Netz und PV mit Zahlenwert?"}}
+        REREAD -- "Nein → Logeintrag, Abbruch ohne Schreibbefehl" --> END_SKIP
+        REREAD -- Ja --> DISCHARGE_SET
 
         %% ── Schritt 1: Entladestrom ──────────────────────────────────────
         DISCHARGE_SET{{"Entladestrom setzen?"}}
@@ -173,18 +178,18 @@ flowchart TD
         CALC_TARIFF["💹 Tarif-Laden — Direkt setzen (kein PI)   Output → tariff_charge_power   Wartezeit"]
 
         %% ── AC Laden Pfad ────────────────────────────────────────────────
-        AC_GATE{{"AC-Lade-Bool = on?   UND |Grid-Fehler| > Toleranz?"}}
+        AC_GATE{{"AC-Lade-Bool = on?"}}
         AC_GATE -- Ja --> CALC_AC
         AC_GATE -- Nein --> NORMAL_GATE
 
-        CALC_AC["⚡ AC Laden — PI-Script (ac_charge_mode=true)   raw_error = (ac_charge_offset − grid) × error_share   error_share (Pool 2, AC-Laden): missing_i / Σ(missing_j) — nur unter gleichzeitig AC-ladenden Instanzen, von Leistungsverteilung gesetzt (Standard 1.0)   unabhängig von Pool 1 (Nulleinspeisung) — verhindert error_share=0-Einfrieren wenn Instanz nicht in Modus '1' steht   missing_i = (Ladeziel_i−SOC_i)/100 × Kap_i   (Kap_i = Kap-Sensor kWh oder 100 wenn nicht gesetzt)   max_power = ac_charge_power_limit   Kapazitäts-Clamping   Korrektur = P·error + I·integral_candidate   (separate ac_charge_p/i_factor)   new_power = current + Korrektur   clamp(0, Lade-Limit) → Output → WR   Anti-Windup: integral = (final − current − P·error) / I → clamp(±effective_max) → round(2)   Wartezeit   (at_max / at_min Guards NICHT angewendet)"]
+        CALC_AC["⚡ AC Laden — Stellwertrechnung (kein PI, Integral unverändert)   Stellwert = Ist-Ladeleistung + error_share × (ac_charge_offset − grid)   error_share (Pool 2, AC-Laden): missing_i / Σ(missing_j) — nur unter gleichzeitig AC-ladenden Instanzen, von Leistungsverteilung gesetzt (Standard 1.0)   missing_i = (Ladeziel_i−SOC_i)/100 × Kap_i   clamp(0, Lade-Limit)   < min(Mindestladeleistung, Lade-Limit) → 0 W   nichts schreiben wenn: |Offset − Grid| ≤ Toleranz UND Output ≤ Lade-Limit   ODER Rampe läuft (Ist-Ladeleistung > 15 W unter Output) UND Stellwert > Output   sonst → Output → WR + Wartezeit"]
 
         %% ── Normaler PI-Pfad ─────────────────────────────────────────────
         NORMAL_GATE{{"(Fehler > Toleranz ODER current > dynamic_max)?   UND kein At-Max / At-Min-Limit?   (at_max = false wenn current > dynamic_max — PI korrigiert nach unten)"}}
         NORMAL_GATE -- Ja --> CALC_NORMAL
         NORMAL_GATE -- Nein --> INTEGRAL_DECAY
 
-        CALC_NORMAL["🧠 PI-Script (ac_charge_mode=false)   raw_error = (grid − target_offset) × error_share   error_share (Pool 1, Nulleinspeisung): usable_i / Σ(usable_j) — nur unter Instanzen in Modus '1', von Leistungsverteilung gesetzt (Standard 1.0)   usable_i = (SOC_i−Min-SOC_i)/100 × Kap_i   (Kap_i = Kap-Sensor kWh oder 100 wenn nicht gesetzt)   dynamic_max:      Zone 1 → Hard Limit      Zone 2 → Min(Hard Limit, Max(0, PV − Reserve))   Kapazitäts-Clamping   Korrektur = P·error + I·integral_candidate   new_power = current + Korrektur   clamp(0, dynamic_max) → Output → WR   Anti-Windup: integral = (final − current − P·error) / I → clamp(±effective_max) → round(2)   Wartezeit"]
+        CALC_NORMAL["🧠 PI-Script (ac_charge_mode=false)   raw_error = (grid − target_offset) × error_share   error_share (Pool 1, Nulleinspeisung): usable_i / Σ(usable_j) — nur unter Instanzen in Modus '1', von Leistungsverteilung gesetzt (Standard 1.0)   usable_i = (SOC_i−Min-SOC_i)/100 × Kap_i   (Kap_i = Kap-Sensor kWh oder 100 wenn nicht gesetzt)   dynamic_max:      Zone 1 → Hard Limit (Schwester in Modus '3' → wie Zone 2, Richtungssperre)      Zone 2 → Min(Hard Limit, Max(0, PV − Reserve))   Kapazitäts-Clamping   Korrektur = P·error + I·integral_candidate   new_power = current + Korrektur   clamp(0, dynamic_max) → Output → WR   Anti-Windup: integral = (final − current − P·error) / I → clamp(±effective_max) → round(2)   Wartezeit"]
 
         INTEGRAL_DECAY["📉 Integral-Decay   |Integral| > 10 → Integral × 0,95   sonst → kein Update"]
 

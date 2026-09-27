@@ -222,7 +222,7 @@ blueprint:
           description: |
             Eigene input_number-Entität (0.0–1.0) für den Fehler-Anteil während AC-Laden (Pool 2).
             ⚠️ Muss in der Instanz-Automation als "AC-Lade Fehler-Anteil Helfer" eingetragen sein —
-            getrennt vom Fehler-Anteil-Helfer oben, sonst friert der AC-Lade-PI ein sobald
+            getrennt vom Fehler-Anteil-Helfer oben, sonst friert die AC-Ladeleistung bei 0 W ein, sobald
             diese Instanz nicht mehr in Modus '1' steht.
             Einstellungen: min: 0, max: 1, step: 0.01.
           default: {}

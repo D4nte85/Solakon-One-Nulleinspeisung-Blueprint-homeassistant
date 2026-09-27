@@ -94,7 +94,7 @@ Verhindert Oszillation zwischen Zone-0-Start/Ende nachts bei vollem Speicher und
 
 ### 5. Input Boolean Helper (AC-Lade-Zustand) — NUR wenn AC Laden aktiv
 
-Persistenter Zustandsspeicher für das AC Laden. Signalisiert dem PI-Script die invertierte Fehlerberechnung (`ac_charge_mode=true`). Verhindert außerdem, dass die Guards (at\_max/at\_min) den PI fälschlich blockieren.
+Persistenter Zustandsspeicher für das AC Laden. Schaltet die Regelung von PI auf die Stellwertrechnung des AC-Ladens um.
 
 1. Gehen Sie zu **Einstellungen** → **Geräte & Dienste** → **Helfer**
 2. Klicken Sie auf **Helfer erstellen** → **Schalter** (Input Boolean)
@@ -136,7 +136,7 @@ Gilt nur für Zone 1/Zone 2 (Nulleinspeisung, Modus '1'). Für AC-Laden siehe Pu
 
 Eigener Fehler-Anteil-Pool für AC-Laden (Modus '3'), getrennt vom Helper aus Punkt 8. Notwendig,
 weil eine ladende Instanz nicht in Modus '1' steht und im Nulleinspeisungs-Pool sonst
-`error_share = 0` bekäme — das würde den AC-Lade-PI auf 0 W einfrieren, obwohl aktiv Ladebedarf
+`error_share = 0` bekäme — das würde die Ladeleistung auf 0 W einfrieren, obwohl aktiv Ladebedarf
 besteht. Die Leistungsverteilungs-Automation berechnet den Anteil nur unter den gerade
 gleichzeitig AC-ladenden Instanzen (eigener Pool, unabhängig von Punkt 8). Gewichtet wird nach
 der fehlenden Energie bis zum Ladeziel: `missing_i = (Ladeziel_i − SOC_i) / 100 × Kap_i` — die
@@ -173,9 +173,11 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
 
 * **P-Anteil:** Reagiert sofort auf aktuelle Abweichungen. Konfigurierbare Aggressivität über den P-Faktor.
 * **I-Anteil:** Summiert Abweichungen über die Zeit auf, eliminiert bleibende Regelabweichungen. Anti-Windup via Back-Calculation: Integral wird nach jedem Eingriff auf den Wert korrigiert, der den tatsächlichen (ggf. geklemmten) Ausgang produziert — Clamp auf ±effective_max, gerundet auf 2 Nachkommastellen. Automatischer Reset bei Zonenwechsel. Toleranz-Decay 5%/Zyklus wenn Fehler ≤ Toleranz und |Integral| > 10. Zone-0-Einfrieren bei aktivem Überschuss.
-* **Fehlerberechnung:** Normal (`ac_charge_mode=false`): `raw_error = (grid − target_offset) × error_share`. AC Laden (`ac_charge_mode=true`): `raw_error = (target_offset − grid) × error_share` (invertiert). `error_share` skaliert den Fehler auf den Anteil dieser Instanz (Standard 1.0 = voller Fehler). Zwei unabhängige Pools im Multi-Instanz-Betrieb: Nulleinspeisung (`error_share_entity`) und AC-Laden (`ac_error_share_entity`) — siehe Multi-Instancing-Abschnitt.
-* **Dynamisches Power-Limit:** Zone 1 → Hard Limit. Zone 2 → `Min(Hard Limit, Max(0, PV − Reserve))`. AC Laden → konfigurierbares Lade-Limit. Tarif-Laden → kein PI (direkter Wert).
-* **PI-Aufruf-Guard:** Zone 0 aktiv → PI nicht aufgerufen, Integral eingefroren. Tarif-Laden aktiv → direkt setzen. AC Laden aktiv → PI mit `ac_charge_mode=true`. Normal → PI nur wenn (`|Fehler| > Toleranz` ODER `current > dynamic_max`) UND kein At-Limit. `at_max_limit` = false wenn `current > dynamic_max` (PV-Einbruch) → PI korrigiert nach unten, auch bei Netzfehler innerhalb der Toleranz.
+* **Fehlerberechnung:** `raw_error = (grid − target_offset) × error_share`. `error_share` skaliert den Fehler auf den Anteil dieser Instanz (Standard 1.0 = voller Fehler). Zwei unabhängige Pools im Multi-Instanz-Betrieb: Nulleinspeisung (`error_share_entity`) und AC-Laden (`ac_error_share_entity`) — siehe Multi-Instancing-Abschnitt.
+* **Dynamisches Power-Limit:** Zone 1 → Hard Limit; lädt eine Schwester-Instanz (Richtungssperre, Multi-Instancing) → wie Zone 2. Zone 2 → `Min(Hard Limit, Max(0, PV − Reserve))`. AC Laden → konfigurierbares Lade-Limit. Tarif-Laden → kein PI (direkter Wert).
+* **AC Laden — Stellwertrechnung statt PI:** Ladesollwert = Ist-Ladeleistung + `error_share` × (AC-Offset − Grid), geklemmt auf 0 … Lade-Limit, in einem Schritt. Geschrieben wird bei `|AC-Offset − Grid| > Toleranz` oder Output über dem Lade-Limit. Unter der Mindestladeleistung (Standard 50 W) wird 0 W geschrieben. Solange die Rampe läuft (Ist-Ladeleistung mehr als 15 W unter dem Output), wird nur gesenkt: Die Ladeleistung steigt nur mit etwa 34 W/s, der Netzsensor zeigt währenddessen einen älteren Stand. Das Integral bleibt im AC-Laden unverändert.
+* **Zweitlesung:** Netz und PV werden vor der PI-Phase erneut gelesen. Liefert einer der beiden keine Zahl, endet der Lauf mit einem Logeintrag ohne Schreibbefehl — sonst rechnete die PI-Phase mit 0 W, in Zone 2 fiele das Limit auf 0 und der Output würde genullt.
+* **PI-Aufruf-Guard:** Zone 0 aktiv → PI nicht aufgerufen, Integral eingefroren. Tarif-Laden aktiv → direkt setzen. AC Laden aktiv → Stellwertrechnung, kein PI. Normal → PI nur wenn (`|Fehler| > Toleranz` ODER `current > dynamic_max`) UND kein At-Limit. `at_max_limit` = false wenn `current > dynamic_max` (PV-Einbruch) → PI korrigiert nach unten, auch bei Netzfehler innerhalb der Toleranz.
 * **Ausgangs-Stillstandserkennung:** Steht der Sollwert am oberen Limit und besteht der Netzfehler in dieselbe Richtung fort (`at_max_limit`), schreibt der PI nicht mehr — er kann nicht weiter hochregeln. Bleibt der Wechselrichter in genau diesem Zustand stehen, ohne den Modus zu wechseln, erreicht ihn kein Befehl mehr; auch Fall D greift nicht, da der Modus weiterhin `'1'` ist. Erkannt wird das über die **Abweichung der Ist-Leistung vom Limit**: mehr als 5 % Abweichung bei einem Ist-Sensor, dessen `last_updated` seit über 300 s stillsteht. Der Zeitstempel rückt nur bei einer Wertänderung vor und steht damit für „Wert seit dann unverändert" — ein Ist-Sensor, der um den abweichenden Wert rauscht, löst entsprechend nicht aus. Aktion: Integral = 0, Output → 0 W, Timer-Toggle, Modus → `'0'`; im nächsten Lauf holt **Fall D** das Gerät regulär zurück (Timer-Toggle + Modus `'1'`), der PI rampt wieder hoch. Wiederholt sich frühestens alle 300 s, gemessen an `last_changed` des Modus-Entity. Gilt nur im normalen Entlade-Modus — Zone 0, Tarif-Laden und AC Laden halten den Ausgang bewusst unterhalb ihres jeweiligen Limits.
 
 ---
@@ -259,7 +261,8 @@ Laden der Batterie wenn eine externe Einspeisung ins Netz erkannt wird. Eintritt
 * **Blockiert durch:** Zone 0 (Überschuss-Bool = `on`) und Tarif-Laden (Tarif-Bool = `on`).
 * **Eintritts-Bedingung (Fall G):** AC Laden aktiviert UND SOC < Ladeziel UND Modus ≠ `'3'` UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + ΣOutput_entladend) < min(Offset, 0) − Hysterese.
 * **Abbruch (Fall H):** AC Laden deaktiviert **ODER** SOC ≥ Ladeziel **ODER** (Grid ≥ Offset + Hysterese UND eigener Output = 0 W). Das Abschalten der Option beendet also eine laufende Ladung — geprüft wird dafür der Lade-Helfer selbst, nicht die Option.
-* **PI-Regelung:** `ac_charge_mode=true` → invertierte Fehlerberechnung: `target_offset − grid`. Separate P/I-Faktoren. P klein halten (~0.3–0.5), I auf 0 belassen (Ladeleistung steigt nur mit ~33 W/s).
+* **Stellwertrechnung statt PI:** Ladesollwert = Ist-Ladeleistung + `error_share` × (Offset − Grid), geklemmt auf 0 … Max. Ladeleistung. Unter der **Mindestladeleistung** (Standard 50 W, 0–300 W) wird 0 W geschrieben; kleinere Ladeleistungen setzt das Gerät nur pendelnd um. Liegt sie über der Max. Ladeleistung, gilt die Max. Ladeleistung als Schwelle. Solange die Rampe läuft (Ist-Ladeleistung mehr als 15 W unter dem Output), wird nur gesenkt (Ladeleistung steigt nur mit ~34 W/s). Die Richtung stimmt mit der gemessenen Ist-Leistung überein, eine bleibende Abweichung des Geräts fällt heraus — ein I-Anteil ist unnötig.
+* **Richtungssperre (Multi-Instancing):** Solange diese Instanz lädt, entlädt keine Schwester-Instanz mit eingetragenem `sister_mode_selects` in Zone 1 aus der Batterie — sonst deckte deren PI die Ladeleistung als Hausverbrauch, und die Stellwertrechnung läse diese Entladung als Überschuss.
 * **Rückkehr:** Zone 1 → Modus `'1'` (Timer-Toggle) + Integral Reset. Zone 2 → Modus `'0'` (Timer-Toggle) + Output 0W + Integral Reset.
 
 ---
@@ -462,8 +465,7 @@ Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher, wenn PV d
 | **Hysterese Ladeabbruch** | 50 W | 0 | 300 W | Totband für Ein- und Austritt. |
 | **AC Laden Offset (Statisch)** | -50 W | -100 | 100 W | Regelziel im AC-Lade-Modus. Negativ = Einspeisung angestrebt. |
 | **AC Laden Offset (Dynamisch)** | *(leer)* | — | — | Optionale `input_number` Entität. Überschreibt statischen Wert. |
-| **AC Laden P-Faktor** | 0.5 | 0.1 | 5.0 | Klein halten: Die Ladeleistung steigt nur mit ~33 W/s, ein großer Faktor legt nach, bevor das Gerät den letzten Sollwert erreicht hat. |
-| **AC Laden I-Faktor** | 0 | 0 | 0.2 | Standardwert 0 belassen — ein I-Anteil summiert während des langsamen Anstiegs weiter auf. |
+| **Mindestladeleistung** | 50 W | 0 | 300 W | Kleinster Ladesollwert der Stellwertrechnung, darunter wird 0 W geschrieben. 50 W ist am Gerät gemessen, Änderung auf eigene Gefahr. Über der Max. Ladeleistung gilt diese als Schwelle. |
 
 ---
 
@@ -559,7 +561,7 @@ Schrittweise erhöhen bis System leicht anfängt zu zittern — dann einen Schri
 I-Faktor: 0.02   # Startpunkt
 ```
 
-Typischer Arbeitsbereich: **0.03–0.08**. Für AC Laden separat tunen — P besonders klein halten (~0.3–0.5), I-Faktor auf 0 lassen: Im AC-Lade-Modus steigt die Ladeleistung des Solakon ONE nur mit etwa 33 W/s (0 → 800 W in rund 25 s), Senken wirkt sofort. Solange das Gerät hochfährt, sieht der PI noch den alten Netzfehler und würde nachlegen. Tarif-Laden verwendet keinen PI-Regler.
+Typischer Arbeitsbereich: **0.03–0.08**. AC Laden und Tarif-Laden verwenden keinen PI-Regler.
 
 ---
 
@@ -654,8 +656,9 @@ Abbruch-Bedingung (Fall H):
 
 ```
 Modus '3' + tariff_charge_mode_active:  tariff_charge_power (Zweig BT, kein PI)
-Modus '3' + ac_charge_mode_active:      ac_charge_power_limit (PI mit ac_charge_mode=true)
+Modus '3' + ac_charge_mode_active:      ac_charge_power_limit (Stellwertrechnung, kein PI)
 Zone 1 (cycle = on):                    hard_limit
+Zone 1 + Schwester in Modus '3':        wie Zone 2 (Richtungssperre)
 Zone 2 (cycle = off):                   Min(Hard Limit, Max(0, PV - pv_charge_reserve))
 ```
 
@@ -714,8 +717,8 @@ Die Verteilung läuft über **zwei unabhängige Pools**, nicht einen gemeinsamen
 
 Grund für die Trennung: Eine Instanz, die gerade per AC lädt, steht in Modus `'3'` und zählt damit
 nicht zu Pool 1. Gäbe es nur einen gemeinsamen Fehler-Anteil, bekäme sie dort `error_share = 0`
-zugewiesen — und genau dieser Wert würde auch ihrem AC-Lade-PI übergeben, der dadurch bei aktivem
-Ladebedarf auf 0 W einfriert. Mit zwei getrennten Pools bekommt jede Instanz für jeden Modus einen
+zugewiesen — und genau dieser Wert ginge auch in ihre Stellwertrechnung ein, die Ladeleistung
+bliebe bei aktivem Ladebedarf auf 0 W stehen. Mit zwei getrennten Pools bekommt jede Instanz für jeden Modus einen
 eigenen, korrekt berechneten Anteil. Beide Pools verwenden dieselbe Struktur (Gleichverteilung
 oder SOC-gewichtet, je nach globalem Umschalter), aber die entgegengesetzte Basis: Pool 1
 gewichtet nach der nutzbaren Energie über dem Min-SOC, Pool 2 nach der fehlenden Energie bis
@@ -757,6 +760,7 @@ gleichzeitig laden.
    - Bei AC-Laden zusätzlich: AC-Lade-Zustand-Helfer und `ac_share`-Helfer pro ladender Instanz zuordnen,
      dazu das SOC-Ladeziel pro Instanz eintragen — identisch mit dem Wert „SOC-Ladeziel" der jeweiligen Instanz
    - Empfohlen (verhindert Batterie-zu-Batterie-Umpumpen bei Fall G): pro Instanz den Ist-Leistungssensor eintragen, dazu einen gemeinsamen `total_actual_power`-Helfer anlegen und in jeder Instanz-Automation als „Σ-Ausgangsleistung entladend — Dynamisch" (`total_actual_power_entity`) eintragen
+5. Richtungssperre: In jeder Instanz-Automation unter „Betriebsmodus der Schwester-Instanzen" (`sister_mode_selects`) die Betriebsmodus-Selects aller **anderen** Instanzen eintragen. Solange eine davon lädt (Modus `'3'`), gilt in Zone 1 das Limit von Zone 2 — ohne Eintrag kann die Gruppe nach dem Eintritt ins AC-Laden Energie von Batterie zu Batterie pumpen
 
 ---
 
