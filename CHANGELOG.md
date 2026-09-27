@@ -5,6 +5,8 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 ## [Unreleased]
 
+## [V313] – 2026-09-27
+
 ### Behoben
 - Adaptive Wartezeit im Tarif- und AC-Laden lief immer bis zum Timeout: Sie verglich die Ist-Leistung mit dem Sollwert, die Ist-Leistung ist beim Laden aber negativ. Verglichen wird dort jetzt −Ist-Leistung, wie in der Integration. Außerdem wird die Ist-Leistung an allen vier Wartestellen von kW auf W normalisiert; ein kW-Sensor erreichte die Toleranz bisher nie
 - Kein Nullen des Outputs mehr bei Sensorausfall mitten im Lauf: Die PI-Phase liest Netz und PV nach den Falls ein zweites Mal mit `float(0)`. Fiel einer der beiden nach der Kernsensor-Prüfung aus, rechnete sie mit 0 W; in Zone 2 fiel das Limit `Max(0, PV − Reserve)` auf 0 und der Output wurde genullt. Jetzt endet der Lauf mit Logeintrag ohne Schreibbefehl. Portiert aus der Integration v3.2.0-beta.1
