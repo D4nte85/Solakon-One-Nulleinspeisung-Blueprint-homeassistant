@@ -5,6 +5,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [V313] – 2026-09-27
+
 ### Fixed
 - Adaptive wait time during tariff and AC charging always ran until the timeout: it compared actual power with the setpoint, but actual power is negative while charging. It now compares −actual power there, as the integration does. In addition, actual power is normalized from kW to W at all four wait points; a kW sensor never reached the tolerance before
 - No more zeroing of the output on a sensor dropout mid-run: the PI phase reads grid and PV a second time after the cases with `float(0)`. If one of them dropped out after the core sensor check, it computed with 0 W; in Zone 2 the limit `Max(0, PV − Reserve)` fell to 0 and the output was zeroed. The run now ends with a log entry and without a write command. Ported from integration v3.2.0-beta.1

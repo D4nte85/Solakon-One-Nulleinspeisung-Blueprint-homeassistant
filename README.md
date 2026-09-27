@@ -1,4 +1,4 @@
-# ⚡ Solakon ONE Zero Export Blueprint (EN) - V312
+# ⚡ Solakon ONE Zero Export Blueprint (EN) - V313
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/d4nte85)
