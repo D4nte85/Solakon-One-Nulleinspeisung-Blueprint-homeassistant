@@ -390,7 +390,7 @@ Prevents oscillation between Case 0A/0B at night with a full battery when PV rea
 | **I Factor** | 0.05 | 0 | 0.2 | Integral gain. Higher = faster error correction, but less stable. |
 | **Tolerance Range** | 25 W | 0 | 200 W | Deadband around setpoint. No PI correction within (integral decay instead). |
 | **Wait Time** | 3 s | 0 | 30 s | Wait time after power change. If "Adaptive Wait Time" is enabled, this value only acts as a timeout. |
-| **Adaptive Wait Time** | Off | – | – | Exits the wait time early once actual power ≈ setpoint ± tolerance. Caution with slow external grid measurements (e.g. IR reading head) — can cause premature controller action. |
+| **Adaptive Wait Time** | Off | – | – | Exits the wait time early once actual power ≈ setpoint ± tolerance (when charging: −actual power, since actual power is negative then). Caution with slow external grid measurements (e.g. IR reading head) — can cause premature controller action. |
 
 > **Note:** P and I factors apply to Zone 1 and Zone 2. For AC Charging mode (Mode `'3'`) separate factors are used — see [AC Charging Parameters](#-ac-charging-optional-1).
 
