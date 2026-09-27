@@ -101,7 +101,7 @@ flowchart TD
     ZONE_CHECK -- "CASE HT   Tariff-Charge-Bool = on   AND (no cheap-price statement OR SOC ≥ tariff charge target)   no cheap-price statement = tariff off, price sensor unreadable, PV-Forecast-Suppressed or price ≥ cheap threshold" --> TARIFF_END
     ZONE_CHECK -- "CASE TM   Tariff active   AND price < expensive   AND no AC/Tariff charging   AND NOT Surplus-Bool = on   AND Mode = '1'   AND NOT PV-Forecast-Suppressed" --> TARIFF_MID
     ZONE_CHECK -- "CASE G   AC Charging enabled   AND SOC < charge target   AND Mode ≠ '3' ← Guard!   AND NOT Tariff-Charge-Bool = on   AND NOT Surplus-Bool = on   AND (Grid + ΣOutput_discharging) < −Hysteresis" --> AC_START
-    ZONE_CHECK -- "CASE H   Mode = '3'   AND AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on   AND (AC Charging disabled OR SOC ≥ charge target OR (Grid ≥ AC-Offset + Hysteresis AND |Output| ≤ Tolerance))" --> AC_END
+    ZONE_CHECK -- "CASE H   Mode = '3'   AND AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on   AND (AC Charging disabled OR SOC ≥ charge target OR (Grid ≥ AC-Offset + Hysteresis AND Output = 0 W))" --> AC_END
     ZONE_CHECK -- "CASE I   Charge-Bool = on   AND (Mode ≠ '3' OR both Charge-Bools = on)" --> SAFETY_I_SESSION
     ZONE_CHECK -- "CASE I   Mode = '3'   AND NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on" --> SAFETY_I
     ZONE_CHECK -- "CASE E   NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on   AND NOT Discharge Lock (price < expensive)   AND Zone 3 < SOC ≤ Zone 1 AND Cycle = off AND Mode = '0' AND NOT night" --> Z2_START
