@@ -77,7 +77,7 @@ Prevents oscillation between Zone 0 start/end at night with a full battery and p
 
 ### 5. Input Boolean Helper (AC Charge State) — ONLY if AC Charging enabled
 
-Persistent state storage for AC charging. Signals the PI script the inverted error calculation (`ac_charge_mode=true`). Also prevents the guards (at_max/at_min) from incorrectly blocking PI.
+Persistent state storage for AC charging. Switches control from PI to the setpoint calculation of AC charging.
 
 1. Go to **Settings** → **Devices & Services** → **Helpers**
 2. Click **Create Helper** → **Toggle** (Input Boolean)
@@ -149,25 +149,25 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
   - **Tolerance Decay:** 5% reduction per cycle in main automation, while error ≤ tolerance and `|Integral| > 10`
   - **Zone 0 Freeze:** In Zone 0 (Surplus) the integral is kept unchanged
 
-* **Error Calculation (mode-dependent, in PI script):**
-  - **Normal (`ac_charge_mode=false`):** `raw_error = (grid − target_offset) × error_share`
-  - **AC Charging (`ac_charge_mode=true`):** `raw_error = (target_offset − grid) × error_share` (inverted)
-  - In both cases: capacity clamping to actually available capacity
+* **Error Calculation (in PI script):** `raw_error = (grid − target_offset) × error_share`
+  - Capacity clamping to actually available capacity
   - `error_share` = share of grid error this instance handles (0–1, default 1.0)
   - Two independent multi-instance pools: Zero-Export (`error_share_entity`) and AC charging (`ac_error_share_entity`) — see Multi-Instancing section
 
 * **Power Limit (zone-dependent, `max_power` to script):**
   - **Zone 0:** Hard Limit (PI not called)
-  - **Zone 1:** Hard Limit (e.g. 800 W)
+  - **Zone 1:** Hard Limit (e.g. 800 W); if a sibling instance is charging (direction lock, multi-instancing): like Zone 2
   - **Zone 2:** `Min(Hard Limit, Max(0, PV − Reserve))`
   - **AC Charging (Mode 3):** Configurable charge limit
 
 * **PI Call Guard (in main automation):**
   - Zone 0 active → PI not called, integral frozen
   - Tariff Charging active → direct power set, no PI
-  - AC Charging active → PI with `ac_charge_mode=true`, `at_max/at_min` guards disabled
+  - AC Charging active → setpoint calculation, no PI, integral unchanged
   - Normal → PI only if (`|error| > tolerance` OR `current > dynamic_max`) AND no at-limit
   - `at_max_limit = false` if `current > dynamic_max` (PV drop) → PI corrects downward, even with the grid error within tolerance
+* **AC Charging — setpoint calculation instead of PI:** charge setpoint = actual charge power + `error_share` × (AC offset − grid), clamped to 0 … charge limit, in one step. Written when `|AC offset − grid| > tolerance` or output above the charge limit. Below the minimum charge power (default 50 W), 0 W is written. While the ramp is running (actual charge power more than 15 W below output), it only decreases: charging power rises by only about 34 W/s, and the grid sensor shows an older state meanwhile. The integral stays unchanged during AC charging.
+* **Second reading:** grid and PV are read again before the PI phase. If either has no numeric value, the run ends with a log entry and without a write command — otherwise the PI phase would compute with 0 W, the Zone 2 limit would drop to 0 and the output would be zeroed.
 * **Output stall detection:** When the setpoint sits at the upper limit and the grid error persists in the same direction (`at_max_limit`), the PI stops writing — it cannot raise the setpoint any further. An inverter stalled in exactly that state never receives another command; case D does not apply either, because the mode is still `'1'`. This is detected via the **deviation of actual power from the limit**: more than 5 % deviation while the actual sensor's `last_updated` has been standing still for over 300 s. That timestamp only advances on a value change and therefore means "unchanged since then" — an actual sensor fluctuating around the deviating value does not trigger it. Action: integral = 0, output → 0 W, timer toggle, mode → `'0'`; on the next run **case D** brings the device back (timer toggle + mode `'1'`) and the PI ramps up again. Repeats at most every 300 s, measured on the mode entity's `last_changed`. Applies to normal discharge mode only — Zone 0, tariff charging and AC charging deliberately hold the output below their respective limit.
 
 ---
@@ -245,10 +245,11 @@ Charges the battery when external grid feed-in is detected. Detection is based o
 * **Stay condition:** Mode stays `'3'` while SOC < charge target AND Grid < (ac_charge_offset + Hysteresis)
 * **Exit condition (Case H):** AC Charging disabled OR SOC ≥ charge target OR (Grid ≥ ac_charge_offset + Hysteresis AND Output = 0 W) — switching the option off ends a running charging session; what is checked for this is the charge helper itself, not the option
   - `Output = 0 W` guard prevents false trigger while PI is still actively controlling; output follows the same sign convention as grid (negative = charging) and stays clearly negative throughout active charging — the exact comparison requires genuine convergence to zero instead of merely any negative (= still charging) value
-* **PI Control:** `ac_charge_mode=true` → inverted error: `(target_offset − grid) × error_share`
-  - Positive error → increase charge power (Grid too negative → charge more)
-  - `at_max/at_min` guards not applied (direction inverted)
-  - **Separate P/I Factors:** P small (~0.3–0.5), I at default 0 — charging power rises by only ~33 W/s
+* **Setpoint calculation instead of PI:** charge setpoint = actual charge power + `error_share` × (Offset − Grid), clamped to 0 … max. charge power
+  - Below the **minimum charge power** (default 50 W, 0–300 W), 0 W is written; the device only follows smaller charge powers oscillating. If it is above the max. charge power, the max. charge power is the threshold
+  - While the ramp is running (actual charge power more than 15 W below output), it only decreases — charging power rises by only ~34 W/s
+  - The device's steady deviation is contained in the actual power and drops out — no I-part needed
+* **Direction lock (multi-instancing):** while this instance is charging, no sibling instance with `sister_mode_selects` configured discharges its battery in Zone 1 — otherwise its PI would cover the charge power as house load, and the setpoint calculation would read that discharge as surplus
 * **Return:**
   - Zone 1 → Mode `'1'` (Timer-Toggle) + Integral Reset
   - Zone 2 → Mode `'0'` (Timer-Toggle) + Output 0W + Integral Reset
@@ -300,7 +301,7 @@ For operation of multiple Solakon ONE inverters in one household.
   - Without capacity sensor: `Cap_i = 100` — weighting by SOC percentage points
   - Written by a parent power distribution automation; leave empty in single-instance operation
 * `ac_error_share_entity`: `input_number` (0.0–1.0) for per-instance share of grid error while AC charging — Pool 2 (mode '3'), independent from Pool 1
-  - Prevents the AC-charge PI from freezing at 0 W: a charging instance isn't in mode '1' and would get `error_share = 0` from Pool 1 if both pools were shared
+  - Prevents the charge power from freezing at 0 W: a charging instance isn't in mode '1' and would get `error_share = 0` from Pool 1 if both pools were shared
   - Leave empty in single-instance operation, or when not using AC charging with multi-instancing
 * Single instance: always leave all three empty (error_share = 1.0, Hard Limit applies)
 
@@ -455,12 +456,11 @@ Prevents oscillation between Case 0A/0B at night with a full battery when PV rea
 |:----------|:--------|:----|:----|:------------|
 | **Enable AC Charging** | false | — | — | Toggle for AC Charging. |
 | **SOC Charge Target** | 90 % | 10 % | 99 % | Charging stops at this SOC. |
-| **Max. Charge Power** | 800 W | 50 | 1200 W | Upper limit of AC charge power (`max_power` to script). |
+| **Max. Charge Power** | 800 W | 50 | 1200 W | Upper limit of AC charge power. |
 | **Hysteresis AC Charging** | 50 W | 0 | 300 W | Deadband for entry and exit. Entry: (Grid + Output) < min(Offset, 0) − Hysteresis. Exit: Grid ≥ (Offset + Hysteresis) AND Output = 0 W. |
 | **AC Charging Offset (Static)** | -50 W | -100 | 100 W | Control target in AC charging mode. Negative = targeting export → higher charge power. |
 | **AC Charging Offset (Dynamic)** | *(empty)* | — | — | Optional `input_number` entity. Overrides static value. |
-| **AC Charging P Factor** | 0.5 | 0.1 | 5.0 | Proportional gain in AC charging mode. Keep small: charging power rises by only ~33 W/s, a large factor adds more before the device has reached the last setpoint. |
-| **AC Charging I Factor** | 0 | 0 | 0.2 | Integral gain in AC charging mode. Leave at default 0 — an I-part keeps accumulating during the slow rise. |
+| **Minimum Charge Power** | 50 W | 0 | 300 W | Smallest charge setpoint of the setpoint calculation; below it, 0 W is written. 50 W is measured on the device, change at your own risk. Above the max. charge power, the max. charge power is the threshold. |
 
 ---
 
@@ -566,7 +566,7 @@ I Factor: 0.02  # Starting point
 
 Signs of too high I: system oscillates slowly with a long period. The **Back-Calculation Anti-Windup** resets the integral after every clamped output, preventing runaway accumulation. The **Tolerance Decay** (5%/cycle when error ≤ tolerance) automatically reduces it during stable operation.
 
-Typical working range: **0.03–0.08**. For AC Charging, tune separately — keep P especially small (~0.3–0.5) and leave I at 0: in AC charging mode the Solakon ONE raises its charging power by only about 33 W/s (0 → 800 W in roughly 25 s), lowering takes effect immediately. While the device ramps up, the PI still sees the old grid error and would add more.
+Typical working range: **0.03–0.08**. AC charging and tariff charging do not use the PI controller.
 
 ---
 
@@ -588,7 +588,7 @@ Typical working range: **0.03–0.08**. For AC Charging, tune separately — kee
 ### Architecture
 
 1. **Main Automation** (`solakon_one_zeroexport.yaml`): Zone control, SOC logic, surplus state, tariff state, AC charge state, discharge current management, timeout reset, PI call guard, integral decay/freeze
-2. **PI Controller Script** (`PI-Controller.yaml`): Pure calculation logic with back-calculation anti-windup, mode-dependent error calculation via `ac_charge_mode` field, `error_share` for multi-instancing
+2. **PI Controller Script** (`PI-Controller.yaml`): Pure calculation logic with back-calculation anti-windup, `error_share` for multi-instancing (the `ac_charge_mode` field is no longer used by the main automation)
 
 ### PI Controller Implementation (in Script)
 
@@ -597,7 +597,7 @@ Typical working range: **0.03–0.08**. For AC Charging, tune separately — kee
 ac_charge_mode = false (Normal):
   raw_error = (grid_power - target_offset) × error_share
 
-ac_charge_mode = true (AC Charging):
+ac_charge_mode = true (no longer called by the main automation):
   raw_error = (target_offset - grid_power) × error_share   ← inverted
 
 In both cases — Capacity Clamping:
@@ -624,8 +624,7 @@ final_power        = Clamp(new_power, 0, effective_max)
 ```
 Zone 0 active (Surplus):     integral = integral_old (frozen)
 Tariff Charging active:      direct power set (no PI called)
-AC Charging active (Branch B): → PI Script called (ac_charge_mode=true)
-                                  at_max/at_min guards NOT applied
+AC Charging active (Branch B): → setpoint calculation, no PI, integral unchanged
 Normal (Branch C):            → PI Script called (ac_charge_mode=false)
                                   at_max/at_min guards applied
                                   at_max_limit = false when current > dynamic_max
@@ -774,8 +773,8 @@ Distribution runs across **two independent pools**, not one shared pool:
 
 Reason for the split: an instance currently AC charging is in mode `'3'` and therefore does
 not count toward Pool 1. With a single shared error share, it would be assigned
-`error_share = 0` there — and that same value would be handed to its AC-charge PI, freezing
-it at 0 W despite active charging demand. With two separate pools, every instance gets a
+`error_share = 0` there — and that same value would enter its setpoint calculation, freezing
+the charge power at 0 W despite active charging demand. With two separate pools, every instance gets a
 correctly calculated share for whichever mode it's in. Both pools use the same structure
 (equal split or SOC-weighted, per the global toggle), but the opposite basis: Pool 1 weights
 by the usable energy above Min-SOC, Pool 2 by the energy missing until the charge target. The
@@ -816,6 +815,7 @@ charging at the same time.
    - For AC charging: additionally assign the AC charge state helper and `ac_share` helper per charging instance,
      plus enter the SOC charge target per instance — identical to the "SOC Charge Target" value of the respective instance
    - Recommended (prevents battery-to-battery pumping in Case G): enter the actual-power sensor per instance, plus create a shared `total_actual_power` helper and enter it in each instance automation as "Σ Output Discharging — Dynamic" (`total_actual_power_entity`)
+5. Direction lock: in each instance automation, enter the operating mode selects of all **other** instances under "Operating Mode of Sibling Instances" (`sister_mode_selects`). While one of them is charging (mode `'3'`), Zone 1 uses the Zone 2 limit — without it, the group can pump energy from battery to battery after entering AC charging
 
 ---
 
@@ -825,8 +825,8 @@ charging at the same time.
 2. **Create optional helpers when feature is enabled:** Surplus Boolean for Zone 0; AC Charge Boolean for AC Charging; Tariff Charge Boolean for Tariff Arbitrage
 3. **Grid power sensor:** Correct polarity (positive = import, negative = export)
 4. **Tariff price sensor:** Unit must match thresholds (no conversion in blueprint)
-5. **AC Charging control target:** Its own configurable offset (`ac_charge_offset`), independent of Zone 1/2. Negative value = targeting export → PI increases charge power
-6. **AC Charging P/I tuning:** Keep P factor small (~0.3–0.5) and I at 0 — the charging power rises by only about 33 W/s on every increase, even mid-session; lowering takes effect within a few seconds. A large P or I part adds more before the device has reached the last setpoint
+5. **AC Charging control target:** Its own configurable offset (`ac_charge_offset`), independent of Zone 1/2. Negative value = targeting export → higher charge power
+6. **AC Charging minimum charge power:** 50 W is measured on the device — below it, the device only follows the charge power oscillating. Change at your own risk
 7. **Integral Helper bounds:** −1200 to 1200 (matches effective_max clamping in back-calculation anti-windup)
 8. **Integral Helper:** Managed automatically — do not change manually
 9. **Tolerance Decay:** Prevents integral accumulation during stable operation — 5% reduction when `|Integral| > 10` and error ≤ tolerance

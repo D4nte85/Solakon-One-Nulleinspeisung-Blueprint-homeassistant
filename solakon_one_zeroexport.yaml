@@ -19,9 +19,7 @@ blueprint:
     - **Integral Reset:** Set to 0 on every zone change.
     - **Integral Decay:** 5% reduction per cycle while error ≤ tolerance and |Integral| > 10 (in main automation).
     - **Integral Freeze:** In Zone 0 (Surplus) no decay, no PI call.
-    - **Error Calculation (mode-dependent, in script):**
-      - Normal (`ac_charge_mode=false`): `raw_error = (grid − target_offset) × error_share`
-      - AC Charging (`ac_charge_mode=true`): `raw_error = (target_offset − grid) × error_share` (inverted)
+    - **Error Calculation (in script):** `raw_error = (grid − target_offset) × error_share`
       - `error_share` = share of grid error this instance handles (0–1, default 1.0).
         Single instance always 1.0. In multi-instance operation set by power distribution automation:
         `(SOC − Min-SOC) / Σ(SOC_i − Min-SOC_i)` — proportional to usable capacity.
@@ -30,13 +28,13 @@ blueprint:
         Zero-Export pool and never gets its share frozen there.
     - **Capacity Clamping:** Error is limited to actually available capacity.
     - **Dynamic Power Limit (`max_power` to script):**
-      - Zone 1: Hard Limit
+      - Zone 1: Hard Limit; if a sibling instance is charging (mode `'3'`): like Zone 2 (direction lock)
       - Zone 2: `Min(Hard Limit, Max(0, PV − Reserve))`
       - AC Charging (Mode `'3'`): configurable charge limit
     - **PI Call Guard:**
       - Zone 0 active → no PI call, integral frozen
       - Tariff Charging active → direct power set, no PI
-      - AC Charging active → PI with `ac_charge_mode=true`, `at_max/at_min` guards disabled
+      - AC Charging active → setpoint calculation, no PI, integral unchanged
       - Normal → PI only if `|error| > tolerance` AND no at-limit
       - `at_max_limit` = false if `current > dynamic_max` (PV drop) → PI can correct downward
     - **Output stall detection:** At `at_max_limit` the PI no longer writes — an inverter stalled in that state would never receive another command, and case D does not apply because the mode is still `'1'`. If actual power deviates from the limit by more than 5 % while the actual sensor has been unchanged for over 300 s (`last_updated`), the automation sets integral = 0, output → 0 W, timer toggle, mode → `'0'`; on the next run case D brings the device back. Repeats at most every 300 s (measured on the mode entity's `last_changed`).
@@ -114,14 +112,16 @@ blueprint:
     - **Entry (Case G):** AC Charging enabled AND SOC < charge target AND Mode ≠ `'3'` AND (Grid + ΣOutput_discharging) < min(Offset, 0) − Hysteresis AND no Tariff charging AND no surplus
       - Guard `Mode ≠ '3'` prevents re-entry when AC Charging is already active
       - Multi-instance: `ΣOutput_discharging` prevents a sibling instance's discharge from being read as external grid surplus (optional helper `total_actual_power_entity`, written by the power distribution automation)
+    - **Direction lock (multi-instance):** if a sibling instance is in mode `'3'` (AC or tariff charging), Zone 1 of this instance uses the Zone 2 limit `Max(0, PV − Reserve)` — its battery does not discharge, PV keeps being fed in (optional input `sister_mode_selects`)
     - **Stay:** Mode `'3'` while SOC < charge target AND Grid < (Offset + Hysteresis)
     - **Exit (Case H):** AC Charging disabled OR SOC ≥ charge target OR (Grid ≥ Offset + Hysteresis AND Output = 0 W)
       - Switching the option off ends a running charging session; what is checked for this is the charge helper itself, not the option
       - `Output = 0 W` guard prevents false trigger while PI is still controlling (always refers to this instance's own output); output follows the same sign convention as grid (negative = charging) and stays clearly negative throughout active charging — the exact comparison requires genuine convergence to zero instead of merely any negative (= still charging) value
-    - **PI Control:** `ac_charge_mode=true` → inverted error: `target_offset − grid`
-      - Positive error (Grid too negative) → increase charge power
-      - `at_max/at_min` guards disabled (direction inverted)
-    - **Separate P/I Factors:** P small (~0.3–0.5), I at 0 — charging power rises by only ~33 W/s
+    - **Setpoint calculation instead of PI:** charge setpoint = actual charge power + error share × (Offset − Grid), clamped to 0 … max. charge power
+      - Written when |Offset − Grid| > tolerance or output above the max. charge power
+      - Below the minimum charge power (default 50 W), 0 W is written
+      - While the ramp is running (actual charge power more than 15 W below output), only decreases — charging power rises by only ~34 W/s
+      - The integral stays unchanged during AC charging
     - **Return:**
       - Zone 1 → Integral = 0, AC-Bool = `off`, Output → 0 W, Timer-Toggle, Mode → `'1'`
       - Zone 2 → Integral = 0, AC-Bool = `off`, Output → 0 W, Timer-Toggle, Mode → `'0'`
@@ -599,8 +599,8 @@ blueprint:
               ⚠️ Only required for multi-instancing WITH AC charging — otherwise leave empty.
               Separate error-share pool for AC charging (mode '3'), independent from the
               Zero-Export error share above. Needed because a charging instance is not in
-              mode '1' and would otherwise get error_share=0 there — freezing its AC-charge
-              PI at 0 W despite active charging demand.
+              mode '1' and would otherwise get error_share=0 there — freezing its charge
+              power at 0 W despite active charging demand.
               The power distribution automation calculates the share only among instances
               currently AC charging at the same time and writes it into this helper.
               ⚠️ If left empty, the instance handles the full grid error while AC charging
@@ -625,6 +625,21 @@ blueprint:
             selector:
               entity:
                 domain: input_number
+
+          sister_mode_selects:
+            name: 🔀 Operating Mode of Sibling Instances (Multi-Instancing)
+            description: |
+              ⚠️ ONLY required for multi-instancing — leave empty in single-instance operation.
+              The operating mode selects of all other instances on the same grid sensor.
+              Direction lock: if one of them is in mode '3' (AC or tariff charging),
+              Zone 1 of this instance uses the Zone 2 output limit (PV − Reserve).
+              The battery then does not discharge, PV keeps being fed in.
+              ⚠️ If left empty, there is no direction lock.
+            default: []
+            selector:
+              entity:
+                domain: select
+                multiple: true
 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # ☀️ SURPLUS EXPORT (Optional - Zone 0)
@@ -861,7 +876,7 @@ blueprint:
             name: ⚡ AC Charge State Storage (input_boolean - AC Charging only)
             description: |
               input_boolean helper for persistent tracking of the AC charging state.
-              Signals the PI script the inverted error calculation (ac_charge_mode=true).
+              Switches control to the setpoint calculation of AC charging.
               ⚠️ Only required when AC Charging is enabled.
               Settings → Create Helper → Toggle
               - Name: e.g. 'Solakon AC Charging Active'
@@ -870,32 +885,19 @@ blueprint:
               entity:
                 domain: input_boolean
 
-          ac_charge_p_factor:
-            name: 🎛️ P Factor AC Charging
+          ac_charge_min_power:
+            name: 🔽 Minimum Charge Power (W)
             description: |
-              Proportional gain for AC charging mode.
-              Keep small: charging power rises by only ~33 W/s, a large factor
-              adds more before the device has reached the last setpoint.
-              Recommendation: 0.3–0.5.
-            default: 0.5
-            selector:
-              number:
-                min: 0.1
-                max: 5
-                step: 0.1
-
-          ac_charge_i_factor:
-            name: 🎛️ I Factor AC Charging
-            description: |
-              Integral gain for AC charging mode.
-              Leave at default 0 — charging power rises by only ~33 W/s,
-              an I-part keeps accumulating during the rise.
-            default: 0
+              Smallest charge setpoint of the setpoint calculation; below it, 0 W is written.
+              50 W is measured on the device: it only follows smaller charge powers oscillating.
+              Change at your own risk.
+              If the value is above the max. charge power, the max. charge power is the threshold.
+            default: 50
             selector:
               number:
                 min: 0
-                max: 0.2
-                step: 0.01
+                max: 300
+                unit_of_measurement: W
 
         # ═══════════════════════════════════════════════════════════════════════════════════════════════
         # 💹 TARIFF ARBITRAGE (Optional)
@@ -2594,8 +2596,8 @@ actions:
         {% endif %}
       regulator_factor_float: !input regulator_factor
       ki_factor_float: !input ki_factor
-      ac_charge_p_factor_float: !input ac_charge_p_factor
-      ac_charge_i_factor_float: !input ac_charge_i_factor
+      ac_charge_min_power_int: !input ac_charge_min_power
+      sister_mode_select_ids: !input sister_mode_selects
       offset_1_static: !input offset_1
       offset_1_entity_id: !input offset_1_entity
       offset_2_static: !input offset_2
@@ -2628,15 +2630,20 @@ actions:
       current_active_power: "{{ states(active_power_entity) | float(0) }}"
       integral_old: "{{ states(integral_entity) | float(0) }}"
 
+      # Direction lock: a sibling instance is in mode '3' (AC or tariff charging)
+      sister_charging: >
+        {% set ids = [sister_mode_select_ids] if sister_mode_select_ids is string else (sister_mode_select_ids or []) %}
+        {{ ids | select('is_state', '3') | list | count > 0 }}
+
       # Dynamic power limit (zone-dependent, Zone 2 capped to min(Hard Limit, inverter entity max))
-      # Mode '3' (AC Charging) → charge limit as max_power to script
-      # Zone 1               → Hard Limit
+      # Mode '3' (AC Charging) → charge limit
+      # Zone 1               → Hard Limit; if a sibling instance is charging: like Zone 2
       # Zone 2               → Min(Hard Limit, Max(0, PV - Reserve))
       inverter_entity_max: "{{ [1200, state_attr(active_power_entity, 'max') | float(1200)] | min }}"
       dynamic_max_power: >
         {% if states(solakon_mode) == '3' %}
           {{ [ac_charge_power_limit_int, inverter_entity_max] | min }}
-        {% elif is_state(cycle_active, 'on') %}
+        {% elif is_state(cycle_active, 'on') and not (sister_charging | bool(false)) %}
           {{ [hard_limit_int, inverter_entity_max] | min }}
         {% else %}
           {{ [[0, solar_power_float - (pv_charge_reserve_int | float(0))] | max, hard_limit_int, inverter_entity_max] | min }}
@@ -2648,12 +2655,50 @@ actions:
       grid_error_abs: "{{ (grid_power_float - (target_offset | float(0))) | abs }}"
 
       # At-Limit Guards — only relevant for normal discharge mode
-      # In AC mode the error direction is inverted, guards would incorrectly block PI
       # dynamic_max_power is the effective limit (Zone 1: hard_limit, Zone 2: min(hard_limit, Max(0, PV−Reserve)))
       # above_dynamic_max: PI continues when current > dynamic_max (e.g. PV drop) — allows downward correction
       above_dynamic_max: "{{ current_active_power > dynamic_max_power | float(0) }}"
       at_max_limit: "{{ raw_error > 0 and current_active_power >= dynamic_max_power | float(0) and not above_dynamic_max }}"
       at_min_limit: "{{ raw_error < 0 and current_active_power <= 0 }}"
+
+      # AC charging setpoint calculation based on actual power:
+      #   setpoint = actual charge power + error share × (offset − grid), clamped to 0 … charge limit
+      #   below min(minimum charge power, charge limit) → 0
+      #   written when |offset − grid| > tolerance or output above the charge limit
+      #   ramp running (actual charge power > 15 W below output) → only decrease
+      #   −1 = write nothing
+      ac_setpoint: >
+        {% set v = states(actual_power_sensor) | float(0) %}
+        {% set charge = -((v * 1000) if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else v) %}
+        {% set limit = dynamic_max_power | float(0) %}
+        {% set offset = target_offset | float(0) %}
+        {% set out = current_active_power | float(0) %}
+        {% set value = charge + (ac_error_share_value | float(1.0)) * (offset - grid_power_float) %}
+        {% set value = ([[value, 0] | max, limit] | min) | round(0) %}
+        {% if value < [ac_charge_min_power_int | float(0), limit] | min %}{% set value = 0 %}{% endif %}
+        {% if (offset - grid_power_float) | abs <= tolerance_int | float(0) and out <= limit %}
+          -1
+        {% elif charge < out - 15 and value > out %}
+          -1
+        {% elif (value - out) | abs < 0.5 %}
+          -1
+        {% else %}
+          {{ value | int }}
+        {% endif %}
+
+  # Second reading: grid or PV without a numeric value → abort without a write command
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ not (states(grid_power) | is_number) or not (states(solar_power) | is_number) }}"
+        sequence:
+          - action: system_log.write
+            data:
+              level: error
+              message: >
+                Solakon Error: sensor {{ grid_power if not (states(grid_power) | is_number) else solar_power }}
+                unavailable or without a numeric value (second reading). Aborting without a write command.
+          - stop: "Core sensor without a numeric value."
 
 
   # STEP 1: Set discharge current
@@ -2785,38 +2830,34 @@ actions:
               - delay:
                   seconds: "{{ wait_time_int }}"
 
-      # BRANCH B: AC Charging — PI Script with ac_charge_mode=true (inverted error calculation)
-      # at_max/at_min guards not applied: error direction is inverted in script
+      # BRANCH B: AC Charging — setpoint calculation (no PI, integral unchanged)
       - conditions:
           - condition: template
-            value_template: "{{ ac_charge_mode_active | bool(false) and grid_error_abs > tolerance_int }}"
+            value_template: "{{ ac_charge_mode_active | bool(false) }}"
         sequence:
-          # PI Script call (ac_charge_mode=true)
-          - action: "{{ pi_script }}"
-            data:
-              grid_power: !input grid_power_sensor
-              current_power: "{{ current_active_power }}"
-              target_offset: "{{ target_offset }}"
-              max_power: "{{ dynamic_max_power }}"
-              p_factor: "{{ ac_charge_p_factor_float }}"
-              i_factor: "{{ ac_charge_i_factor_float }}"
-              integral_entity: !input integral_helper
-              output_entity: !input active_power_number
-              ac_charge_mode: true
-              error_share: "{{ ac_error_share_value }}"
-          # Wait time — adaptive (if enabled) until actual power ≈ setpoint or timeout, otherwise fixed
           - if:
               - condition: template
-                value_template: "{{ adaptive_wait_bool }}"
+                value_template: "{{ ac_setpoint | int(-1) >= 0 }}"
             then:
-              - wait_template: >
-                  {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
-                timeout:
-                  seconds: "{{ wait_time_int }}"
-                continue_on_timeout: true
-            else:
-              - delay:
-                  seconds: "{{ wait_time_int }}"
+              # Output → setpoint
+              - action: number.set_value
+                target:
+                  entity_id: !input active_power_number
+                data:
+                  value: "{{ ac_setpoint | int }}"
+              # Wait time — adaptive (if enabled) until actual power ≈ setpoint or timeout, otherwise fixed
+              - if:
+                  - condition: template
+                    value_template: "{{ adaptive_wait_bool }}"
+                then:
+                  - wait_template: >
+                      {{ (states(actual_power_sensor) | float(0) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+                    timeout:
+                      seconds: "{{ wait_time_int }}"
+                    continue_on_timeout: true
+                else:
+                  - delay:
+                      seconds: "{{ wait_time_int }}"
 
       # BRANCH C: Normal PI Controller (Zone 1 / Zone 2)
       - conditions:

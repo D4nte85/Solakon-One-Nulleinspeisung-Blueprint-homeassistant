@@ -218,8 +218,8 @@ blueprint:
           description: |
             Separate input_number entity (0.0–1.0) for the error share while AC charging (Pool 2).
             ⚠️ Must be entered in the instance automation as "AC Charge Error Share Helper" —
-            separate from the error share helper above, otherwise the AC-charge PI freezes
-            as soon as this instance leaves mode '1'.
+            separate from the error share helper above, otherwise the charge power freezes
+            at 0 W as soon as this instance leaves mode '1'.
             Settings: min: 0, max: 1, step: 0.01.
           default: {}
           selector:
