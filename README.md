@@ -158,7 +158,7 @@ leerere Instanz bekommt den größeren Ladeanteil.
    AC-Lade-Zustand-Helfer aus Punkt 5)
 7. In der Instanz-Automation als „AC-Lade Fehler-Anteil Helfer" eintragen
 
-### 9. Input Number Helper für Dynamischen Offset (Optional)
+### 9. Input Number Helper für den Dynamic Offset (Optional)
 
 Wenn Sie den Nullpunkt-Offset zur Laufzeit dynamisch anpassen möchten, empfehlen wir den **Solakon ONE — Dynamischer Offset Blueprint**. Dieser erstellt und befüllt die benötigten Helper automatisch.
 
@@ -179,13 +179,13 @@ Alternativ manuell:
 Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Rechenlogik ist in ein separates **Script-Blueprint** (`PI-Regler`) ausgelagert, das aus der Hauptautomatisierung heraus aufgerufen wird.
 
 * **P-Anteil:** Reagiert sofort auf aktuelle Abweichungen. Konfigurierbare Aggressivität über den P-Faktor.
-* **I-Anteil:** Summiert Abweichungen über die Zeit auf, eliminiert bleibende Regelabweichungen. Anti-Windup via Back-Calculation: Integral wird nach jedem Eingriff auf den Wert korrigiert, der den tatsächlichen (ggf. geklemmten) Ausgang produziert — Clamp auf ±effective_max, gerundet auf 2 Nachkommastellen. Automatischer Reset bei Zonenwechsel. Toleranz-Decay 5%/Zyklus wenn Fehler ≤ Toleranz und |Integral| > 10. Zone-0-Einfrieren bei aktivem Überschuss.
+* **I-Anteil:** Summiert Abweichungen über die Zeit auf, eliminiert bleibende Regelabweichungen. Anti-Windup via Back-Calculation: Integral wird nach jedem Eingriff auf den Wert korrigiert, der den tatsächlichen (ggf. geklemmten) Ausgang produziert — Clamp auf ±effective_max, gerundet auf 2 Nachkommastellen. Automatischer Reset bei Zonenwechsel. Integral-Decay 5%/Zyklus wenn Fehler ≤ Totband und |Integral| > 10. Zone-0-Einfrieren bei aktivem Überschuss.
 * **Fehlerberechnung:** `raw_error = (grid − target_offset) × error_share`. `error_share` skaliert den Fehler auf den Anteil dieser Instanz (Standard 1.0 = voller Fehler). Zwei unabhängige Pools im Multi-Instanz-Betrieb: Nulleinspeisung (`error_share_entity`) und AC-Laden (`ac_error_share_entity`) — siehe Multi-Instancing-Abschnitt.
 * **Dynamisches Power-Limit:** Zone 1 → Hard Limit; lädt eine Schwester-Instanz (Richtungssperre, Multi-Instancing) → wie Zone 2. Zone 2 → `Min(Hard Limit, Max(0, PV − Reserve))`. AC Laden → konfigurierbares Lade-Limit. Tarif-Laden → kein PI (direkter Wert).
-* **AC Laden — Stellwertrechnung statt PI:** Ladesollwert = Ist-Ladeleistung + `error_share` × (AC-Offset − Grid), geklemmt auf 0 … Lade-Limit, in einem Schritt. Geschrieben wird bei `|AC-Offset − Grid| > Toleranz` oder Output über dem Lade-Limit. Unter der Mindestladeleistung (Standard 50 W) wird 0 W geschrieben. Solange die Rampe läuft (Ist-Ladeleistung mehr als 15 W unter dem Output), wird nur gesenkt: Die Ladeleistung steigt nur mit etwa 34 W/s, der Netzsensor zeigt währenddessen einen älteren Stand. Das Integral bleibt im AC-Laden unverändert.
-* **Zweitlesung:** Netz und PV werden vor der PI-Phase erneut gelesen. Liefert einer der beiden keine Zahl, endet der Lauf mit einem Logeintrag ohne Schreibbefehl — sonst rechnete die PI-Phase mit 0 W, in Zone 2 fiele das Limit auf 0 und der Output würde genullt.
-* **PI-Aufruf-Guard:** Zone 0 aktiv → PI nicht aufgerufen, Integral eingefroren. Tarif-Laden aktiv → direkt setzen. AC Laden aktiv → Stellwertrechnung, kein PI. Normal → PI nur wenn (`|Fehler| > Toleranz` ODER `current > dynamic_max`) UND kein At-Limit. `at_max_limit` = false wenn `current > dynamic_max` (PV-Einbruch) → PI korrigiert nach unten, auch bei Netzfehler innerhalb der Toleranz.
-* **Ausgangs-Stillstandserkennung:** Steht der Sollwert am oberen Limit und besteht der Netzfehler in dieselbe Richtung fort (`at_max_limit`), schreibt der PI nicht mehr — er kann nicht weiter hochregeln. Bleibt der Wechselrichter in genau diesem Zustand stehen, ohne den Modus zu wechseln, erreicht ihn kein Befehl mehr; auch Fall D greift nicht, da der Modus weiterhin `'1'` ist. Erkannt wird das über die **Abweichung der Ist-Leistung vom Limit**: mehr als 5 % Abweichung bei einem Ist-Sensor, dessen `last_updated` seit über 300 s stillsteht. Der Zeitstempel rückt nur bei einer Wertänderung vor und steht damit für „Wert seit dann unverändert" — ein Ist-Sensor, der um den abweichenden Wert rauscht, löst entsprechend nicht aus. Aktion: Integral = 0, Output → 0 W, Timer-Toggle, Modus → `'0'`; im nächsten Lauf holt **Fall D** das Gerät regulär zurück (Timer-Toggle + Modus `'1'`), der PI rampt wieder hoch. Wiederholt sich frühestens alle 300 s, gemessen an `last_changed` des Modus-Entity. Gilt nur im normalen Entlade-Modus — Zone 0, Tarif-Laden und AC Laden halten den Ausgang bewusst unterhalb ihres jeweiligen Limits.
+* **AC Laden — Stellwertrechnung statt PI:** Ladesollwert = Ist-Ladeleistung + `error_share` × (AC-Offset − Grid), geklemmt auf 0 … Lade-Limit, in einem Schritt. Geschrieben wird bei `|AC-Offset − Grid| > Totband` oder Ausgangsleistung über dem Lade-Limit. Unter der Mindestladeleistung (Standard 50 W) wird 0 W geschrieben. Solange die Rampe läuft (Ist-Ladeleistung mehr als 15 W unter der Ausgangsleistung), wird nur gesenkt: Die Ladeleistung steigt nur mit etwa 34 W/s, der Netzsensor zeigt währenddessen einen älteren Stand. Das Integral bleibt im AC-Laden unverändert.
+* **Zweitlesung:** Netz und PV werden vor der PI-Phase erneut gelesen. Liefert einer der beiden keine Zahl, endet der Lauf mit einem Logeintrag ohne Schreibbefehl — sonst rechnete die PI-Phase mit 0 W, in Zone 2 fiele das Limit auf 0 und die Ausgangsleistung würde genullt.
+* **PI-Aufruf-Guard:** Zone 0 aktiv → PI nicht aufgerufen, Integral eingefroren. Tarif-Laden aktiv → direkt setzen. AC Laden aktiv → Stellwertrechnung, kein PI. Normal → PI nur wenn (`|Fehler| > Totband` ODER `current > dynamic_max`) UND kein At-Limit. `at_max_limit` = false wenn `current > dynamic_max` (PV-Einbruch) → PI korrigiert nach unten, auch bei Netzfehler innerhalb der Totband.
+* **Ausgangs-Stillstandserkennung:** Steht der Sollwert am oberen Limit und besteht der Netzfehler in dieselbe Richtung fort (`at_max_limit`), schreibt der PI nicht mehr — er kann nicht weiter hochregeln. Bleibt der Wechselrichter in genau diesem Zustand stehen, ohne den Modus zu wechseln, erreicht ihn kein Befehl mehr; auch Fall D greift nicht, da der Modus weiterhin `'1'` ist. Erkannt wird das über die **Abweichung der Ist-Leistung vom Limit**: mehr als 5 % Abweichung bei einem Ist-Sensor, dessen `last_updated` seit über 300 s stillsteht. Der Zeitstempel rückt nur bei einer Wertänderung vor und steht damit für „Wert seit dann unverändert" — ein Ist-Sensor, der um den abweichenden Wert rauscht, löst entsprechend nicht aus. Aktion: Integral = 0, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'`; im nächsten Lauf holt **Fall D** das Gerät regulär zurück (Timer-Toggle + Modus `'1'`), der PI rampt wieder hoch. Wiederholt sich frühestens alle 300 s, gemessen an `last_changed` des Modus-Entity. Gilt nur im normalen Entlade-Modus — Zone 0, Tarif-Laden und AC Laden halten den Ausgang bewusst unterhalb ihres jeweiligen Limits.
 
 ---
 
@@ -196,7 +196,7 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
 | **0 — Überschuss-Einspeisung** | SOC ≥ Export-Schwelle UND PV > Output + Grid + PV-Hysterese | `'1'` | 2 A | Hard Limit | **Optional.** Integral eingefroren. Blockiert GT und G. |
 | **1 — Aggressive Entladung** | SOC > Zone-1-Schwelle | `'1'` | Konfigurierter Max-Wert | 0W + Offset 1 | Läuft **bis SOC ≤ Zone-3-Schwelle**. Auch nachts aktiv. |
 | **2 — Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `'1'` | **0 A** | 0W + Offset 2 | Dynamisches Limit: `Min(Hard Limit, Max(0, PV − Reserve))`. Optional: Nachtabschaltung. |
-| **3 — Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` | Max-Wert (Ruhe) | — | Output = 0 W. Vollständiger Batterieschutz. Absoluter Vorrang. Verhalten des Geräts siehe [App-Einstellungen](#voraussetzung-app-einstellungen). |
+| **3 — Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` | Max-Wert (Ruhe) | — | Ausgangsleistung 0 W. Vollständiger Batterieschutz. Absoluter Vorrang. Verhalten des Geräts siehe [App-Einstellungen](#voraussetzung-app-einstellungen). |
 
 ---
 
@@ -229,18 +229,18 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 | **0A** | Surplus-Bool = `off` UND (SOC ≥ Export-Schwelle UND (PV > Output + Grid + PV-Hysterese ODER (PV = 0 UND PV=0-Latch scharf)) **ODER** Surplus-Forecast-Forced) | Zone 0 Start: Surplus-Bool → `on` |
 | **0B** | Surplus-Bool = `on` UND **NICHT Surplus-Forecast-Forced** UND (SOC < Export-Schwelle − SOC-Hysterese ODER (PV ≤ Output + Grid − PV-Hysterese UND **NICHT Austritts-Sperre**)) | Zone 0 Ende: Surplus-Bool → `off`, Integral = 0 |
 | **A** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'` |
-| **B** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC ≤ Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Output → 0W (bestätigt über Ist-Leistung, 1× Retry), Timer-Toggle, Modus → `'0'` |
-| **C** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC ≤ Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Output → 0W (bestätigt über Ist-Leistung, 1× Retry), Timer-Toggle, Modus → `'0'` |
+| **B** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC ≤ Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Ausgangsleistung → 0 W (bestätigt über Ist-Leistung, 1× Retry), Timer-Toggle, Modus → `'0'` |
+| **C** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC ≤ Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Ausgangsleistung → 0 W (bestätigt über Ist-Leistung, 1× Retry), Timer-Toggle, Modus → `'0'` |
 | **D** | (Zyklus = `on` ODER **Ladegrund gilt**) UND Modus ∉ `{'1','3'}` UND (**Ladegrund gilt** ODER SOC > Zone-3-Schwelle) UND (**keine Entladesperre** ODER Lade-Bool = `on`) | Recovery: Timer-Toggle, Modus → `'3'` wenn der Ladegrund gilt, sonst `'1'` |
-| **GT** | Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel − SOC-Hysterese UND **Modus ≠ `'3'`** UND **NICHT AC-Lade-Bool = `on`** UND **NICHT Surplus-Bool = `on`** UND **NICHT PV-Forecast-Suppressed** | Tarif-Laden Start: Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'` |
+| **GT** | Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel − SOC-Hysterese UND **Modus ≠ `'3'`** UND **NICHT AC-Lade-Bool = `on`** UND **NICHT Surplus-Bool = `on`** UND **NICHT PV-Forecast-Suppressed** | Tarif-Laden Start: Tarif-Bool = `on`, Timer-Toggle, Ausgangsleistung → Ladeleistung (direkt), Modus → `'3'` |
 | **HT** | Tarif-Bool = `on` UND (**keine Günstig-Aussage** ODER SOC ≥ Tarif-Ladeziel) | Tarif-Laden Ende: Tarif-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
-| **TM** | Tarif aktiv UND Preis < Teuer-Schwelle UND kein AC/Tarif-Laden UND **NICHT Surplus-Bool = `on`** UND **Modus = `'1'`** UND **NICHT PV-Forecast-Suppressed** | Discharge-Lock: Integral = 0, Zyklus = `off` (wenn aktiv), Output → 0W, Timer-Toggle, Modus → `'0'` |
-| **G** | AC aktiv UND SOC < Ladeziel UND **Modus ≠ `'3'`** UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + ΣOutput_entladend) < min(Offset, 0) − Hysterese | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Output → 0W |
+| **TM** | Tarif aktiv UND Preis < Teuer-Schwelle UND kein AC/Tarif-Laden UND **NICHT Surplus-Bool = `on`** UND **Modus = `'1'`** UND **NICHT PV-Forecast-Suppressed** | Discharge-Lock: Integral = 0, Zyklus = `off` (wenn aktiv), Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'` |
+| **G** | AC aktiv UND SOC < Ladeziel UND **Modus ≠ `'3'`** UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + ΣOutput_entladend) < min(Offset, 0) − Hysterese | AC Laden Start: AC-Bool = `on`, Timer-Toggle, Modus → `'3'`, Ausgangsleistung → 0 W |
 | **H** | Modus = `'3'` UND AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND (**AC Laden deaktiviert** ODER SOC ≥ Ladeziel ODER (Grid ≥ `ac_charge_offset + Hysterese` UND eigener Output = 0 W)) | AC Laden Ende: AC-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
-| **I** | Lade-Bool = `on` UND (Modus ≠ `'3'` ODER **beide** Lade-Bools = `on`) | Safety-Korrektur: Integral = 0, betroffene Lade-Bools → `off`; Modus und Output bleiben unverändert |
+| **I** | Lade-Bool = `on` UND (Modus ≠ `'3'` ODER **beide** Lade-Bools = `on`) | Safety-Korrektur: Integral = 0, betroffene Lade-Bools → `off`; Modus und Ausgangsleistung bleiben unverändert |
 | **I** | Modus = `'3'` UND NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` | Safety-Korrektur: Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` + 0W (Timer-Toggle) |
-| **E** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Output → 0W, Timer-Toggle, Modus → `'1'` |
-| **F** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Surplus-Bool = `on` UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Output → 0W, Timer-Toggle, Modus → `'0'` |
+| **E** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Entladesperre (Preis < teuer) UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht | Zone 2 Start: Integral = 0, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'1'` |
+| **F** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Surplus-Bool = `on` UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv | Nachtabschaltung: Integral = 0, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'` |
 
 ---
 
@@ -252,7 +252,7 @@ Ermöglicht aktives Einspeisen von PV-Überschuss wenn der Akku voll ist. SOC- u
 * **Eintritts-Bedingung:** SOC ≥ Export-Schwelle UND (PV > (Output + Grid + PV-Hysterese) ODER (PV = 0 UND PV=0-Latch scharf, siehe Abschnitt 13))
 * **Austritts-Bedingung:** (PV ≤ (Output + Grid − PV-Hysterese) UND NICHT Austritts-Sperre) ODER SOC < (Export-Schwelle − SOC-Hysterese) — beide Terme werden blockiert solange Surplus-Forecast forciert (siehe Abschnitt 11); die optionale Austritts-Sperre (siehe Abschnitt 12) blockiert nur den PV-Term
 * **Blockiert:** Tarif-Laden (Fall GT) und AC-Laden (Fall G) können nicht starten solange Zone 0 aktiv ist.
-* **Verhalten:** Output auf Hard Limit, Entladestrom 2 A (Stabilitätspuffer), Integral eingefroren.
+* **Verhalten:** Ausgangsleistung auf Hard Limit, Entladestrom 2 A (Stabilitätspuffer), Integral eingefroren.
 * **Deaktiviert:** Klassische Nulleinspeisung — kein aktives Einspeisen.
 
 **Zum 2-A-Stabilitätspuffer:** Ist der Akku voll, kann kein Strom mehr hineinfließen — der Solakon kann PV aber nur regeln solange Batteriestrom fließt, also muss er in diesem Fall herausfließen. Ohne diesen Stromfluss (0 A) schaltet das Gerät komplett ab. Die 2 A sind deshalb eine Entladefreigabe (Obergrenze, kein fester Sollwert) und bewusst niedrig gewählt, um die Batterie dabei so wenig wie möglich zu belasten.
@@ -270,7 +270,7 @@ Laden der Batterie wenn eine externe Einspeisung ins Netz erkannt wird. Eintritt
 * **Abbruch (Fall H):** AC Laden deaktiviert **ODER** SOC ≥ Ladeziel **ODER** (Grid ≥ Offset + Hysterese UND eigener Output = 0 W). Das Abschalten der Option beendet also eine laufende Ladung — geprüft wird dafür der Lade-Helfer selbst, nicht die Option.
 * **Stellwertrechnung statt PI:** Ladesollwert = Ist-Ladeleistung + `error_share` × (Offset − Grid), geklemmt auf 0 … Max. Ladeleistung. Unter der **Mindestladeleistung** (Standard 50 W, 0–300 W) wird 0 W geschrieben; kleinere Ladeleistungen setzt das Gerät nur pendelnd um. Liegt sie über der Max. Ladeleistung, gilt die Max. Ladeleistung als Schwelle. Solange die Rampe läuft (Ist-Ladeleistung mehr als 15 W unter dem Output), wird nur gesenkt (Ladeleistung steigt nur mit ~34 W/s). Die Richtung stimmt mit der gemessenen Ist-Leistung überein, eine bleibende Abweichung des Geräts fällt heraus — ein I-Anteil ist unnötig.
 * **Richtungssperre (Multi-Instancing):** Solange diese Instanz lädt, entlädt keine Schwester-Instanz mit eingetragenem `sister_mode_selects` in Zone 1 aus der Batterie — sonst deckte deren PI die Ladeleistung als Hausverbrauch, und die Stellwertrechnung läse diese Entladung als Überschuss.
-* **Rückkehr:** Zone 1 → Modus `'1'` (Timer-Toggle) + Integral Reset. Zone 2 → Modus `'0'` (Timer-Toggle) + Output 0W + Integral Reset.
+* **Rückkehr:** Zone 1 → Modus `'1'` (Timer-Toggle) + Integral Reset. Zone 2 → Modus `'0'` (Timer-Toggle) + Ausgangsleistung 0 W + Integral Reset.
 
 ---
 
@@ -298,9 +298,9 @@ Du kannst für beide Schwellenwerte entweder feste Zahlenwerte nutzen oder **dyn
 #### Tarif-Laden (Fall GT)
 
 * **Eintritts-Bedingung:** Tarif-Arbitrage aktiviert **UND** Preis < Günstig-Schwelle **UND** SOC < Ziel-SOC − SOC-Hysterese **UND** Modus ≠ `'3'` **UND** kein AC-Laden aktiv **UND** kein Überschuss-Laden aktiv.
-* **Verhalten:** Setzt die konfigurierte Ladeleistung (`tariff_charge_power`) — kein PI-Regler, kein Toleranz-Check.
+* **Verhalten:** Setzt die konfigurierte Ladeleistung (`tariff_charge_power`) — kein PI-Regler, kein Totband-Check.
 * **Abbruch:** keine günstige Preisaussage mehr **ODER** SOC-Ladeziel erreicht. Keine Preisaussage heißt: Preis ≥ Günstig-Schwelle, Tarif-Arbitrage abgeschaltet, PV-Forecast-Suppressed oder Preissensor unlesbar. Ein einzelner Zyklus ohne Preisaussage beendet die Ladung; sie startet über Fall GT neu, sobald wieder ein günstiger Preis ausgewiesen ist.
-* **Rückkehr:** Zone 1 → Timer-Toggle + Modus `'1'` / Zone 2 → Timer-Toggle + Modus `'0'` + Output 0W.
+* **Rückkehr:** Zone 1 → Timer-Toggle + Modus `'1'` / Zone 2 → Timer-Toggle + Modus `'0'` + Ausgangsleistung 0 W.
 * **Priorität:** Tarif-Laden (GT) liegt vor AC-Laden (G) im choose-Block.
 
 #### Entladesperre / Discharge-Lock (Fall TM)
@@ -332,7 +332,7 @@ Statt eines festen Werts wird ein **Toggle zwischen 3598 und 3599** gesendet. Di
 Betrifft **nur Zone 2** (Fall F). Zone 1, AC Laden und Überschuss-Einspeisung (Zone 0) laufen auch nachts weiter — Zone 0 hat Vorrang vor der Nachtabschaltung.
 
 * **Schwelle:** PV-Leistung unter dem Wert der **PV-Ladereserve** (kein separater Parameter)
-* **Verhalten:** Output 0 W, Timer-Toggle, Modus → `'0'`, Integral reset
+* **Verhalten:** Ausgangsleistung 0 W, Timer-Toggle, Modus → `'0'`, Integral reset
 * **Zone 2 Reaktivierung:** Sobald PV wieder über die PV-Ladereserve steigt, greift Fall E
 
 ---
@@ -418,9 +418,9 @@ Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher, wenn PV d
 |:----------|:---------|:----|:----|:-------------|
 | **P-Faktor** | 1.3 | 0.1 | 5.0 | Proportional-Verstärkung. Höher = aggressiver. |
 | **I-Faktor** | 0.05 | 0.01 | 0.2 | Integral-Verstärkung. Höher = schnellere Fehlerkorrektur, aber instabiler. |
-| **Toleranzbereich** | 25 W | 0 | 200 W | Totband um Regelziel. Keine PI-Korrektur innerhalb (stattdessen Integral-Decay). |
+| **Totband** | 25 W | 0 | 200 W | Totband um Regelziel. Keine PI-Korrektur innerhalb (stattdessen Integral-Decay). |
 | **Wartezeit** | 3 s | 0 | 30 s | Wartezeit nach Leistungsänderung. Ist "Adaptive Wartezeit" aktiviert, gilt der Wert nur als Timeout. |
-| **Adaptive Wartezeit** | Aus | – | – | Bricht die Wartezeit früh ab wenn Ist-Leistung ≈ Sollwert ± Toleranz (beim Laden: −Ist-Leistung, weil die Ist-Leistung dann negativ ist). Vorsicht bei langsamen externen Netzmesswerten (z.B. IR-Lesekopf) — kann zu verfrühtem Reglereingriff führen. |
+| **Adaptive Wartezeit** | Aus | – | – | Bricht die Wartezeit früh ab wenn Ist-Leistung ≈ Sollwert ± Totband (beim Laden: −Ist-Leistung, weil die Ist-Leistung dann negativ ist). Vorsicht bei langsamen externen Netzmesswerten (z.B. IR-Lesekopf) — kann zu verfrühtem Reglereingriff führen. |
 
 > **Hinweis:** P- und I-Faktor gelten für Zone 1 und Zone 2. Für den AC-Lade-Modus werden separate Faktoren verwendet.
 

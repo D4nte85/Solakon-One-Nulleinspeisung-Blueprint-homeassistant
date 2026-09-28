@@ -36,19 +36,19 @@ flowchart TD
         Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
 
         %% ── Fall B: Zone 3 (Zyklus on) ──────────────────────────────────
-        Z3_A["🛑 Zone 3 aktivieren   Zyklus = off   Integral = 0   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Output → 0 W (bestätigt, 1× Retry)   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
+        Z3_A["🛑 Zone 3 aktivieren   Zyklus = off   Integral = 0   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Ausgangsleistung → 0 W (bestätigt, 1× Retry)   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
         %% ── Fall C: Zone 3 (Absicherung) ────────────────────────────────
-        Z3_B["🛑 Zone 3 Absicherung   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Output → 0 W (bestätigt, 1× Retry)   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
+        Z3_B["🛑 Zone 3 Absicherung   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Ausgangsleistung → 0 W (bestätigt, 1× Retry)   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
         %% ── Fall D: Recovery ─────────────────────────────────────────────
         RECOVERY["🔄 Recovery — Modus-Reaktivierung   Timer-Toggle (3598↔3599)   Ladegrund gilt (AC-Option an bzw. Preis günstig) → Modus '3'   sonst → Modus '1'   (kein Integral-Reset, kein Zonenwechsel)"]
 
         %% ── Fall E: Zone 2 ───────────────────────────────────────────────
-        Z2_START["🔋 Zone 2 aktivieren   Integral = 0   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
+        Z2_START["🔋 Zone 2 aktivieren   Integral = 0   Ausgangsleistung → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
 
         %% ── Fall F: Nachtabschaltung ─────────────────────────────────────
-        NIGHT["🌙 Nachtabschaltung   Integral = 0   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
+        NIGHT["🌙 Nachtabschaltung   Integral = 0   Ausgangsleistung → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
     end
     style SG_SOC fill:none,stroke:#28a745,stroke-width:5,stroke-dasharray:6,color:#000
@@ -57,15 +57,15 @@ flowchart TD
     subgraph SG_TARIFF ["💹 Tarif-Arbitrage   (Falls GT, HT, TM)"]
 
         %% ── Fall GT: Tarif-Laden Eintritt ────────────────────────────────
-        TARIFF_START["💹 Tarif-Laden aktivieren   Tarif-Lade-Bool → on   Timer-Toggle (3598↔3599)   Output → Ladeleistung (direkt, kein PI)   Modus → '3' (INV Charge PV Priority)"]
+        TARIFF_START["💹 Tarif-Laden aktivieren   Tarif-Lade-Bool → on   Timer-Toggle (3598↔3599)   Ausgangsleistung → Ladeleistung (direkt, kein PI)   Modus → '3' (INV Charge PV Priority)"]
 
         %% ── Fall HT: Tarif-Laden Beenden ─────────────────────────────────
         TARIFF_END{{"Integral = 0   Tarif-Lade-Bool → off   Aktuelle Zone?"}}
-        TARIFF_END_Z1["💹 Tarif-Laden beenden (Zone 1)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
-        TARIFF_END_Z2["💹 Tarif-Laden beenden (Zone 2)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
+        TARIFF_END_Z1["💹 Tarif-Laden beenden (Zone 1)   Ausgangsleistung → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
+        TARIFF_END_Z2["💹 Tarif-Laden beenden (Zone 2)   Ausgangsleistung → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
         %% ── Fall TM: Discharge-Lock ──────────────────────────────────────
-        TARIFF_MID["🔒 Discharge-Lock   Integral = 0   Zyklus = off (nur wenn Zone 1)   Surplus-Bool → off (nur wenn aktiv)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
+        TARIFF_MID["🔒 Discharge-Lock   Integral = 0   Zyklus = off (nur wenn Zone 1)   Surplus-Bool → off (nur wenn aktiv)   Ausgangsleistung → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
     end
     style SG_TARIFF fill:none,stroke:#1a7f1a,stroke-width:5,stroke-dasharray:6,color:#000
@@ -74,20 +74,20 @@ flowchart TD
     subgraph SG_AC ["⚡ AC-Laden & Safety   (Falls G, H, I)"]
 
         %% ── Fall G: AC Laden Eintritt ────────────────────────────────────
-        AC_START["⚡ AC Laden aktivieren   AC-Lade-Bool → on   Timer-Toggle (3598↔3599)   Output → 0 W (PI startet sauber)   Modus → '3' (INV Charge PV Priority)"]
+        AC_START["⚡ AC Laden aktivieren   AC-Lade-Bool → on   Timer-Toggle (3598↔3599)   Ausgangsleistung → 0 W (PI startet sauber)   Modus → '3' (INV Charge PV Priority)"]
 
         %% ── Fall H: AC Laden Beenden ─────────────────────────────────────
         AC_END{{"Integral = 0   AC-Lade-Bool → off   Aktuelle Zone?"}}
-        AC_END_Z1["⚡ AC Laden beenden (Zone 1)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
-        AC_END_Z2["⚡ AC Laden beenden (Zone 2)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
+        AC_END_Z1["⚡ AC Laden beenden (Zone 1)   Ausgangsleistung → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
+        AC_END_Z2["⚡ AC Laden beenden (Zone 2)   Ausgangsleistung → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
         %% ── Fall I: Safety — Lade-Session ohne Modus '3' ────────────────
-        SAFETY_I_SESSION["⚠️ Safety — Lade-Session geräumt   Integral = 0   betroffene Lade-Bools → off   Modus und Output unverändert"]
+        SAFETY_I_SESSION["⚠️ Safety — Lade-Session geräumt   Integral = 0   betroffene Lade-Bools → off   Modus und Ausgangsleistung unverändert"]
 
         %% ── Fall I: Safety — Modus '3' ohne aktive Lade-Session ─────────
         SAFETY_I{{"Integral = 0   Aktuelle Zone?"}}
-        SAFETY_I_Z1["⚠️ Safety (Zone 1)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
-        SAFETY_I_Z2["⚠️ Safety (Zone 2)   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
+        SAFETY_I_Z1["⚠️ Safety (Zone 1)   Ausgangsleistung → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
+        SAFETY_I_Z2["⚠️ Safety (Zone 2)   Ausgangsleistung → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
     end
     style SG_AC fill:none,stroke:#0066cc,stroke-width:5,stroke-dasharray:6,color:#000
@@ -142,7 +142,7 @@ flowchart TD
         REST_CURRENT -- Nein --> PI_GATE
 
         PI_GATE{{"Modus ∈ {'1','3'}?   UND (Zyklus = on ODER Nacht-Sperre inaktiv ODER PV ≥ Reserve)"}}
-        PI_GATE -- Nein --> END_SKIP([Ende — kein Output])
+        PI_GATE -- Nein --> END_SKIP([Ende — kein Schreibbefehl])
         PI_GATE -- Ja --> REREAD
 
         %% ── Zweitlesung ──────────────────────────────────────────────────
@@ -162,30 +162,30 @@ flowchart TD
         TIMEOUT_CHECK -- Nein --> PI_DECISION
         TIMEOUT_RESET --> PI_DECISION
 
-        %% ── Schritt 3: Output & Integral ─────────────────────────────────
+        %% ── Schritt 3: Ausgangsleistung & Integral ─────────────────────────────────
         PI_DECISION{{"Surplus-Bool = on?   → Zone 0 aktiv"}}
         PI_DECISION -- Ja --> CALC_SURPLUS
         PI_DECISION -- Nein --> TARIFF_GATE
 
         %% ── Zone 0 Pfad ──────────────────────────────────────────────────
-        CALC_SURPLUS["☀️ Zone 0 — Überschuss-Einspeisung   Output → Hard Limit   Integral einfrieren (integral_old unverändert)   Wartezeit"]
+        CALC_SURPLUS["☀️ Zone 0 — Überschuss-Einspeisung   Ausgangsleistung → Hard Limit   Integral einfrieren (integral_old unverändert)   Wartezeit"]
 
         %% ── Tarif-Laden Pfad ─────────────────────────────────────────────
         TARIFF_GATE{{"Tarif-Lade-Bool = on?"}}
         TARIFF_GATE -- Ja --> CALC_TARIFF
         TARIFF_GATE -- Nein --> AC_GATE
 
-        CALC_TARIFF["💹 Tarif-Laden — Direkt setzen (kein PI)   Output → tariff_charge_power   Wartezeit"]
+        CALC_TARIFF["💹 Tarif-Laden — Direkt setzen (kein PI)   Ausgangsleistung → tariff_charge_power   Wartezeit"]
 
         %% ── AC Laden Pfad ────────────────────────────────────────────────
         AC_GATE{{"AC-Lade-Bool = on?"}}
         AC_GATE -- Ja --> CALC_AC
         AC_GATE -- Nein --> NORMAL_GATE
 
-        CALC_AC["⚡ AC Laden — Stellwertrechnung (kein PI, Integral unverändert)   Stellwert = Ist-Ladeleistung + error_share × (ac_charge_offset − grid)   error_share (Pool 2, AC-Laden): missing_i / Σ(missing_j) — nur unter gleichzeitig AC-ladenden Instanzen, von Leistungsverteilung gesetzt (Standard 1.0)   missing_i = (Ladeziel_i−SOC_i)/100 × Kap_i   clamp(0, Lade-Limit)   < min(Mindestladeleistung, Lade-Limit) → 0 W   nichts schreiben wenn: |Offset − Grid| ≤ Toleranz UND Output ≤ Lade-Limit   ODER Rampe läuft (Ist-Ladeleistung > 15 W unter Output) UND Stellwert > Output   sonst → Output → WR + Wartezeit"]
+        CALC_AC["⚡ AC Laden — Stellwertrechnung (kein PI, Integral unverändert)   Stellwert = Ist-Ladeleistung + error_share × (ac_charge_offset − grid)   error_share (Pool 2, AC-Laden): missing_i / Σ(missing_j) — nur unter gleichzeitig AC-ladenden Instanzen, von Leistungsverteilung gesetzt (Standard 1.0)   missing_i = (Ladeziel_i−SOC_i)/100 × Kap_i   clamp(0, Lade-Limit)   < min(Mindestladeleistung, Lade-Limit) → 0 W   nichts schreiben wenn: |Offset − Grid| ≤ Totband UND Output ≤ Lade-Limit   ODER Rampe läuft (Ist-Ladeleistung > 15 W unter Output) UND Stellwert > Output   sonst → Output → WR + Wartezeit"]
 
         %% ── Normaler PI-Pfad ─────────────────────────────────────────────
-        NORMAL_GATE{{"(Fehler > Toleranz ODER current > dynamic_max)?   UND kein At-Max / At-Min-Limit?   (at_max = false wenn current > dynamic_max — PI korrigiert nach unten)"}}
+        NORMAL_GATE{{"(Fehler > Totband ODER current > dynamic_max)?   UND kein At-Max / At-Min-Limit?   (at_max = false wenn current > dynamic_max — PI korrigiert nach unten)"}}
         NORMAL_GATE -- Ja --> CALC_NORMAL
         NORMAL_GATE -- Nein --> INTEGRAL_DECAY
 
@@ -197,7 +197,7 @@ flowchart TD
         STALL_GATE{{"Ausgang steht?   At-Max-Limit UND kein AC Laden   UND |Ist − dynamic_max| > 5 % · dynamic_max   UND Ist-Sensor seit > 300 s unverändert (last_updated)   UND Modus seit > 300 s unverändert (last_changed)"}}
         STALL_GATE -- Nein --> END_OK
         STALL_GATE -- Ja --> STALL_RECOVER
-        STALL_RECOVER["⚠️ Stillstand — Rückholung   Integral = 0   Output → 0 W   Timer-Toggle (3598↔3599)   Modus → '0'   → nächster Lauf: Fall D (Timer-Toggle + Modus '1'), PI rampt hoch"]
+        STALL_RECOVER["⚠️ Stillstand — Rückholung   Integral = 0   Ausgangsleistung → 0 W   Timer-Toggle (3598↔3599)   Modus → '0'   → nächster Lauf: Fall D (Timer-Toggle + Modus '1'), PI rampt hoch"]
         STALL_RECOVER --> END_OK
 
         CALC_SURPLUS --> END_OK([Ende])

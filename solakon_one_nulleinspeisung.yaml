@@ -3,12 +3,12 @@ blueprint:
   description: |
     Dynamische Nulleinspeisung für den Solakon ONE Wechselrichter mit PI-Regler, SOC-Zonenlogik,
     optionaler Überschuss-Einspeisung (inkl. Surplus-Forecast-Eintritt), optionalem AC Laden,
-    optionaler Tarif-Arbitrage (inkl. PV-Forecast-Unterdrückung) und optionaler adaptiver Wartezeit.
+    optionaler Tarif-Arbitrage (inkl. Prognose-Unterdrückung) und optionaler adaptiver Wartezeit.
 
     <details>
     <summary><b>🧠 PI-Regler & Steuerlogik</b> 👈</summary>
 
-    Der Kern des Blueprints ist ein PI-Regler, der das AC-Output-Limit dynamisch anpasst.
+    Der Kern des Blueprints ist ein PI-Regler, der das Limit der AC-Ausgangsleistung dynamisch anpasst.
     Die Rechenlogik ist in ein separates Script-Blueprint (`PI-Regler`) ausgelagert.
 
     - **Regelgröße:** Netzleistung (Shelly/Stromzähler). Positiv = Bezug, negativ = Einspeisung.
@@ -17,7 +17,7 @@ blueprint:
     - **I-Anteil:** Summiert Abweichungen über die Zeit auf — eliminiert bleibende Regelabweichungen.
     - **Anti-Windup:** Back-Calculation im Script — Integral wird nach jedem Stelleingriff auf den Wert zurückgesetzt, der den tatsächlichen (ggf. geklemmten) Ausgang produziert. Clamp auf ±effective_max, gerundet auf 2 Nachkommastellen.
     - **Integral-Reset:** Bei jedem Zonenwechsel auf 0.
-    - **Integral-Decay:** 5 % Abbau pro Zyklus solange Fehler ≤ Toleranz und |Integral| > 10 (in Hauptautomatisierung).
+    - **Integral-Decay:** 5 % Abbau pro Zyklus solange Fehler ≤ Totband und |Integral| > 10 (in Hauptautomatisierung).
     - **Integral-Einfrieren:** In Zone 0 (Überschuss) kein Decay, kein PI-Aufruf.
     - **Fehlerberechnung (im Script):** `raw_error = (grid − target_offset) × error_share`
       - `error_share` = Anteil des Netzfehlers, den diese Instanz übernimmt (0–1, Standard 1.0).
@@ -35,9 +35,9 @@ blueprint:
       - Zone 0 aktiv → kein PI-Aufruf, Integral eingefroren
       - Tarif-Laden aktiv → direkte Leistungssetzung, kein PI
       - AC Laden aktiv → Stellwertrechnung, kein PI, Integral unverändert
-      - Normal → PI nur wenn `|Fehler| > Toleranz` UND kein At-Limit
+      - Normal → PI nur wenn `|Fehler| > Totband` UND kein At-Limit
       - `at_max_limit` = false wenn `current > dynamic_max` (PV-Einbruch) → PI kann nach unten korrigieren
-    - **Ausgangs-Stillstandserkennung:** Bei `at_max_limit` schreibt der PI nicht mehr — ein in diesem Zustand stehengebliebener Wechselrichter bekäme keinen Befehl mehr, und Fall D greift nicht, da der Modus auf `'1'` steht. Weicht die Ist-Leistung um mehr als 5 % vom Limit ab und steht der Ist-Sensor dabei über 300 s unverändert (`last_updated`), wird Integral = 0, Output → 0 W, Timer-Toggle, Modus → `'0'` gesetzt; im nächsten Lauf holt Fall D das Gerät regulär zurück. Frühestens alle 300 s (gemessen an `last_changed` des Modus).
+    - **Ausgangs-Stillstandserkennung:** Bei `at_max_limit` schreibt der PI nicht mehr — ein in diesem Zustand stehengebliebener Wechselrichter bekäme keinen Befehl mehr, und Fall D greift nicht, da der Modus auf `'1'` steht. Weicht die Ist-Leistung um mehr als 5 % vom Limit ab und steht der Ist-Sensor dabei über 300 s unverändert (`last_updated`), wird Integral = 0, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'` gesetzt; im nächsten Lauf holt Fall D das Gerät regulär zurück. Frühestens alle 300 s (gemessen an `last_changed` des Modus).
     - **Separate P/I-Faktoren für AC Laden:** Die Ladeleistung steigt nur mit etwa 33 W/s, Senken wirkt sofort. Deshalb empfiehlt sich ein kleiner P-Faktor (~0.3–0.5) und I = 0 — sonst legt der PI nach, bevor das Gerät den letzten Sollwert erreicht hat.
 
     </details>
@@ -50,23 +50,23 @@ blueprint:
     | **0 — Überschuss** | SOC ≥ Export-Schwelle UND PV > Output + Grid + PV-Hysterese | `'1'` | 2 A | Optional. Integral eingefroren. |
     | **1 — Aggressiv** | SOC > Zone-1-Schwelle | `'1'` | Max (z.B. 40 A) | Läuft bis SOC ≤ Zone-3-Schwelle. Auch nachts aktiv. |
     | **2 — Batterieschonend** | Zone-3 < SOC ≤ Zone-1, Zyklus = off | `'1'` | 0 A | Dynamisches Limit: `Min(Hard Limit, Max(0, PV − Reserve))`. Optional: Nachtabschaltung. |
-    | **3 — Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` | 0 A | Output = 0 W. Vollständiger Batterieschutz. Hat immer Vorrang. |
+    | **3 — Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` | 0 A | Ausgangsleistung 0 W. Vollständiger Batterieschutz. Hat immer Vorrang. |
 
     Die Zone-1-Schwelle kann statisch oder per **dynamischem Helfer** (`input_number`, `soc_fast_limit_entity`) gesetzt werden — ein gesetzter Helfer überschreibt den statischen Wert automatisch (z.B. für eine eigene Automation, die die Schwelle abends senkt, wenn der PV-Forecast für morgen hoch, der Akku aber unter der Standard-Schwelle geblieben ist).
 
     **Steuer-Falls (Reihenfolge ist entscheidend):**
     - **A** — Zone 1 Start: SOC > Zone-1-Schwelle UND Zyklus = `off` UND kein AC/Tarif-Laden UND keine Entladesperre → Integral = 0, Zyklus = `on`, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'`
-    - **B** — Zone 3 Stop: SOC < Zone-3-Schwelle UND Zyklus = `on` UND kein AC/Tarif-Laden → Integral = 0, Zyklus = `off`, Surplus/AC-Bool zurücksetzen, Output → 0W, Timer-Toggle, Modus → `'0'`
-    - **C** — Zone 3 Absicherung: SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` UND kein AC/Tarif-Laden → Surplus/AC-Bool zurücksetzen, Output → 0W, Timer-Toggle, Modus → `'0'`
+    - **B** — Zone 3 Stop: SOC < Zone-3-Schwelle UND Zyklus = `on` UND kein AC/Tarif-Laden → Integral = 0, Zyklus = `off`, Surplus/AC-Bool zurücksetzen, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'`
+    - **C** — Zone 3 Absicherung: SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` UND kein AC/Tarif-Laden → Surplus/AC-Bool zurücksetzen, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'`
     - **D** — Recovery: Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle UND (keine Entladesperre ODER Lade-Session aktiv) → Timer-Toggle, Modus → `'3'` wenn AC- **oder** Tarif-Lade-Bool = `on`, sonst `'1'` (kein Integral-Reset, kein Zonenwechsel)
-    - **GT** — Tarif-Laden Start: Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel − SOC-Hysterese UND Modus ≠ `'3'` UND kein Überschuss UND **NICHT PV-Forecast-Suppressed** → Tarif-Bool = `on`, Timer-Toggle, Output → Ladeleistung (direkt), Modus → `'3'`
+    - **GT** — Tarif-Laden Start: Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel − SOC-Hysterese UND Modus ≠ `'3'` UND kein Überschuss UND **NICHT PV-Forecast-Suppressed** → Tarif-Bool = `on`, Timer-Toggle, Ausgangsleistung → Ladeleistung (direkt), Modus → `'3'`
     - **HT** — Tarif-Laden Ende: Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Ladeziel) → Integral = 0, Tarif-Bool = `off`, Zone 1: Timer-Toggle + Modus `'1'` / Zone 2: Timer-Toggle + Modus `'0'` + 0W
-    - **TM** — Entladesperre: Tarif aktiv UND Preis < Teuer UND kein Laden UND kein Überschuss UND Modus = `'1'` UND **NICHT PV-Forecast-Suppressed** → Integral = 0, Zyklus = `off` (wenn Zone 1), Output → 0W, Timer-Toggle, Modus → `'0'`
-    - **G** — AC Laden Start: AC aktiv UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + ΣOutput_entladend) < min(Offset, 0) − Hysterese UND kein Tarif-Laden UND kein Überschuss → AC-Bool = `on`, Timer-Toggle, Output → 0W, Modus → `'3'`. ΣOutput_entladend: Einzelbetrieb = eigener Output, Multi-Instanz = Summe aller Instanzen im Entlademodus (verhindert, dass die Entladung einer Schwester-Instanz als externer Netzüberschuss gewertet wird)
-    - **H** — AC Laden Ende: Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND eigener Output = 0 W)) → Integral = 0, AC-Bool = `off`, Zone 1: Output → 0W, Timer-Toggle, Modus → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Modus → `'0'`
-    - **I** — Safety: Modus = `'3'` ohne aktive AC- oder Tarif-Lade-Session → Integral = 0, Zone 1: Output → 0W, Timer-Toggle, Modus → `'1'` / Zone 2: Output → 0W, Timer-Toggle, Modus → `'0'`
-    - **E** — Zone 2 Start: Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht UND keine Entladesperre → Integral = 0, Output → 0W, Timer-Toggle, Modus → `'1'`
-    - **F** — Nachtabschaltung: Nacht UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv UND kein AC/Tarif-Laden UND kein Überschuss → Integral = 0, Output → 0W, Timer-Toggle, Modus → `'0'`
+    - **TM** — Entladesperre: Tarif aktiv UND Preis < Teuer UND kein Laden UND kein Überschuss UND Modus = `'1'` UND **NICHT PV-Forecast-Suppressed** → Integral = 0, Zyklus = `off` (wenn Zone 1), Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'`
+    - **G** — AC Laden Start: AC aktiv UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + ΣOutput_entladend) < min(Offset, 0) − Hysterese UND kein Tarif-Laden UND kein Überschuss → AC-Bool = `on`, Timer-Toggle, Ausgangsleistung → 0 W, Modus → `'3'`. ΣOutput_entladend: Einzelbetrieb = eigene Ausgangsleistung, Multi-Instanz = Summe aller Instanzen im Entlademodus (verhindert, dass die Entladung einer Schwester-Instanz als externer Netzüberschuss gewertet wird)
+    - **H** — AC Laden Ende: Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND eigener Output = 0 W)) → Integral = 0, AC-Bool = `off`, Zone 1: Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'1'` / Zone 2: Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'`
+    - **I** — Safety: Modus = `'3'` ohne aktive AC- oder Tarif-Lade-Session → Integral = 0, Zone 1: Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'1'` / Zone 2: Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'`
+    - **E** — Zone 2 Start: Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht UND keine Entladesperre → Integral = 0, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'1'`
+    - **F** — Nachtabschaltung: Nacht UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv UND kein AC/Tarif-Laden UND kein Überschuss → Integral = 0, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'`
 
     **Timer-Toggle:** Statt eines festen Werts wird zwischen 3598 und 3599 gewechselt — erzeugt eine Zustandsänderung damit der Solakon den neuen Modus sicher übernimmt. Wird bei jedem Moduswechsel direkt vor dem Modus-Setzen durchgeführt.
 
@@ -95,7 +95,7 @@ blueprint:
     - **Austritts-Sperre (Optional):** Solange Leistungs-Vorhersage ≥ Sperr-Faktor × Hard Limit UND SOC > Zone-3-Schwelle ist nur der PV-Austritt gesperrt — kurze PV-Einbrüche (Wolken) werden durchgeritten. Der SOC-Austritt bleibt immer aktiv
     - **Konfiguration:** Export-Schwelle muss über der Zone-1-Schwelle liegen — sonst bricht die Automation mit Fehler-Log ab. Empfehlung: ~5 % unter der App-Ladeobergrenze — der Eintritt ist nur messbar solange der Akku noch lädt (am Vollladepunkt drosselt der WR die PV auf den Eigenbedarf)
     - **Persistenz:** Zustand in `input_boolean` — überlebt mehrere Automation-Läufe
-    - **Verhalten:** Output → Hard Limit, Entladestrom → 2 A (Stabilitätspuffer), Integral eingefroren
+    - **Verhalten:** Ausgangsleistung → Hard Limit, Entladestrom → 2 A (Stabilitätspuffer), Integral eingefroren
     - **Hysterese:** Doppelte Absicherung (SOC + PV) verhindert instabiles Hin- und Herschalten
     - **Deaktiviert:** Klassische Nulleinspeisung, kein aktives Einspeisen
 
@@ -116,15 +116,15 @@ blueprint:
     - **Verbleib:** Modus `'3'` solange SOC < Ladeziel UND Grid < (Offset + Hysterese)
     - **Abbruch (Fall H):** AC Laden deaktiviert ODER SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND eigener Output = 0 W)
       - Abschalten der Option beendet eine laufende Lade-Session; geprüft wird dafür der Lade-Helfer selbst, nicht die Option
-      - `Output = 0 W`-Guard verhindert Fehlauslösung während PI noch regelt (bezieht sich stets auf den eigenen Output dieser Instanz); Output folgt derselben Vorzeichenkonvention wie Grid (negativ = ladend) und ist während aktivem Laden durchgehend deutlich negativ — der exakte Vergleich verlangt echte Konvergenz auf null statt bloß eines beliebigen negativen (= noch aktiv ladenden) Werts
+      - `Output = 0 W`-Guard verhindert Fehlauslösung während PI noch regelt (bezieht sich stets auf die eigene Ausgangsleistung dieser Instanz); die Ausgangsleistung folgt derselben Vorzeichenkonvention wie Grid (negativ = ladend) und ist während aktivem Laden durchgehend deutlich negativ — der exakte Vergleich verlangt echte Konvergenz auf null statt bloß eines beliebigen negativen (= noch aktiv ladenden) Werts
     - **Stellwertrechnung statt PI:** Ladesollwert = Ist-Ladeleistung + Fehler-Anteil × (Offset − Grid), geklemmt auf 0 … Max. Ladeleistung
-      - Geschrieben wird bei |Offset − Grid| > Toleranz oder Output über der Max. Ladeleistung
+      - Geschrieben wird bei |Offset − Grid| > Totband oder Ausgangsleistung über der Max. Ladeleistung
       - Unter der Mindestladeleistung (Standard 50 W) wird 0 W geschrieben
-      - Solange die Rampe läuft (Ist-Ladeleistung mehr als 15 W unter dem Output), wird nur gesenkt — die Ladeleistung steigt nur mit ~34 W/s
+      - Solange die Rampe läuft (Ist-Ladeleistung mehr als 15 W unter der Ausgangsleistung), wird nur gesenkt — die Ladeleistung steigt nur mit ~34 W/s
       - Das Integral bleibt während des AC-Ladens unverändert
     - **Rückkehr:**
-      - Zone 1 → Integral = 0, AC-Bool = `off`, Output → 0 W, Timer-Toggle, Modus → `'1'`
-      - Zone 2 → Integral = 0, AC-Bool = `off`, Output → 0 W, Timer-Toggle, Modus → `'0'`
+      - Zone 1 → Integral = 0, AC-Bool = `off`, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'1'`
+      - Zone 2 → Integral = 0, AC-Bool = `off`, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'`
     - **Priorität:** Zone 3 (SOC-Schutz) hat immer Vorrang. Tarif-Laden hat Vorrang vor AC-Laden.
 
     </details>
@@ -159,7 +159,7 @@ blueprint:
     Betrifft **nur Zone 2** (Fall F). Zone 1 und AC Laden laufen auch nachts weiter.
 
     - **Schwelle:** PV-Leistung unter dem Wert der PV-Ladereserve (kein separater Parameter)
-    - **Verhalten:** Modus → `'0'`, Integral reset, Output 0 W
+    - **Verhalten:** Modus → `'0'`, Integral reset, Ausgangsleistung 0 W
     - **Zone 1:** Läuft durch — hoher SOC, aggressive Entladung weiterhin gewünscht
     - **Zone 2 Reaktivierung:** Sobald PV wieder über die PV-Ladereserve steigt, greift Fall E
 
@@ -384,7 +384,7 @@ blueprint:
                 step: 0.01
 
           tolerance:
-            name: 📏 Toleranzbereich (Totband)
+            name: 📏 Totband
             description: Bereich in Watt um den Nullpunkt, in dem KEINE Korrektur stattfindet (z.B. ±25 W).
             default: 25
             selector:
@@ -399,7 +399,7 @@ blueprint:
               Wartezeit (in Sekunden) nach dem Setzen der Ausgangsleistung.
               Kompensiert die Reaktionszeit des Wechselrichters und die Messlatenz der Grid-/Solar-Sensoren (z.B. 3 s).
               Ist "Adaptive Wartezeit" aktiviert, gilt dieser Wert nur als Timeout — der Regler bricht früher ab,
-              sobald Ist-Leistung ≈ Sollwert ± Toleranz.
+              sobald Ist-Leistung ≈ Sollwert ± Totband.
             default: 3
             selector:
               number:
@@ -411,7 +411,7 @@ blueprint:
           adaptive_wait_time:
             name: 🧠 Adaptive Wartezeit
             description: |
-              Bricht die Wartezeit früh ab, sobald Ist-Leistung ≈ Sollwert ± Toleranz (beim Laden: −Ist-Leistung), statt immer die
+              Bricht die Wartezeit früh ab, sobald Ist-Leistung ≈ Sollwert ± Totband (beim Laden: −Ist-Leistung), statt immer die
               volle Wartezeit auszuschöpfen. Vorsicht bei externen Netzmesswerten mit hoher Latenz
               (z.B. IR-Lesekopf am Zähler) — dort kann der Regelzyklus dann kürzer sein als die
               Aktualisierungsrate der Netzmessung, was zu verfrühtem Reglereingriff führt.
@@ -496,7 +496,7 @@ blueprint:
           offset_1_entity:
             name: ⚙️ Zone 1 - Dynamischer Nullpunkt-Offset (Optional)
             description: |
-              Optionale input_number Entität für den dynamischen Offset in Zone 1.
+              Optionale input_number Entität für den Dynamic Offset in Zone 1.
               ⚠️ Wenn leer gelassen, wird der statische Wert oben verwendet.
             default: {}
             selector:
@@ -517,7 +517,7 @@ blueprint:
           offset_2_entity:
             name: ⚙️ Zone 2 - Dynamischer Nullpunkt-Offset (Optional)
             description: |
-              Optionale input_number Entität für den dynamischen Offset in Zone 2.
+              Optionale input_number Entität für den Dynamic Offset in Zone 2.
               ⚠️ Wenn leer gelassen, wird der statische Wert oben verwendet.
             default: {}
             selector:
@@ -631,7 +631,7 @@ blueprint:
               ⚠️ NUR für Multi-Instancing erforderlich — im Einzelbetrieb leer lassen.
               Die Betriebsmodus-Selects aller anderen Instanzen am selben Netzsensor.
               Richtungssperre: Steht eine davon in Modus '3' (AC- oder Tarif-Laden),
-              gilt in Zone 1 dieser Instanz das Output-Limit von Zone 2 (PV − Reserve).
+              gilt in Zone 1 dieser Instanz das Ausgangsleistungs-Limit von Zone 2 (PV − Reserve).
               Die Batterie entlädt dann nicht, PV wird weiter eingespeist.
               ⚠️ Wenn leer gelassen, entfällt die Richtungssperre.
             default: []
@@ -650,7 +650,7 @@ blueprint:
           surplus_export_enabled:
             name: ☀️ Überschuss-Einspeisung aktivieren
             description: |
-              ✅ EIN: SOC ≥ Schwelle UND (PV > Verbrauch + PV-Hysterese ODER PV = 0) → Output auf Maximum.
+              ✅ EIN: SOC ≥ Schwelle UND (PV > Verbrauch + PV-Hysterese ODER PV = 0) → Ausgangsleistung auf Maximum.
               ❌ AUS: Klassische Nulleinspeisung.
             default: false
             selector:
@@ -839,7 +839,7 @@ blueprint:
             name: 📏 Hysterese AC Laden (W)
             description: |
               Totband für Ein- und Austritt.
-              Eintritt: (Grid + ΣOutput_entladend) < min(Offset, 0) − Hysterese — Σ über alle Instanzen im Entlademodus, Einzelbetrieb = eigener Output.
+              Eintritt: (Grid + ΣOutput_entladend) < min(Offset, 0) − Hysterese — Σ über alle Instanzen im Entlademodus, Einzelbetrieb = eigene Ausgangsleistung.
               Austritt: Grid ≥ (Offset + Hysterese) UND eigener Output = 0 W.
               Verhindert Flackern bei wechselnder Einspeisung (z.B. 50 W).
             default: 50
@@ -1129,7 +1129,7 @@ variables:
   night_shutdown_enabled_bool: !input night_shutdown_enabled
   pv_charge_reserve_int: !input pv_charge_reserve
 
-  # Toleranz (wird in Fall G benötigt)
+  # Totband (wird in Fall G benötigt)
   tolerance_int: !input tolerance
 
   # Wartezeit (Bestätigung der Nullung in Fall B und C)
@@ -1291,7 +1291,7 @@ variables:
        pv_forecast_sensor_id is string and pv_forecast_sensor_id | length > 0 and
        states(pv_forecast_sensor_id) not in ['unknown', 'unavailable'] and
        pv_forecast_energy_float | float(0) >= pv_forecast_threshold_float | float(0) }}
-  # Entladesperre aktiv? (Preis < Teuer-Schwelle UND Sensor valide UND keine PV-Forecast-Unterdrückung)
+  # Entladesperre aktiv? (Preis < Teuer-Schwelle UND Sensor valide UND keine Prognose-Unterdrückung)
   # Gilt für Zone 1 und Zone 2 — Guards in Falls A und E
   price_discharge_locked: >
     {{ tariff_arbitrage_enabled_bool and
@@ -1646,13 +1646,13 @@ actions:
                   - action: input_boolean.turn_off
                     target:
                       entity_id: !input ac_charge_state_helper
-          # 6. Output → 0 W
+          # 6. Ausgangsleistung → 0 W
           - action: number.set_value
             target:
               entity_id: !input active_power_number
             data:
               value: 0
-          # Nullung bestätigen: warten bis |Ist| ≤ Toleranz, sonst einmal erneut schreiben
+          # Nullung bestätigen: warten bis |Ist| ≤ Totband, sonst einmal erneut schreiben
           - wait_template: "{{ (states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int }}"
             timeout:
               seconds: "{{ zero_confirm_wait_int }}"
@@ -1732,13 +1732,13 @@ actions:
                   - action: input_boolean.turn_off
                     target:
                       entity_id: !input ac_charge_state_helper
-          # 3. Output → 0 W
+          # 3. Ausgangsleistung → 0 W
           - action: number.set_value
             target:
               entity_id: !input active_power_number
             data:
               value: 0
-          # Nullung bestätigen: warten bis |Ist| ≤ Toleranz, sonst einmal erneut schreiben
+          # Nullung bestätigen: warten bis |Ist| ≤ Totband, sonst einmal erneut schreiben
           - wait_template: "{{ (states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int }}"
             timeout:
               seconds: "{{ zero_confirm_wait_int }}"
@@ -1907,7 +1907,7 @@ actions:
                   entity_id: !input remote_timeout_set_number
                 data:
                   value: 3599
-          # 4. Output → Ladeleistung (direkt, kein PI)
+          # 4. Ausgangsleistung → Ladeleistung (direkt, kein PI)
           - action: number.set_value
             target:
               entity_id: !input active_power_number
@@ -1957,7 +1957,7 @@ actions:
           - choose:
               - conditions: "{{ is_state(cycle_active, 'on') }}"
                 sequence:
-                  # 4a. Output → 0 W (vor Moduswechsel)
+                  # 4a. Ausgangsleistung → 0 W (vor Moduswechsel)
                   - action: number.set_value
                     target:
                       entity_id: !input active_power_number
@@ -1988,7 +1988,7 @@ actions:
                       option: '1'
                   - stop: ""
             default:
-              # 4a. Output → 0 W
+              # 4a. Ausgangsleistung → 0 W
               - action: number.set_value
                 target:
                   entity_id: !input active_power_number
@@ -2062,7 +2062,7 @@ actions:
                   - action: input_boolean.turn_off
                     target:
                       entity_id: !input cycle_active_boolean_helper
-          # 4. Output → 0 W
+          # 4. Ausgangsleistung → 0 W
           - action: number.set_value
             target:
               entity_id: !input active_power_number
@@ -2143,7 +2143,7 @@ actions:
                   entity_id: !input remote_timeout_set_number
                 data:
                   value: 3599
-          # 4. Output → 0 W (PI startet sauber)
+          # 4. Ausgangsleistung → 0 W (PI startet sauber)
           - action: number.set_value
             target:
               entity_id: !input active_power_number
@@ -2196,7 +2196,7 @@ actions:
           - choose:
               - conditions: "{{ is_state(cycle_active, 'on') }}"
                 sequence:
-                  # 4a. Output → 0 W (vor Moduswechsel)
+                  # 4a. Ausgangsleistung → 0 W (vor Moduswechsel)
                   - action: number.set_value
                     target:
                       entity_id: !input active_power_number
@@ -2227,7 +2227,7 @@ actions:
                       option: '1'
                   - stop: ""
             default:
-              # 4a. Output → 0 W
+              # 4a. Ausgangsleistung → 0 W
               - action: number.set_value
                 target:
                   entity_id: !input active_power_number
@@ -2258,7 +2258,7 @@ actions:
                   option: '0'
 
       # FALL I: Safety — Lade-Session ohne Modus '3', oder beide Lade-Bools zugleich
-      # Räumt die Session, lässt Modus und Output unangetastet: der Widerspruch liegt
+      # Räumt die Session, lässt Modus und Ausgangsleistung unangetastet: der Widerspruch liegt
       # im Zustandsrest, nicht am Gerät. Je Richtung ein eigener Logbuchtext.
       - conditions:
           - condition: template
@@ -2348,7 +2348,7 @@ actions:
           - choose:
               - conditions: "{{ is_state(cycle_active, 'on') }}"
                 sequence:
-                  # 3a. Output → 0 W (vor Moduswechsel)
+                  # 3a. Ausgangsleistung → 0 W (vor Moduswechsel)
                   - action: number.set_value
                     target:
                       entity_id: !input active_power_number
@@ -2379,7 +2379,7 @@ actions:
                       option: '1'
                   - stop: ""
             default:
-              # 3a. Output → 0 W
+              # 3a. Ausgangsleistung → 0 W
               - action: number.set_value
                 target:
                   entity_id: !input active_power_number
@@ -2442,7 +2442,7 @@ actions:
               entity_id: !input integral_helper
             data:
               value: 0
-          # 3. Output → 0 W
+          # 3. Ausgangsleistung → 0 W
           - action: number.set_value
             target:
               entity_id: !input active_power_number
@@ -2497,7 +2497,7 @@ actions:
           # 1. Logbuch-Eintrag
           - action: logbook.log
             data:
-              name: Solakon Nachtmodus
+              name: Solakon Nachtabschaltung
               message: "🌙 Nachtabschaltung aktiviert (Zone 2) - PV: {{ states(solar_power) }}W"
               entity_id: !input solar_power_sensor
           # Surplus-Zustand zurücksetzen (nur wenn aktiv)
@@ -2513,7 +2513,7 @@ actions:
               entity_id: !input integral_helper
             data:
               value: 0
-          # 3. Output → 0 W
+          # 3. Ausgangsleistung → 0 W
           - action: number.set_value
             target:
               entity_id: !input active_power_number
@@ -2603,7 +2603,7 @@ actions:
       offset_2_static: !input offset_2
       offset_2_entity_id: !input offset_2_entity
 
-      # Dynamischer Offset
+      # Dynamic Offset
       offset_1_int: >
         {% if offset_1_entity_id is string and offset_1_entity_id | length > 0 and states(offset_1_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
           {{ states(offset_1_entity_id) | float(offset_1_static) }}
@@ -2650,7 +2650,7 @@ actions:
         {% endif %}
 
       # Fehler für Guards (immer in Entlade-Richtung: grid − offset)
-      # Absolutwert ist für beide Modi (normal + AC) identisch → grid_error_abs gilt für Toleranzprüfung
+      # Absolutwert ist für beide Modi (normal + AC) identisch → grid_error_abs gilt für Totband-Prüfung
       raw_error: "{{ grid_power_float - (target_offset | float(0)) }}"
       grid_error_abs: "{{ (grid_power_float - (target_offset | float(0))) | abs }}"
 
@@ -2664,7 +2664,7 @@ actions:
       # Stellwertrechnung AC-Laden auf Ist-Basis:
       #   Stellwert = Ist-Ladeleistung + Fehler-Anteil × (Offset − Netz), geklemmt auf 0 … Lade-Limit
       #   unter min(Mindestladeleistung, Lade-Limit) → 0
-      #   geschrieben bei |Offset − Netz| > Toleranz oder Ausgangsleistung über dem Lade-Limit
+      #   geschrieben bei |Offset − Netz| > Totband oder Ausgangsleistung über dem Lade-Limit
       #   Rampe läuft (Ist-Ladeleistung > 15 W unter der Ausgangsleistung) → nur senken
       #   −1 = nichts schreiben
       ac_setpoint: >
@@ -2777,7 +2777,7 @@ actions:
             value_template: "{{ surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on') }}"
         sequence:
           - parallel:
-              # Output → Hard Limit (gedeckelt auf WR-Entity-Max)
+              # Ausgangsleistung → Hard Limit (gedeckelt auf WR-Entity-Max)
               - action: number.set_value
                 target:
                   entity_id: !input active_power_number
@@ -2804,12 +2804,12 @@ actions:
                   seconds: "{{ wait_time_int }}"
 
       # ZWEIG BT: Tarif-Laden — Direkt setzen (kein PI)
-      # Output → tariff_charge_power (konstant, unabhängig vom Grid)
+      # Ausgangsleistung → tariff_charge_power (konstant, unabhängig vom Grid)
       - conditions:
           - condition: template
             value_template: "{{ tariff_charge_mode_active | bool(false) }}"
         sequence:
-          # Output → Ladeleistung (direkt, kein PI-Aufruf)
+          # Ausgangsleistung → Ladeleistung (direkt, kein PI-Aufruf)
           - action: number.set_value
             target:
               entity_id: !input active_power_number
@@ -2838,7 +2838,7 @@ actions:
               - condition: template
                 value_template: "{{ ac_setpoint | int(-1) >= 0 }}"
             then:
-              # Output → Stellwert
+              # Ausgangsleistung → Stellwert
               - action: number.set_value
                 target:
                   entity_id: !input active_power_number
@@ -2894,9 +2894,9 @@ actions:
               - delay:
                   seconds: "{{ wait_time_int }}"
 
-    # STANDARD: Integral-Decay (Fehler innerhalb Toleranz oder At-Limit)
+    # STANDARD: Integral-Decay (Fehler innerhalb des Totbands oder At-Limit)
     default:
-      # Integral-Decay wenn PI nicht aufgerufen wird (Fehler innerhalb Toleranz)
+      # Integral-Decay wenn PI nicht aufgerufen wird (Fehler innerhalb des Totbands)
       - choose:
           - conditions:
               - condition: template
@@ -2916,7 +2916,7 @@ actions:
       # Erkannt über die Abweichung der Ist-Leistung vom Limit (> 5 %) bei einem
       # Ist-Sensor, dessen last_updated seit über 300 s stillsteht — der Zeitstempel
       # rückt nur bei Wertänderung vor und steht damit für "Wert seit dann unverändert".
-      # Aktion: Integral = 0, Output 0 W, Timer-Toggle, Modus '0' — im nächsten Lauf
+      # Aktion: Integral = 0, Ausgangsleistung 0 W, Timer-Toggle, Modus '0' — im nächsten Lauf
       # holt Fall D das Gerät regulär zurück (Timer-Toggle + Modus '1'), der PI rampt hoch.
       # Der Abstand von 300 s auf last_changed des Modus verhindert eine Wiederholung
       # im Sekundentakt, solange die Erholung noch aussteht.
@@ -2945,13 +2945,13 @@ actions:
                     ⚠️ Ausgang folgt dem Limit nicht — Ist: {{ states(actual_power_sensor) }},
                     Limit: {{ dynamic_max_power }} W. Rückholung über Modus '0' + Fall D.
                   entity_id: !input mode_select
-              # 2. Integral zurücksetzen (Output geht auf 0)
+              # 2. Integral zurücksetzen (Ausgangsleistung geht auf 0)
               - action: input_number.set_value
                 target:
                   entity_id: !input integral_helper
                 data:
                   value: 0
-              # 3. Output → 0 W
+              # 3. Ausgangsleistung → 0 W
               - action: number.set_value
                 target:
                   entity_id: !input active_power_number
