@@ -64,8 +64,8 @@ flowchart TD
         TARIFF_END_Z1["💹 Tarif-Laden beenden (Zone 1)   Ausgangsleistung → 0 W   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
         TARIFF_END_Z2["💹 Tarif-Laden beenden (Zone 2)   Ausgangsleistung → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
-        %% ── Fall TM: Discharge-Lock ──────────────────────────────────────
-        TARIFF_MID["🔒 Discharge-Lock   Integral = 0   Zyklus = off (nur wenn Zone 1)   Surplus-Bool → off (nur wenn aktiv)   Ausgangsleistung → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
+        %% ── Fall TM: Tarifsperre ──────────────────────────────────────
+        TARIFF_MID["🔒 Tarifsperre   Integral = 0   Zyklus = off (nur wenn Zone 1)   Surplus-Bool → off (nur wenn aktiv)   Ausgangsleistung → 0 W   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
     end
     style SG_TARIFF fill:none,stroke:#1a7f1a,stroke-width:5,stroke-dasharray:6,color:#000
@@ -93,10 +93,10 @@ flowchart TD
     style SG_AC fill:none,stroke:#0066cc,stroke-width:5,stroke-dasharray:6,color:#000
 
     %% ── ZONE_CHECK → Fall-Verzweigungen ──────────────────────────────────
-    ZONE_CHECK -- "FALL A   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND NICHT Entladesperre (Preis < teuer)   UND SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
+    ZONE_CHECK -- "FALL A   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND NICHT Tarifsperre (Preis < teuer)   UND SOC > Zone-1-Schwelle UND Zyklus = off" --> Z1_START
     ZONE_CHECK -- "FALL B   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND SOC ≤ Zone-3-Schwelle UND Zyklus = on" --> Z3_A
     ZONE_CHECK -- "FALL C   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND SOC ≤ Zone-3-Schwelle UND Zyklus = off UND Modus ≠ '0'" --> Z3_B
-    ZONE_CHECK -- "FALL D   Zyklus = on ODER Ladegrund gilt   UND Modus ∉ {'1','3'} ← '3' explizit ausgenommen!   UND (Ladegrund gilt ODER SOC > Zone-3-Schwelle)   UND (keine Entladesperre ODER Lade-Bool = on)" --> RECOVERY
+    ZONE_CHECK -- "FALL D   Zyklus = on ODER Ladegrund gilt   UND Modus ∉ {'1','3'} ← '3' explizit ausgenommen!   UND (Ladegrund gilt ODER SOC > Zone-3-Schwelle)   UND (keine Tarifsperre ODER Lade-Bool = on)" --> RECOVERY
     ZONE_CHECK -- "FALL GT   Tarif-Arbitrage aktiviert   UND Preis < Günstig-Schwelle   UND SOC < Tarif-Ladeziel − SOC-Hysterese   UND Modus ≠ '3' ← Guard!   UND NICHT AC-Lade-Bool = on   UND NICHT Surplus-Bool = on   UND NICHT PV-Forecast-Suppressed" --> TARIFF_START
     ZONE_CHECK -- "FALL HT   Tarif-Lade-Bool = on   UND (keine Günstig-Aussage ODER SOC ≥ Tarif-Ladeziel)   keine Günstig-Aussage = Tarif aus, Preissensor unlesbar, PV-Forecast-Suppressed oder Preis ≥ Günstig-Schwelle" --> TARIFF_END
     ZONE_CHECK -- "FALL TM   Tarif aktiv   UND Preis < Teuer   UND kein AC/Tarif-Laden   UND NICHT Surplus-Bool = on   UND Modus = '1'   UND NICHT PV-Forecast-Suppressed" --> TARIFF_MID
@@ -104,7 +104,7 @@ flowchart TD
     ZONE_CHECK -- "FALL H   Modus = '3'   UND AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND (AC Laden deaktiviert ODER SOC ≥ Ladeziel ODER (Grid ≥ AC-Offset + Hysterese UND eigener Output = 0 W))" --> AC_END
     ZONE_CHECK -- "FALL I   Lade-Bool = on   UND (Modus ≠ '3' ODER beide Lade-Bools = on)" --> SAFETY_I_SESSION
     ZONE_CHECK -- "FALL I   Modus = '3'   UND NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on" --> SAFETY_I
-    ZONE_CHECK -- "FALL E   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND NICHT Entladesperre (Preis < teuer)   UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = '0' UND NICHT Nacht" --> Z2_START
+    ZONE_CHECK -- "FALL E   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND NICHT Tarifsperre (Preis < teuer)   UND Zone-3 < SOC ≤ Zone-1 UND Zyklus = off UND Modus = '0' UND NICHT Nacht" --> Z2_START
     ZONE_CHECK -- "FALL F   NICHT AC-Lade-Bool = on   UND NICHT Tarif-Lade-Bool = on   UND NICHT Surplus-Bool = on   UND Nachtabschaltung aktiv UND PV < PV-Ladereserve UND Zyklus = off UND Modus aktiv" --> NIGHT
     ZONE_CHECK -- "Kein Zonenwechsel" --> REST_CURRENT
 
@@ -168,7 +168,7 @@ flowchart TD
         PI_DECISION -- Nein --> TARIFF_GATE
 
         %% ── Zone 0 Pfad ──────────────────────────────────────────────────
-        CALC_SURPLUS["☀️ Zone 0 — Überschuss-Einspeisung   Ausgangsleistung → Hard Limit   Integral einfrieren (integral_old unverändert)   Wartezeit"]
+        CALC_SURPLUS["☀️ Zone 0 — Surplus   Ausgangsleistung → Hard Limit   Integral einfrieren (integral_old unverändert)   Wartezeit"]
 
         %% ── Tarif-Laden Pfad ─────────────────────────────────────────────
         TARIFF_GATE{{"Tarif-Lade-Bool = on?"}}

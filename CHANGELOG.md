@@ -9,6 +9,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 - Deutsche Texte an das Glossar angeglichen: Totband statt Toleranz, Ausgangsleistung statt Output im Fließtext (Formeln behalten `Output`), Dynamic Offset statt dynamischer Offset, Prognose-Unterdrückung statt PV-Forecast-Unterdrückung. Input „📏 Toleranzbereich (Totband)“ heißt „📏 Totband“ (Schlüssel `tolerance` unverändert), Logbuch-Name „Solakon Nachtabschaltung“ statt „Solakon Nachtmodus“. Keine Verhaltensänderung.
 - README: Hinweis zur Fernsteuerung als Abschnitt „Voraussetzung: App-Einstellungen“ neu gefasst, wie in der Integration. Neu sind Überschussladung, „keine anderen Zeit- oder Energiepläne“ und der Bezug zu Zone 3; ohne diese Einstellungen speist das Gerät in Zone 3 ein oder lädt nicht. Zonentabelle verweist darauf
 - Ist-Leistung statt „Tatsächliche Ausgangsleistung“: Input-Name „⚡ Solakon ONE - Ist-Leistung“ (Schlüssel unverändert), README-Tabellen.
+- Tarifsperre statt Entladesperre bzw. Discharge-Lock, Surplus statt Überschuss-Einspeisung (Schwellen: Zone 0), Zyklus statt Entladezyklus, Multi-Instancing statt Multi-Instanz. Input-Namen: „☀️ Surplus aktivieren“, „🔋 SOC-Schwelle für Zone 0“, „🔋 Zone-0-Hysterese (SOC)“, „🛠️ Zyklus-Zustandsspeicher“ (Schlüssel unverändert); Benachrichtigungen „Tarifsperre“, „Surplus startet/beendet“.
 
 ## [V313] – 2026-09-27
 

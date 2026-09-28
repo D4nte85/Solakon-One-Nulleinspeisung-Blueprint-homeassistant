@@ -46,7 +46,7 @@ fields:
   error_share:
     name: Fehler-Anteil (0.0–1.0)
     description: >
-      Anteil des Netzfehlers, den diese Instanz übernimmt (Multi-Instanz-Betrieb).
+      Anteil des Netzfehlers, den diese Instanz übernimmt (Multi-Instancing-Betrieb).
       Im Einzelbetrieb nicht setzen — Standard = 1.0 (voller Fehler).
     required: false
     default: 1.0
@@ -62,7 +62,7 @@ variables:
   # Fehlerrichtung je nach Modus:
   #   Normal:    grid - target  → positiv bei Netzbezug (Output erhöhen)
   #   AC Laden:  target - grid  → positiv wenn Grid < Sollwert (Ladeleistung erhöhen)
-  # error_share skaliert den Fehler auf den Anteil dieser Instanz (Multi-Instanz).
+  # error_share skaliert den Fehler auf den Anteil dieser Instanz (Multi-Instancing).
   raw_error: >
     {% set base = (target_float - grid_float) if ac_charge_mode | bool(false) else (grid_float - target_float) %}
     {{ base * (error_share | float(1.0)) }}

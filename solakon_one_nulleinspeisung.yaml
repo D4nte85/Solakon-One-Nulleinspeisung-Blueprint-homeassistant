@@ -2,7 +2,7 @@ blueprint:
   name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V313)
   description: |
     Dynamische Nulleinspeisung für den Solakon ONE Wechselrichter mit PI-Regler, SOC-Zonenlogik,
-    optionaler Überschuss-Einspeisung (inkl. Surplus-Forecast-Eintritt), optionalem AC Laden,
+    optionalem Surplus (inkl. Surplus-Forecast-Eintritt), optionalem AC Laden,
     optionaler Tarif-Arbitrage (inkl. Prognose-Unterdrückung) und optionaler adaptiver Wartezeit.
 
     <details>
@@ -21,7 +21,7 @@ blueprint:
     - **Integral-Einfrieren:** In Zone 0 (Überschuss) kein Decay, kein PI-Aufruf.
     - **Fehlerberechnung (im Script):** `raw_error = (grid − target_offset) × error_share`
       - `error_share` = Anteil des Netzfehlers, den diese Instanz übernimmt (0–1, Standard 1.0).
-        Im Einzelbetrieb immer 1.0. Im Multi-Instanz-Betrieb von der Leistungsverteilungs-Automation
+        Im Einzelbetrieb immer 1.0. Im Multi-Instancing-Betrieb von der Leistungsverteilungs-Automation
         gesetzt: `(SOC − Min-SOC) / Σ(SOC_i − Min-SOC_i)` — proportional zur nutzbaren Kapazität.
         Zwei unabhängige Pools: Nulleinspeisung (`error_share_entity`, Modus '1') und AC-Laden
         (`ac_error_share_entity`, Modus '3') — eine ladende Instanz zählt nie zum Nulleinspeisungs-Pool
@@ -55,17 +55,17 @@ blueprint:
     Die Zone-1-Schwelle kann statisch oder per **dynamischem Helfer** (`input_number`, `soc_fast_limit_entity`) gesetzt werden — ein gesetzter Helfer überschreibt den statischen Wert automatisch (z.B. für eine eigene Automation, die die Schwelle abends senkt, wenn der PV-Forecast für morgen hoch, der Akku aber unter der Standard-Schwelle geblieben ist).
 
     **Steuer-Falls (Reihenfolge ist entscheidend):**
-    - **A** — Zone 1 Start: SOC > Zone-1-Schwelle UND Zyklus = `off` UND kein AC/Tarif-Laden UND keine Entladesperre → Integral = 0, Zyklus = `on`, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'`
+    - **A** — Zone 1 Start: SOC > Zone-1-Schwelle UND Zyklus = `off` UND kein AC/Tarif-Laden UND keine Tarifsperre → Integral = 0, Zyklus = `on`, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'`
     - **B** — Zone 3 Stop: SOC < Zone-3-Schwelle UND Zyklus = `on` UND kein AC/Tarif-Laden → Integral = 0, Zyklus = `off`, Surplus/AC-Bool zurücksetzen, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'`
     - **C** — Zone 3 Absicherung: SOC < Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` UND kein AC/Tarif-Laden → Surplus/AC-Bool zurücksetzen, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'`
-    - **D** — Recovery: Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle UND (keine Entladesperre ODER Lade-Session aktiv) → Timer-Toggle, Modus → `'3'` wenn AC- **oder** Tarif-Lade-Bool = `on`, sonst `'1'` (kein Integral-Reset, kein Zonenwechsel)
+    - **D** — Recovery: Zyklus = `on` UND Modus ∉ `{'1','3'}` UND SOC > Zone-3-Schwelle UND (keine Tarifsperre ODER Lade-Session aktiv) → Timer-Toggle, Modus → `'3'` wenn AC- **oder** Tarif-Lade-Bool = `on`, sonst `'1'` (kein Integral-Reset, kein Zonenwechsel)
     - **GT** — Tarif-Laden Start: Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel − SOC-Hysterese UND Modus ≠ `'3'` UND kein Überschuss UND **NICHT PV-Forecast-Suppressed** → Tarif-Bool = `on`, Timer-Toggle, Ausgangsleistung → Ladeleistung (direkt), Modus → `'3'`
     - **HT** — Tarif-Laden Ende: Modus = `'3'` UND Tarif-Bool = `on` UND (Preis ≥ Günstig-Schwelle ODER SOC ≥ Ladeziel) → Integral = 0, Tarif-Bool = `off`, Zone 1: Timer-Toggle + Modus `'1'` / Zone 2: Timer-Toggle + Modus `'0'` + 0W
-    - **TM** — Entladesperre: Tarif aktiv UND Preis < Teuer UND kein Laden UND kein Überschuss UND Modus = `'1'` UND **NICHT PV-Forecast-Suppressed** → Integral = 0, Zyklus = `off` (wenn Zone 1), Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'`
-    - **G** — AC Laden Start: AC aktiv UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + ΣOutput_entladend) < min(Offset, 0) − Hysterese UND kein Tarif-Laden UND kein Überschuss → AC-Bool = `on`, Timer-Toggle, Ausgangsleistung → 0 W, Modus → `'3'`. ΣOutput_entladend: Einzelbetrieb = eigene Ausgangsleistung, Multi-Instanz = Summe aller Instanzen im Entlademodus (verhindert, dass die Entladung einer Schwester-Instanz als externer Netzüberschuss gewertet wird)
+    - **TM** — Tarifsperre: Tarif aktiv UND Preis < Teuer UND kein Laden UND kein Überschuss UND Modus = `'1'` UND **NICHT PV-Forecast-Suppressed** → Integral = 0, Zyklus = `off` (wenn Zone 1), Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'`
+    - **G** — AC Laden Start: AC aktiv UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + ΣOutput_entladend) < min(Offset, 0) − Hysterese UND kein Tarif-Laden UND kein Überschuss → AC-Bool = `on`, Timer-Toggle, Ausgangsleistung → 0 W, Modus → `'3'`. ΣOutput_entladend: Einzelbetrieb = eigene Ausgangsleistung, Multi-Instancing = Summe aller Instanzen im Entlademodus (verhindert, dass die Entladung einer Schwester-Instanz als externer Netzüberschuss gewertet wird)
     - **H** — AC Laden Ende: Modus = `'3'` UND (SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND eigener Output = 0 W)) → Integral = 0, AC-Bool = `off`, Zone 1: Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'1'` / Zone 2: Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'`
     - **I** — Safety: Modus = `'3'` ohne aktive AC- oder Tarif-Lade-Session → Integral = 0, Zone 1: Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'1'` / Zone 2: Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'`
-    - **E** — Zone 2 Start: Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht UND keine Entladesperre → Integral = 0, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'1'`
+    - **E** — Zone 2 Start: Zone-3 < SOC ≤ Zone-1 UND Zyklus = `off` UND Modus = `'0'` UND NICHT Nacht UND keine Tarifsperre → Integral = 0, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'1'`
     - **F** — Nachtabschaltung: Nacht UND PV < PV-Ladereserve UND Zyklus = `off` UND Modus aktiv UND kein AC/Tarif-Laden UND kein Überschuss → Integral = 0, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'`
 
     **Timer-Toggle:** Statt eines festen Werts wird zwischen 3598 und 3599 gewechselt — erzeugt eine Zustandsänderung damit der Solakon den neuen Modus sicher übernimmt. Wird bei jedem Moduswechsel direkt vor dem Modus-Setzen durchgeführt.
@@ -85,7 +85,7 @@ blueprint:
     </details>
 
     <details>
-    <summary><b>☀️ Überschuss-Einspeisung (Zone 0, Optional)</b> 👈</summary>
+    <summary><b>☀️ Surplus (Zone 0, Optional)</b> 👈</summary>
 
     Ermöglicht aktives Einspeisen von PV-Überschuss wenn der Akku voll ist.
 
@@ -106,13 +106,13 @@ blueprint:
 
     Lädt die Batterie wenn eine externe Einspeisung ins Netz erkannt wird.
     Erkennung: `(Grid + ΣOutput_entladend) < min(Offset, 0) − Hysterese` — d.h. nach Abzug des Solakon-Beitrags liegt noch Überschuss an.
-    ΣOutput_entladend: Einzelbetrieb = eigene Ausgangsleistung, Multi-Instanz = Summe aller Instanzen im Entlademodus.
+    ΣOutput_entladend: Einzelbetrieb = eigene Ausgangsleistung, Multi-Instancing = Summe aller Instanzen im Entlademodus.
     Typischer Anwendungsfall: externe PV-Anlage speist Überschuss ins Netz.
 
     - **Eintritt (Fall G):** AC Laden aktiviert UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + ΣOutput_entladend) < min(Offset, 0) − Hysterese UND kein Tarif-Laden UND kein Überschuss
       - Guard `Modus ≠ '3'` verhindert Re-Eintritt wenn AC Laden bereits läuft
-      - Multi-Instanz: `ΣOutput_entladend` verhindert, dass die Entladung einer Schwester-Instanz als externer Netzüberschuss gewertet wird (optionaler Helfer `total_actual_power_entity`, geschrieben von der Leistungsverteilungs-Automation)
-    - **Richtungssperre (Multi-Instanz):** Steht eine Schwester-Instanz in Modus `'3'` (AC- oder Tarif-Laden), gilt in Zone 1 dieser Instanz das Limit von Zone 2 `Max(0, PV − Reserve)` — ihre Batterie entlädt nicht, PV wird weiter eingespeist (optionales Input `sister_mode_selects`)
+      - Multi-Instancing: `ΣOutput_entladend` verhindert, dass die Entladung einer Schwester-Instanz als externer Netzüberschuss gewertet wird (optionaler Helfer `total_actual_power_entity`, geschrieben von der Leistungsverteilungs-Automation)
+    - **Richtungssperre (Multi-Instancing):** Steht eine Schwester-Instanz in Modus `'3'` (AC- oder Tarif-Laden), gilt in Zone 1 dieser Instanz das Limit von Zone 2 `Max(0, PV − Reserve)` — ihre Batterie entlädt nicht, PV wird weiter eingespeist (optionales Input `sister_mode_selects`)
     - **Verbleib:** Modus `'3'` solange SOC < Ladeziel UND Grid < (Offset + Hysterese)
     - **Abbruch (Fall H):** AC Laden deaktiviert ODER SOC ≥ Ladeziel ODER (Grid ≥ Offset + Hysterese UND eigener Output = 0 W)
       - Abschalten der Option beendet eine laufende Lade-Session; geprüft wird dafür der Lade-Helfer selbst, nicht die Option
@@ -139,14 +139,14 @@ blueprint:
 
     | Schwelle | Verhalten bei Preis-Unterschreitung | Override |
     |:---------|:------------------------------------|:---------|
-    | **Günstig** | **Laden aktiv (Fall GT)** + Entladesperre | `input_number` |
-    | **Teuer** | **Entladesperre (Fall TM)** — Akku passiv | `input_number` |
+    | **Günstig** | **Laden aktiv (Fall GT)** + Tarifsperre | `input_number` |
+    | **Teuer** | **Tarifsperre (Fall TM)** — Akku passiv | `input_number` |
 
     #### Logik-Details
     - **Fall GT (Preis < Günstig):** Lädt mit `tariff_charge_power` bis SOC-Ziel, Start erst unter SOC-Ziel − `tariff_soc_hysteresis`. Priorität vor AC-Laden. Rückkehr zu Zone 1 (Timer-Toggle) oder Zone 2 (Timer-Toggle, 0W). **Wird übersprungen wenn PV-Forecast-Suppressed.**
     - **Fall HT (Austritt):** endet, sobald keine günstige Preisaussage mehr vorliegt — abgeschalteter Tarif, PV-Forecast-Suppressed, unlesbarer Preissensor oder Preis ≥ Günstig-Schwelle — oder das SOC-Ladeziel erreicht ist.
     - **Fall TM (Preis < Teuer):** Stoppt Zone 1 & 2 sofort (Modus `'0'`). Setzt Zyklus-Helper zurück. Schont Akku für teure Spitzen. **Wird übersprungen wenn PV-Forecast-Suppressed.**
-    - **Normalbetrieb (Preis ≥ Teuer):** Entladesperre aufgehoben, Standard-Zonenregelung (Fall A/E) übernimmt wieder.
+    - **Normalbetrieb (Preis ≥ Teuer):** Tarifsperre aufgehoben, Standard-Zonenregelung (Fall A/E) übernimmt wieder.
 
     #### ⚠️ Sensor & Einheiten
     Keine Umrechnung! Die Einheit des Preissensors **muss** mit den Schwellen (statisch/Helfer) übereinstimmen (z.B. alle in €). Bei `unknown` Sensorstatus wird die Tarif-Logik deaktiviert.
@@ -168,7 +168,7 @@ blueprint:
     <details>
     <summary><b>🌤️ PV-Forecast Tarif-Unterdrückung (Optional)</b> 👈</summary>
 
-    Verhindert Tarif-Laden (GT) und Discharge-Lock (TM) an sonnigen Tagen.
+    Verhindert Tarif-Laden (GT) und Tarifsperre (TM) an sonnigen Tagen.
 
     - **Sensor:** PV-Tagesertrags-Prognose in kWh (z.B. Solcast `energy_production_today`; Wh/MWh werden automatisch normalisiert)
     - **Bedingung:** Forecast ≥ Schwelle → `pv_forecast_suppressed = true`
@@ -187,7 +187,7 @@ blueprint:
     - **Forcierungs-Flag:** `surplus_forecast_forced = (Forecast ≥ Schwelle) UND (PV > Hard Limit) UND (SOC > Zone-3-Schwelle)` — an echtes Abregel-Risiko gekoppelt, nicht am rohen Sensorwert allein; die SOC-Untergrenze verhindert, dass die Forcierung gegen den Zone-3-Sicherheitsstopp ankämpft (Flattern 0A ↔ C)
     - **Eintritt (Fall 0A, OR-Branch):** `surplus_forecast_forced` → Zone-0-Eintritt ohne Export-Schwelle
     - **Exit-Sperre (Fall 0B):** `surplus_forecast_forced` blockiert SOC- **und** PV-Austritt symmetrisch. Fällt PV unter Hard Limit (auch nachts), die Vorhersage unter die Schwelle oder der SOC unter Zone 3, wird das Flag sofort `false` → normale Austrittslogik greift ohne Sonderfall
-    - **Nur wirksam wenn:** Überschuss-Einspeisung ebenfalls aktiviert ist
+    - **Nur wirksam wenn:** Surplus ebenfalls aktiviert ist
     - **Fallback:** Sensor `unknown`/`unavailable` → Forecast inaktiv, normales SOC-Gate gilt
 
     </details>
@@ -202,7 +202,7 @@ blueprint:
     - **Wirkung (Fall 0B):** Sperrt **nur** den PV-Austritt. Der SOC-Austritt bleibt ungesperrt und beendet Surplus immer; Zone 3 (Fall C) greift zusätzlich jederzeit
     - **Hintergrund:** Der Austritt bei vollem Akku führt in einen Zustand, in dem die Hardware die PV auf den Eigenbedarf drosselt — der Überschuss ist nicht mehr messbar und der Wiedereintritt hängt an zufälligen Verbrauchsschwankungen (minutenlange Verzögerung). Die Sperre vermeidet diesen Zustand, indem transiente Einbrüche gar nicht erst zum Austritt führen
     - **Risiko:** Meldet der Sensor dauerhaft einen zu hohen Wert, bleibt Zone 0 entsprechend lange aktiv — bis der SOC-Austritt eingreift
-    - **Nur wirksam wenn:** Überschuss-Einspeisung ebenfalls aktiviert ist
+    - **Nur wirksam wenn:** Surplus ebenfalls aktiviert ist
     - **Fallback:** Sensor `unknown`/`unavailable` → Sperre inaktiv, normale Austrittslogik gilt
 
     </details>
@@ -216,7 +216,7 @@ blueprint:
     - **Scharfschalten:** Sobald PV > 0 gemessen wird → Helper → `on`
     - **Entschärfen (Fall 0B):** Beim Austritt während PV = 0 → Helper → `off`
     - **Wirkung (Fall 0A):** Der PV=0-Eintrittszweig greift nur solange der Helper `on` ist. Nach einem nächtlichen Austritt bleibt er gesperrt, bis wieder echtes PV > 0 gemessen wurde — der reine SOC-/PV-Vergleichszweig bleibt unverändert
-    - **Nur wirksam wenn:** Überschuss-Einspeisung ebenfalls aktiviert ist
+    - **Nur wirksam wenn:** Surplus ebenfalls aktiviert ist
     - **Fallback:** Helper nicht angelegt → Latch inaktiv, PV=0-Eintritt verhält sich wie bisher ungeschützt
 
     </details>
@@ -327,7 +327,7 @@ blueprint:
         collapsed: true
         input:
           cycle_active_boolean_helper:
-            name: 🛠️ Entladezyklus-Zustandsspeicher (input_boolean - ERFORDERLICH!)
+            name: 🛠️ Zyklus-Zustandsspeicher (input_boolean - ERFORDERLICH!)
             description: |
               ⚠️ WICHTIG: Erstellen Sie einen Schalter Helfer (Input Boolean).
               Einstellungen → Geräte & Dienste → Helfer → Helfer erstellen → Schalter
@@ -603,7 +603,7 @@ blueprint:
               Die Leistungsverteilungs-Automation berechnet den Anteil nur unter den
               gerade gleichzeitig AC-ladenden Instanzen und schreibt ihn in diesen Helfer.
               ⚠️ Wenn leer gelassen, übernimmt die Instanz beim AC-Laden den vollen
-              Netzfehler (= 1.0), auch im Multi-Instanz-Betrieb.
+              Netzfehler (= 1.0), auch im Multi-Instancing-Betrieb.
             default: {}
             selector:
               entity:
@@ -648,7 +648,7 @@ blueprint:
         collapsed: true
         input:
           surplus_export_enabled:
-            name: ☀️ Überschuss-Einspeisung aktivieren
+            name: ☀️ Surplus aktivieren
             description: |
               ✅ EIN: SOC ≥ Schwelle UND (PV > Verbrauch + PV-Hysterese ODER PV = 0) → Ausgangsleistung auf Maximum.
               ❌ AUS: Klassische Nulleinspeisung.
@@ -657,7 +657,7 @@ blueprint:
               boolean:
 
           soc_export_limit:
-            name: 🔋 SOC-Schwelle für Überschuss-Einspeisung
+            name: 🔋 SOC-Schwelle für Zone 0
             description: |
               Ab diesem SOC (z.B. 90 %) wird bei PV-Überschuss ins Netz eingespeist.
               Empfehlung: ~5 % unter der App-Ladeobergrenze — der Eintritt (PV > Verbrauch)
@@ -673,7 +673,7 @@ blueprint:
                 unit_of_measurement: "%"
 
           surplus_exit_hysteresis:
-            name: 🔋 Überschuss-Einspeisung Hysterese (SOC)
+            name: 🔋 Zone-0-Hysterese (SOC)
             description: |
               SOC muss um diesen Wert unter die Schwelle fallen bevor Zone 0 verlassen wird
               (z.B. 5 % → Austritt bei SOC < 85 % wenn Schwelle = 90 %).
@@ -700,7 +700,7 @@ blueprint:
             name: ☀️ Surplus-Zustand Speicher (input_boolean - nur für Zone 0)
             description: |
               input_boolean Helper zum persistenten Tracken des Surplus-Zustands.
-              ⚠️ Nur erforderlich wenn Überschuss-Einspeisung aktiviert ist.
+              ⚠️ Nur erforderlich wenn Surplus aktiviert ist.
             default: input_boolean.solakon_surplus_aktiv
             selector:
               entity:
@@ -712,7 +712,7 @@ blueprint:
               input_boolean Helper zum persistenten Sperren des PV=0-Eintrittszweigs nach einem
               nächtlichen Austritt, bis wieder echtes PV > 0 gemessen wurde. Verhindert Oszillation
               zwischen Fall 0A/0B bei vollem Speicher in der Nacht.
-              ⚠️ Nur erforderlich wenn Überschuss-Einspeisung aktiviert ist. Fehlt der Helper
+              ⚠️ Nur erforderlich wenn Surplus aktiviert ist. Fehlt der Helper
               (nicht angelegt), verhält sich der Eintritt wie bisher ungeschützt.
             default: input_boolean.solakon_surplus_zero_entry_armed
             selector:
@@ -726,7 +726,7 @@ blueprint:
               UND SOC > Zone-3-Schwelle. Keine Export-Schwelle beim Eintritt. Exit (SOC- und
               PV-Term) bleibt gesperrt solange alle drei Bedingungen gelten — fällt eine weg,
               sofort normale Austrittslogik.
-              ⚠️ Nur wirksam wenn Überschuss-Einspeisung aktiviert ist.
+              ⚠️ Nur wirksam wenn Surplus aktiviert ist.
             default: false
             selector:
               boolean:
@@ -766,7 +766,7 @@ blueprint:
               Überschuss nicht mehr messbar ist — der Wiedereintritt verzögert sich um Minuten.
               Risiko: Meldet der Sensor dauerhaft einen zu hohen Wert, bleibt Zone 0
               entsprechend lange aktiv — bis der SOC-Austritt eingreift.
-              ⚠️ Nur wirksam wenn Überschuss-Einspeisung aktiviert ist.
+              ⚠️ Nur wirksam wenn Surplus aktiviert ist.
             default: false
             selector:
               boolean:
@@ -903,7 +903,7 @@ blueprint:
       tariff_parameter:
         name: "💹 TARIF-ARBITRAGE (Optional):"
         description: |
-          Laden bei günstigem Strompreis, Entladesperre bei mittlerem Preis.
+          Laden bei günstigem Strompreis, Tarifsperre bei mittlerem Preis.
           ⚠️ Sensor-Einheit und Schwellwerte müssen übereinstimmen (kein Umrechnen im Blueprint).
           ⚠️ Tibber liefert EUR/kWh → Schwellwerte ebenfalls in EUR/kWh angeben.
         collapsed: true
@@ -911,7 +911,7 @@ blueprint:
           tariff_arbitrage_enabled:
             name: 💹 Tarif-Arbitrage aktivieren
             description: |
-              ✅ EIN: Laden bei günstigem Preis, Entladesperre bei mittlerem Preis.
+              ✅ EIN: Laden bei günstigem Preis, Tarifsperre bei mittlerem Preis.
               ❌ AUS: Funktion deaktiviert — normale SOC-Zonenlogik.
             default: false
             selector:
@@ -987,7 +987,7 @@ blueprint:
             name: 🔋 Tarif-Laden SOC-Hysterese (%)
             description: |
               Tarif-Laden startet erst, wenn SOC < (SOC-Ziel − Hysterese). Das Ende bleibt beim SOC-Ziel.
-              Verhindert das Pendeln zwischen Tarif-Laden und Discharge-Lock am SOC-Ziel.
+              Verhindert das Pendeln zwischen Tarif-Laden und Tarifsperre am SOC-Ziel.
               0 = Start direkt unter dem SOC-Ziel.
             default: 3
             selector:
@@ -1075,7 +1075,7 @@ blueprint:
             name: 🌙 Nachtabschaltung aktivieren
             description: |
               Deaktiviert Zone 2 nachts automatisch (bei PV < PV-Ladereserve).
-              ⚠️ Zone 1, AC Laden und Überschuss-Einspeisung (Zone 0) laufen auch nachts weiter!
+              ⚠️ Zone 1, AC Laden und Surplus (Zone 0) laufen auch nachts weiter!
               ⚠️ Die PV-Schwelle für "Nacht" ist die PV-Ladereserve aus den Zone-2-Parametern.
             default: false
             selector:
@@ -1291,7 +1291,7 @@ variables:
        pv_forecast_sensor_id is string and pv_forecast_sensor_id | length > 0 and
        states(pv_forecast_sensor_id) not in ['unknown', 'unavailable'] and
        pv_forecast_energy_float | float(0) >= pv_forecast_threshold_float | float(0) }}
-  # Entladesperre aktiv? (Preis < Teuer-Schwelle UND Sensor valide UND keine Prognose-Unterdrückung)
+  # Tarifsperre aktiv? (Preis < Teuer-Schwelle UND Sensor valide UND keine Prognose-Unterdrückung)
   # Gilt für Zone 1 und Zone 2 — Guards in Falls A und E
   price_discharge_locked: >
     {{ tariff_arbitrage_enabled_bool and
@@ -1480,7 +1480,7 @@ actions:
           - action: logbook.log
             data:
               name: Solakon Zonenwechsel
-              message: "☀️ Zone 0 aktiviert (Überschuss-Einspeisung startet)"
+              message: "☀️ Zone 0 aktiviert (Surplus startet)"
               entity_id: !input solar_power_sensor
           # 2. Surplus-Zustand → on
           - action: input_boolean.turn_on
@@ -1506,7 +1506,7 @@ actions:
           - action: logbook.log
             data:
               name: Solakon Zonenwechsel
-              message: "☁️ Zone 0 deaktiviert (Überschuss-Einspeisung beendet)"
+              message: "☁️ Zone 0 deaktiviert (Surplus beendet)"
               entity_id: !input solar_power_sensor
           # 2. Surplus-Zustand → off
           - action: input_boolean.turn_off
@@ -1533,7 +1533,7 @@ actions:
   # -------------------------------------------------------------------------------------------------
   - choose:
       # FALL A: ZONE 1 - Aggressive Entladung START
-      # Guard: kein AC/Tarif-Laden aktiv, keine Entladesperre (Preis < teuer)
+      # Guard: kein AC/Tarif-Laden aktiv, keine Tarifsperre (Preis < teuer)
       - conditions:
           - condition: template
             value_template: "{{ not (ac_charge_mode_active | bool(false)) }}"
@@ -1794,7 +1794,7 @@ actions:
       # Bei aktiver Lade-Session entfällt die SOC-Bedingung.
       # Recovery folgt einer Lade-Session nur solange deren Ladegrund gilt
       # (recovery_session_active) - eine Session ohne Grund beenden HT, H und I.
-      # Guard: Entladesperre - dieselbe Breite wie Fall TM, sonst stellt D die Entladung
+      # Guard: Tarifsperre - dieselbe Breite wie Fall TM, sonst stellt D die Entladung
       # wieder her, die TM im nächsten Lauf erneut stoppt. Der Guard liest die rohe
       # Session, nicht den Ladegrund: eine laufende Ladung hebt die Sperre auf.
       - conditions:
@@ -2018,11 +2018,11 @@ actions:
                 data:
                   option: '0'
 
-      # FALL TM: TARIF DISCHARGE-LOCK — alles unter der Teuer-Schwelle
+      # FALL TM: TARIFSPERRE — alles unter der Teuer-Schwelle
       # Stoppt laufende Entladung (Zone 1 UND Zone 2) wenn der Preis unter der Teuer-Schwelle liegt.
       # Guard: kein AC/Tarif-Laden aktiv, Modus = '1' (Entladung läuft)
-      # Guard: pv_forecast_suppressed — sonnige Tage überspringen Discharge-Lock
-      # Guard: kein aktiver Überschuss — Zone 0 hat Vorrang vor dem Discharge-Lock
+      # Guard: pv_forecast_suppressed — sonnige Tage überspringen Tarifsperre
+      # Guard: kein aktiver Überschuss — Zone 0 hat Vorrang vor der Tarifsperre
       - conditions:
           - condition: template
             value_template: "{{ not (surplus_entity_valid | bool(false) and is_state(surplus_state_entity, 'on')) }}"
@@ -2046,7 +2046,7 @@ actions:
             data:
               name: Solakon Tarif-Arbitrage
               message: >
-                🔒 Discharge-Lock: Preis {{ states(price_sensor_entity) }} unter der Teuer-Schwelle.
+                🔒 Tarifsperre: Preis {{ states(price_sensor_entity) }} unter der Teuer-Schwelle.
                 Zone {{ '1' if is_state(cycle_active, 'on') else '2' }} deaktiviert.
               entity_id: !input soc_sensor
           # 2. Integral zurücksetzen
@@ -2410,7 +2410,7 @@ actions:
                   option: '0'
 
       # FALL E: ZONE 2 - Batterieschonend START
-      # Guard: kein AC/Tarif-Laden aktiv, keine Entladesperre (Preis < teuer)
+      # Guard: kein AC/Tarif-Laden aktiv, keine Tarifsperre (Preis < teuer)
       - conditions:
           - condition: template
             value_template: "{{ not (ac_charge_mode_active | bool(false)) }}"
