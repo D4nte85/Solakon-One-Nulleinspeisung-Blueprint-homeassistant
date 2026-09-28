@@ -9,8 +9,15 @@ Ziel dieses Blueprints ist es, PV-Energie direkt auszugeben ohne den Umweg über
 
 ---
 
-**WICHTIG:** Die Implementierung der Fernsteuerung der Solakon Integration führt dazu, dass es kein "disabled" gibt als Fernsteuerbefehl — dies schaltet die Fernsteuerung an sich ab, d.h. die Standardeinstellungen des Solakon ONE bzw. aus der APP greifen zu diesem Zeitpunkt.
-Für eine wie im Folgenden gewollte Funktion sollte als Standard ein 0W für 24std Zeitplan erstellt und aktiviert werden, oder die "Standart-Ausgangsleistung" auf 0W gestellt werden. Diese Methoden sind äquivalent.
+## Voraussetzung: App-Einstellungen
+
+Die Fernsteuerung der Solakon-Integration kennt kein echtes „Disabled" — `'0'` schaltet die Fernsteuerung ab, danach greifen die Einstellungen des Geräts. Der Blueprint nutzt das bewusst als definierten Fallback, etwa in Zone 3. Damit das Gerät dort nichts ausgibt und PV-Leistung in den Akku lädt, einmalig in der Solakon-App einstellen:
+
+- **Standard-Ausgangsleistung 0 W** (oder ein 0-W-Zeitplan für 24 Stunden)
+- **Überschussladung aktivieren**
+- keine anderen Zeit- oder Energiepläne
+
+Die App wird nur für diese Einstellung gebraucht, danach läuft das Gerät ohne sie. Speist das Gerät in Zone 3 ein oder lädt der Akku dort bei PV-Leistung nicht, fehlt meist eine dieser Einstellungen.
 
 ---
 
@@ -189,7 +196,7 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
 | **0 — Überschuss-Einspeisung** | SOC ≥ Export-Schwelle UND PV > Output + Grid + PV-Hysterese | `'1'` | 2 A | Hard Limit | **Optional.** Integral eingefroren. Blockiert GT und G. |
 | **1 — Aggressive Entladung** | SOC > Zone-1-Schwelle | `'1'` | Konfigurierter Max-Wert | 0W + Offset 1 | Läuft **bis SOC ≤ Zone-3-Schwelle**. Auch nachts aktiv. |
 | **2 — Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `'1'` | **0 A** | 0W + Offset 2 | Dynamisches Limit: `Min(Hard Limit, Max(0, PV − Reserve))`. Optional: Nachtabschaltung. |
-| **3 — Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` | Max-Wert (Ruhe) | — | Output = 0 W. Vollständiger Batterieschutz. Absoluter Vorrang. |
+| **3 — Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` | Max-Wert (Ruhe) | — | Output = 0 W. Vollständiger Batterieschutz. Absoluter Vorrang. Verhalten des Geräts siehe [App-Einstellungen](#voraussetzung-app-einstellungen). |
 
 ---
 
