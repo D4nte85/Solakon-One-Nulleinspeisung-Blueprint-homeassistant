@@ -9,8 +9,15 @@ The goal of this blueprint is to deliver PV energy directly to loads, bypassing 
 
 ---
 
-**IMPORTANT:** The implementation of remote control in the Solakon integration means there is no true "disabled" remote command — this disables remote control itself, i.e. the Solakon ONE falls back to its default settings or those from the app.
-For the intended behavior, a 0W schedule active for 24h should be created and activated, or the "Default Output Power" set to 0W. Both methods are equivalent.
+## Prerequisite: app settings
+
+The remote control of the Solakon integration has no true "disabled" — `'0'` switches remote control off, after which the device's own settings apply. The blueprint uses this deliberately as a defined fallback, for example in Zone 3. So that the device outputs nothing there and PV power charges the battery, set once in the Solakon app:
+
+- **Default output power 0 W** (or a 0 W schedule for 24 hours)
+- **Enable surplus charging** („Überschussladung" in the German app)
+- no other schedules or energy plans
+
+The app is only needed for this setting; afterwards the device runs without it. If the device feeds in during Zone 3, or the battery does not charge there despite PV power, one of these settings is usually missing.
 
 ---
 
@@ -179,7 +186,7 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
 | **0. Surplus Export** | SOC ≥ export threshold AND PV > Output + Grid + PV-Hysteresis | `'1'` | 2 A (stability buffer) | Hard Limit (max W) | **Optional.** Integral frozen. Persistent `input_boolean`. Exit with SOC-Hysteresis + PV-Hysteresis. |
 | **1. Aggressive Discharge** | SOC > Zone 1 threshold | `'1'` | Configured max value (default: 40 A) | 0W + Offset 1 | Runs **until SOC ≤ Zone 3 threshold** (no yo-yo effect). Active at night too. |
 | **2. Battery Conserving** | Zone 3 threshold < SOC ≤ Zone 1 threshold | `'1'` | **0 A** | 0W + Offset 2 | Dynamic limit: `Min(Hard Limit, Max(0, PV − Reserve))`. Optional: Night Shutdown. |
-| **3. Safety Stop** | SOC ≤ Zone 3 threshold | `'0'` (Disabled) | Max value (idle) | — | Output = 0 W. Full battery protection. |
+| **3. Safety Stop** | SOC ≤ Zone 3 threshold | `'0'` (Disabled) | Max value (idle) | — | Output = 0 W. Full battery protection. Device behavior see [app settings](#prerequisite-app-settings). |
 
 #### Overview of Control Cases (choose block)
 

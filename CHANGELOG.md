@@ -5,6 +5,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- README: remote control note rewritten as section "Prerequisite: app settings", as in the integration. New: surplus charging, "no other schedules or energy plans" and the link to Zone 3; without these settings the device feeds in during Zone 3 or does not charge. Zone table links to it
+
 ## [V313] – 2026-09-27
 
 ### Fixed
