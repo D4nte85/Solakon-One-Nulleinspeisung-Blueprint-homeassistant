@@ -64,8 +64,8 @@ flowchart TD
         TARIFF_END_Z1["💹 Tariff Charging end (Zone 1)   Output → 0 W   Timer-Toggle (3598↔3599)   Mode → '1' (INV Discharge PV Priority)"]
         TARIFF_END_Z2["💹 Tariff Charging end (Zone 2)   Output → 0 W   Timer-Toggle (3598↔3599)   Mode → '0' (Disabled)"]
 
-        %% ── Case TM: Discharge Lock ──────────────────────────────────────
-        TARIFF_MID["🔒 Discharge Lock   Integral = 0   Cycle = off (only if Zone 1)   Surplus-Bool → off (only if active)   Output → 0 W   Timer-Toggle (3598↔3599)   Mode → '0' (Disabled)"]
+        %% ── Case TM: Tariff Lock ──────────────────────────────────────
+        TARIFF_MID["🔒 Tariff Lock   Integral = 0   Cycle = off (only if Zone 1)   Surplus-Bool → off (only if active)   Output → 0 W   Timer-Toggle (3598↔3599)   Mode → '0' (Disabled)"]
 
     end
     style SG_TARIFF fill:none,stroke:#1a7f1a,stroke-width:5,stroke-dasharray:6,color:#000
@@ -93,10 +93,10 @@ flowchart TD
     style SG_AC fill:none,stroke:#0066cc,stroke-width:5,stroke-dasharray:6,color:#000
 
     %% ── ZONE_CHECK → Case branches ──────────────────────────────────────
-    ZONE_CHECK -- "CASE A   NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on   AND NOT Discharge Lock (price < expensive)   AND SOC > Zone 1 threshold AND Cycle = off" --> Z1_START
+    ZONE_CHECK -- "CASE A   NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on   AND NOT Tariff Lock (price < expensive)   AND SOC > Zone 1 threshold AND Cycle = off" --> Z1_START
     ZONE_CHECK -- "CASE B   NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on   AND SOC ≤ Zone 3 threshold AND Cycle = on" --> Z3_A
     ZONE_CHECK -- "CASE C   NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on   AND SOC ≤ Zone 3 threshold AND Cycle = off AND Mode ≠ '0'" --> Z3_B
-    ZONE_CHECK -- "CASE D   Cycle = on OR charging reason holds   AND Mode ∉ {'1','3'} ← '3' explicitly excluded!   AND (charging reason holds OR SOC > Zone 3 threshold)   AND (no discharge lock OR Charge-Bool = on)" --> RECOVERY
+    ZONE_CHECK -- "CASE D   Cycle = on OR charging reason holds   AND Mode ∉ {'1','3'} ← '3' explicitly excluded!   AND (charging reason holds OR SOC > Zone 3 threshold)   AND (no Tariff Lock OR Charge-Bool = on)" --> RECOVERY
     ZONE_CHECK -- "CASE GT   Tariff Arbitrage enabled   AND price < cheap threshold   AND SOC < tariff charge target − SOC hysteresis   AND Mode ≠ '3' ← Guard!   AND NOT AC-Charge-Bool = on   AND NOT Surplus-Bool = on   AND NOT PV-Forecast-Suppressed" --> TARIFF_START
     ZONE_CHECK -- "CASE HT   Tariff-Charge-Bool = on   AND (no cheap-price statement OR SOC ≥ tariff charge target)   no cheap-price statement = tariff off, price sensor unreadable, PV-Forecast-Suppressed or price ≥ cheap threshold" --> TARIFF_END
     ZONE_CHECK -- "CASE TM   Tariff active   AND price < expensive   AND no AC/Tariff charging   AND NOT Surplus-Bool = on   AND Mode = '1'   AND NOT PV-Forecast-Suppressed" --> TARIFF_MID
@@ -104,7 +104,7 @@ flowchart TD
     ZONE_CHECK -- "CASE H   Mode = '3'   AND AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on   AND (AC Charging disabled OR SOC ≥ charge target OR (Grid ≥ AC-Offset + Hysteresis AND Output = 0 W))" --> AC_END
     ZONE_CHECK -- "CASE I   Charge-Bool = on   AND (Mode ≠ '3' OR both Charge-Bools = on)" --> SAFETY_I_SESSION
     ZONE_CHECK -- "CASE I   Mode = '3'   AND NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on" --> SAFETY_I
-    ZONE_CHECK -- "CASE E   NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on   AND NOT Discharge Lock (price < expensive)   AND Zone 3 < SOC ≤ Zone 1 AND Cycle = off AND Mode = '0' AND NOT night" --> Z2_START
+    ZONE_CHECK -- "CASE E   NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on   AND NOT Tariff Lock (price < expensive)   AND Zone 3 < SOC ≤ Zone 1 AND Cycle = off AND Mode = '0' AND NOT night" --> Z2_START
     ZONE_CHECK -- "CASE F   NOT AC-Charge-Bool = on   AND NOT Tariff-Charge-Bool = on   AND NOT Surplus-Bool = on   AND Night Shutdown active AND PV < PV Charge Reserve AND Cycle = off AND Mode active" --> NIGHT
     ZONE_CHECK -- "No zone change" --> PI_GATE
 
