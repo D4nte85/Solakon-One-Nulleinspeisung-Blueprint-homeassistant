@@ -394,7 +394,7 @@ Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher, wenn PV d
 |:----------|:---------|:----------------|:-------------|
 | **Extern** | Netz-Leistungssensor | *(kein Standard)* | Z.B. Shelly 3EM. **Positiv = Bezug, Negativ = Einspeisung** |
 | **Solakon** | Solarleistung | `sensor.solakon_one_pv_leistung` | Aktuelle PV-Erzeugung in Watt |
-| **Solakon** | Tatsächliche Ausgangsleistung | `sensor.solakon_one_leistung` | Aktuelle AC-Ausgangsleistung in Watt |
+| **Solakon** | Ist-Leistung | `sensor.solakon_one_leistung` | Aktuelle AC-Ausgangsleistung in Watt |
 | **Solakon** | Batterieladestand (SOC) | `sensor.solakon_one_batterie_ladestand` | Ladestand in % |
 | **Solakon** | Remote Timeout Countdown | `sensor.solakon_one_fernsteuerung_zeituberschreitung` | Verbleibender Countdown |
 | **Solakon** | Ausgangsleistungsregler | `number.solakon_one_fernsteuerung_leistung` | Setzt Leistungs-Sollwert |
@@ -749,7 +749,7 @@ einfließen.
 | `...instanz_N_share` | `input_number` | min:0, max:1, step:0.001 | Fehler-Anteil Nulleinspeisung von Leistungsverteilung → PI-Regler (Pool 1) |
 | Kapazitätssensor (optional) | `sensor` | kWh — von Solakon-Integration bereitgestellt | kWh-genaue Gewichtung bei unterschiedlichen Batteriekapazitäten |
 | `...instanz_N_ac_share` (nur bei AC-Laden) | `input_number` | min:0, max:1, step:0.001 | Fehler-Anteil AC-Laden von Leistungsverteilung → PI-Regler (Pool 2) |
-| `total_actual_power` (optional, ein gemeinsamer Helfer, nicht pro Instanz) | `input_number` | min:0, max:≥Global-Max, step:1 | Summe der Ist-Ausgangsleistung aller Instanzen im Entlademodus, von Leistungsverteilung → `total_actual_power_entity` jeder Instanz (Fall-G-Eintritt) |
+| `total_actual_power` (optional, ein gemeinsamer Helfer, nicht pro Instanz) | `input_number` | min:0, max:≥Global-Max, step:1 | Summe der Ist-Leistung aller Instanzen im Entlademodus, von Leistungsverteilung → `total_actual_power_entity` jeder Instanz (Fall-G-Eintritt) |
 
 Für Pool 2 wird zusätzlich derselbe AC-Lade-Zustand-Helfer (`input_boolean`, siehe Punkt 5 der
 Helper-Liste) in der Leistungsverteilung eingetragen — er zeigt an, welche Instanzen gerade

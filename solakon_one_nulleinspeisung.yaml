@@ -250,7 +250,7 @@ blueprint:
         collapsed: true
         input:
           actual_power_sensor:
-            name: ⚡ Solakon ONE - Tatsächliche Ausgangsleistung
+            name: ⚡ Solakon ONE - Ist-Leistung
             description: Die tatsächliche AC-Ausgangsleistung des Wechselrichters.
             default: sensor.solakon_one_leistung
             selector:
@@ -613,7 +613,7 @@ blueprint:
             name: 🔀 Σ-Ausgangsleistung entladend — Dynamisch (Multi-Instancing)
             description: |
               ⚠️ NUR für Multi-Instancing erforderlich — im Einzelbetrieb leer lassen.
-              Optionale input_number-Entität mit der Summe der Ist-Ausgangsleistung
+              Optionale input_number-Entität mit der Summe der Ist-Leistung
               aller Instanzen, die gerade im Entlademodus stehen (Modus '1').
               Wird von der Leistungsverteilungs-Automation berechnet und geschrieben.
               Verhindert bei Fall G (AC-Laden-Eintritt), dass die Entladung einer
