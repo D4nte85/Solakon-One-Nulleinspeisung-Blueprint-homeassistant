@@ -5,6 +5,8 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 ## [Unreleased]
 
+## [V314] – 2026-09-29
+
 ### Hinzugefügt
 - Schalter **Entlade-PI** (Standard an). Aus: Zone 1 und 2 regeln über die Stellwertrechnung auf Ist-Basis statt über den PI — Ist-Entladeleistung + `error_share` × (Grid − Offset), geklemmt auf 0 … `dynamic_max`, während der Rampe nur senken, Integral auf 0. Guard, Wartezeit und Stillstandserkennung bleiben. Portiert aus der Integration v3.3.0
 
