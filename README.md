@@ -167,7 +167,7 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
   - **Zone 2:** `Min(Hard Limit, Max(0, PV − Reserve))`
   - **AC Charging (Mode 3):** Configurable charge limit
 
-* **Discharge PI off — setpoint calculation instead of PI:** With the **Discharge PI** switch off, zones 1 and 2 compute the setpoint in one step like AC charging: `error_share` × (Σ actual power discharging + grid − offset), clamped to 0 … `dynamic_max`. The Σ actual power comes from `total_actual_power_entity`; without this helper, the own actual power is used. While the ramp is running (own actual power more than 15 W below the output power), it only lowers. No minimum power, no script call, the integral is held at 0. Guard, wait time and stall detection are the same as with the PI.
+* **Discharge PI off — setpoint calculation instead of PI:** With the **Discharge PI** switch off, zones 1 and 2 compute the setpoint in one step like AC charging: actual discharge power + `error_share` × (grid − offset), clamped to 0 … `dynamic_max`. While the ramp is running (own actual power more than 15 W below the output power), it only lowers. No minimum power, no script call, the integral is held at 0. Guard, wait time and stall detection are the same as with the PI.
 
 * **PI Call Guard (in main automation):**
   - Zone 0 active → PI not called, integral frozen
@@ -807,7 +807,7 @@ equal-split mode, since no SOC sensors feed into the weighting there.
 | `...instance_N_share` | `input_number` | min:0, max:1, step:0.001 | Zero-Export error share from distribution → PI controller (Pool 1) |
 | Capacity sensor (optional) | `sensor` | kWh — from Solakon integration | Accurate kWh weighting for different battery capacities |
 | `...instance_N_ac_share` (AC charging only) | `input_number` | min:0, max:1, step:0.001 | AC-charging error share from distribution → PI controller (Pool 2) |
-| `total_actual_power` (optional, one shared helper, not per instance) | `input_number` | min:0, max:≥Global-Max, step:1 | Sum of actual output power across all instances in discharge mode, from distribution → each instance's `total_actual_power_entity` (Case G entry, setpoint calculation with the discharge PI off) |
+| `total_actual_power` (optional, one shared helper, not per instance) | `input_number` | min:0, max:≥Global-Max, step:1 | Sum of actual output power across all instances in discharge mode, from distribution → each instance's `total_actual_power_entity` (Case G entry) |
 
 For Pool 2, the same AC charge state helper (`input_boolean`, see helper list item 5) is also
 entered in the power distribution automation — it identifies which instances are currently
