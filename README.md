@@ -424,7 +424,7 @@ Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher, wenn PV d
 | **Wartezeit** | 3 s | 0 | 30 s | Wartezeit nach Leistungsänderung. Ist "Adaptive Wartezeit" aktiviert, gilt der Wert nur als Timeout. |
 | **Adaptive Wartezeit** | Aus | – | – | Bricht die Wartezeit früh ab wenn Ist-Leistung ≈ Sollwert ± Totband (beim Laden: −Ist-Leistung, weil die Ist-Leistung dann negativ ist). Vorsicht bei langsamen externen Netzmesswerten (z.B. IR-Lesekopf) — kann zu verfrühtem Reglereingriff führen. |
 
-> **Hinweis:** P- und I-Faktor gelten für Zone 1 und Zone 2. Für den AC-Lade-Modus werden separate Faktoren verwendet.
+> **Hinweis:** P- und I-Faktor gelten für Zone 1 und Zone 2 bei eingeschaltetem Entlade-PI. Das AC-Laden läuft ohne PI über die Stellwertrechnung.
 
 ---
 

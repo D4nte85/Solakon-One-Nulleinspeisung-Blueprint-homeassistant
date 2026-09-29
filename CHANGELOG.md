@@ -9,6 +9,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 - Schalter **Entlade-PI** (Standard an). Aus: Zone 1 und 2 regeln über die Stellwertrechnung auf Ist-Basis statt über den PI — `error_share` × (Σ Ist-Leistung entladend + Grid − Offset), geklemmt auf 0 … `dynamic_max`, während der Rampe nur senken, Integral auf 0. Guard, Wartezeit und Stillstandserkennung bleiben. Portiert aus der Integration v3.3.0
 
 ### Geändert
+- Veralteten Hinweis auf separate P/I-Faktoren für das AC-Laden aus Beschreibung und README entfernt; das AC-Laden läuft über die Stellwertrechnung.
 - Deutsche Texte an das Glossar angeglichen: Totband statt Toleranz, Ausgangsleistung statt Output im Fließtext (Formeln behalten `Output`), Dynamic Offset statt dynamischer Offset, Prognose-Unterdrückung statt PV-Forecast-Unterdrückung. Input „📏 Toleranzbereich (Totband)“ heißt „📏 Totband“ (Schlüssel `tolerance` unverändert), Logbuch-Name „Solakon Nachtabschaltung“ statt „Solakon Nachtmodus“. Keine Verhaltensänderung.
 - README: Hinweis zur Fernsteuerung als Abschnitt „Voraussetzung: App-Einstellungen“ neu gefasst, wie in der Integration. Neu sind Überschussladung, „keine anderen Zeit- oder Energiepläne“ und der Bezug zu Zone 3; ohne diese Einstellungen speist das Gerät in Zone 3 ein oder lädt nicht. Zonentabelle verweist darauf
 - Ist-Leistung statt „Tatsächliche Ausgangsleistung“: Input-Name „⚡ Solakon ONE - Ist-Leistung“ (Schlüssel unverändert), README-Tabellen.

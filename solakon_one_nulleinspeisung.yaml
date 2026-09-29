@@ -42,7 +42,6 @@ blueprint:
       - Solange die Rampe läuft (eigene Ist-Leistung mehr als 15 W unter der Ausgangsleistung), wird nur gesenkt
       - Integral wird auf 0 gehalten, kein Script-Aufruf
     - **Ausgangs-Stillstandserkennung:** Bei `at_max_limit` schreibt der PI nicht mehr — ein in diesem Zustand stehengebliebener Wechselrichter bekäme keinen Befehl mehr, und Fall D greift nicht, da der Modus auf `'1'` steht. Weicht die Ist-Leistung um mehr als 5 % vom Limit ab und steht der Ist-Sensor dabei über 300 s unverändert (`last_updated`), wird Integral = 0, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'` gesetzt; im nächsten Lauf holt Fall D das Gerät regulär zurück. Frühestens alle 300 s (gemessen an `last_changed` des Modus).
-    - **Separate P/I-Faktoren für AC Laden:** Die Ladeleistung steigt nur mit etwa 33 W/s, Senken wirkt sofort. Deshalb empfiehlt sich ein kleiner P-Faktor (~0.3–0.5) und I = 0 — sonst legt der PI nach, bevor das Gerät den letzten Sollwert erreicht hat.
 
     </details>
 
