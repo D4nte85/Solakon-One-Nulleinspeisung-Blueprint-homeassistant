@@ -38,7 +38,7 @@ blueprint:
       - Normal → PI nur wenn `|Fehler| > Totband` UND kein At-Limit
       - `at_max_limit` = false wenn `current > dynamic_max` (PV-Einbruch) → PI kann nach unten korrigieren
     - **Entlade-PI aus (`pi_enabled`):** Zone 1 und 2 laufen über die Stellwertrechnung statt über den PI — gleicher Guard, gleiche Wartezeit, gleiche Stillstandserkennung.
-      - Stellwert = `error_share` × (Σ Ist-Leistung entladend + Grid − Offset), geklemmt auf 0 … `dynamic_max`; ohne Σ-Helfer die eigene Ist-Leistung
+      - Stellwert = Ist-Entladeleistung + `error_share` × (Grid − Offset), geklemmt auf 0 … `dynamic_max`
       - Solange die Rampe läuft (eigene Ist-Leistung mehr als 15 W unter der Ausgangsleistung), wird nur gesenkt
       - Integral wird auf 0 gehalten, kein Script-Aufruf
     - **Ausgangs-Stillstandserkennung:** Bei `at_max_limit` schreibt der PI nicht mehr — ein in diesem Zustand stehengebliebener Wechselrichter bekäme keinen Befehl mehr, und Fall D greift nicht, da der Modus auf `'1'` steht. Weicht die Ist-Leistung um mehr als 5 % vom Limit ab und steht der Ist-Sensor dabei über 300 s unverändert (`last_updated`), wird Integral = 0, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'` gesetzt; im nächsten Lauf holt Fall D das Gerät regulär zurück. Frühestens alle 300 s (gemessen an `last_changed` des Modus).
@@ -370,7 +370,7 @@ blueprint:
             name: 🎛️ Entlade-PI
             description: >-
               An: Zone 1 und 2 entladen über den PI-Regler mit P- und I-Faktor.
-              Aus: Stellwertrechnung wie beim AC-Laden — neuer Sollwert = Fehler-Anteil × (Σ Ist-Leistung entladend + Grid − Offset),
+              Aus: Stellwertrechnung wie beim AC-Laden — neuer Sollwert = Ist-Entladeleistung + Fehler-Anteil × (Grid − Offset),
               in einem Schritt, ohne Integral; während die Rampe läuft, wird nur gesenkt.
               P- und I-Faktor wirken nur bei An. Bei Aus wird das Integral auf 0 gehalten.
             default: true
@@ -631,10 +631,9 @@ blueprint:
               aller Instanzen, die gerade im Entlademodus stehen (Modus '1').
               Wird von der Leistungsverteilungs-Automation berechnet und geschrieben.
               Verhindert bei Fall G (AC-Laden-Eintritt), dass die Entladung einer
-              Schwester-Instanz als externer Netzüberschuss gewertet wird, und ist
-              bei ausgeschaltetem Entlade-PI die Ist-Basis der Stellwertrechnung.
-              ⚠️ Wenn leer gelassen, verwenden Fall G und die Stellwertrechnung nur den
-              eigenen Ausgangswert dieser Instanz (Einzelbetrieb-Verhalten).
+              Schwester-Instanz als externer Netzüberschuss gewertet wird.
+              ⚠️ Wenn leer gelassen, verwendet Fall G nur den eigenen Ausgangswert
+              dieser Instanz (Einzelbetrieb-Verhalten).
             default: {}
             selector:
               entity:
@@ -2703,21 +2702,15 @@ actions:
         {% endif %}
 
       # Stellwertrechnung Entladen auf Ist-Basis (Entlade-PI aus):
-      #   Stellwert = Fehler-Anteil × (Σ Ist-Leistung entladend + Netz − Offset), geklemmt auf 0 … dynamic_max_power
-      #   Σ Ist-Leistung entladend aus total_actual_power_entity, ohne Helfer die eigene Ist-Leistung
+      #   Stellwert = Ist-Entladeleistung + Fehler-Anteil × (Netz − Offset), geklemmt auf 0 … dynamic_max_power
       #   Rampe läuft (eigene Ist-Leistung > 15 W unter der Ausgangsleistung) → nur senken
       #   −1 = nichts schreiben
       discharge_setpoint: >
         {% set v = states(actual_power_sensor) | float(0) %}
         {% set own = (v * 1000) if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else v %}
-        {% set pool = own %}
-        {% if total_actual_power_entity_id is string and total_actual_power_entity_id | length > 0
-              and states(total_actual_power_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
-          {% set pool = states(total_actual_power_entity_id) | float(own) %}
-        {% endif %}
         {% set limit = dynamic_max_power | float(0) %}
         {% set out = current_active_power | float(0) %}
-        {% set value = (pool + raw_error | float(0)) * (error_share_value | float(1.0)) %}
+        {% set value = own + (error_share_value | float(1.0)) * (raw_error | float(0)) %}
         {% set value = ([[value, 0] | max, limit] | min) | round(0) %}
         {% if own < out - 15 and value > out %}
           -1

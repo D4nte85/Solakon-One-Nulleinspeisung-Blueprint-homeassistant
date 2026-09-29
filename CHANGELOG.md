@@ -6,7 +6,7 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 ## [Unreleased]
 
 ### Hinzugefügt
-- Schalter **Entlade-PI** (Standard an). Aus: Zone 1 und 2 regeln über die Stellwertrechnung auf Ist-Basis statt über den PI — `error_share` × (Σ Ist-Leistung entladend + Grid − Offset), geklemmt auf 0 … `dynamic_max`, während der Rampe nur senken, Integral auf 0. Guard, Wartezeit und Stillstandserkennung bleiben. Portiert aus der Integration v3.3.0
+- Schalter **Entlade-PI** (Standard an). Aus: Zone 1 und 2 regeln über die Stellwertrechnung auf Ist-Basis statt über den PI — Ist-Entladeleistung + `error_share` × (Grid − Offset), geklemmt auf 0 … `dynamic_max`, während der Rampe nur senken, Integral auf 0. Guard, Wartezeit und Stillstandserkennung bleiben. Portiert aus der Integration v3.3.0
 
 ### Geändert
 - Veralteten Hinweis auf separate P/I-Faktoren für das AC-Laden aus Beschreibung und README entfernt; das AC-Laden läuft über die Stellwertrechnung.
