@@ -37,6 +37,10 @@ blueprint:
       - AC Charging active → setpoint calculation, no PI, integral unchanged
       - Normal → PI only if `|error| > tolerance` AND no at-limit
       - `at_max_limit` = false if `current > dynamic_max` (PV drop) → PI can correct downward
+    - **Discharge PI off (`pi_enabled`):** zones 1 and 2 run on the setpoint calculation instead of the PI — same guard, same wait time, same stall detection.
+      - Setpoint = `error_share` × (Σ actual power discharging + grid − offset), clamped to 0 … `dynamic_max`; without the Σ helper, the own actual power
+      - While the ramp is running (own actual power more than 15 W below the output power), it only lowers
+      - Integral is held at 0, no script call
     - **Output stall detection:** At `at_max_limit` the PI no longer writes — an inverter stalled in that state would never receive another command, and case D does not apply because the mode is still `'1'`. If actual power deviates from the limit by more than 5 % while the actual sensor has been unchanged for over 300 s (`last_updated`), the automation sets integral = 0, output → 0 W, timer toggle, mode → `'0'`; on the next run case D brings the device back. Repeats at most every 300 s (measured on the mode entity's `last_changed`).
     - **Separate P/I Factors for AC Charging:** Charging power rises by only about 33 W/s; lowering takes effect immediately. Keep P small (~0.3–0.5) and I at 0 — otherwise the PI adds more before the device has reached the last setpoint.
 
@@ -363,6 +367,17 @@ blueprint:
         name: "🎚️ CONTROL PARAMETERS (PI):"
         collapsed: true
         input:
+          pi_enabled:
+            name: 🎛️ Discharge PI
+            description: >-
+              On: zones 1 and 2 discharge via the PI controller with P and I factor.
+              Off: setpoint calculation as in AC charging — new setpoint = error share × (Σ actual power discharging + grid − offset),
+              in one step, without integral; while the ramp is running, it only lowers.
+              P and I factor only act when on. When off, the integral is held at 0.
+            default: true
+            selector:
+              boolean: {}
+
           regulator_factor:
             name: 🎛️ P Factor (Proportional Gain)
             description: P component of the PI controller (e.g. 1.3). Higher = more aggressive.
@@ -618,9 +633,10 @@ blueprint:
               all instances currently in discharge mode (mode '1').
               Calculated and written by the power distribution automation.
               Prevents Case G (AC-charge entry) from reading a sibling instance's
-              discharge as external grid surplus.
-              ⚠️ If left empty, Case G uses only this instance's own output value
-              (single-instance behavior).
+              discharge as external grid surplus, and is the actual basis of the
+              setpoint calculation when the discharge PI is off.
+              ⚠️ If left empty, Case G and the setpoint calculation use only this
+              instance's own output value (single-instance behavior).
             default: {}
             selector:
               entity:
@@ -2594,6 +2610,7 @@ actions:
         {% else %}
           {{ max_active_power_limit_int }}
         {% endif %}
+      pi_enabled_bool: !input pi_enabled
       regulator_factor_float: !input regulator_factor
       ki_factor_float: !input ki_factor
       ac_charge_min_power_int: !input ac_charge_min_power
@@ -2679,6 +2696,31 @@ actions:
         {% if (offset - grid_power_float) | abs <= tolerance_int | float(0) and out <= limit %}
           -1
         {% elif charge < out - 15 and value > out %}
+          -1
+        {% elif (value - out) | abs < 0.5 %}
+          -1
+        {% else %}
+          {{ value | int }}
+        {% endif %}
+
+      # Discharge setpoint calculation on actual basis (discharge PI off):
+      #   Setpoint = error share × (Σ actual power discharging + grid − offset), clamped to 0 … dynamic_max_power
+      #   Σ actual power discharging from total_actual_power_entity, without helper the own actual power
+      #   Ramp running (own actual power > 15 W below the output power) → only lower
+      #   −1 = write nothing
+      discharge_setpoint: >
+        {% set v = states(actual_power_sensor) | float(0) %}
+        {% set own = (v * 1000) if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else v %}
+        {% set pool = own %}
+        {% if total_actual_power_entity_id is string and total_actual_power_entity_id | length > 0
+              and states(total_actual_power_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
+          {% set pool = states(total_actual_power_entity_id) | float(own) %}
+        {% endif %}
+        {% set limit = dynamic_max_power | float(0) %}
+        {% set out = current_active_power | float(0) %}
+        {% set value = (pool + raw_error | float(0)) * (error_share_value | float(1.0)) %}
+        {% set value = ([[value, 0] | max, limit] | min) | round(0) %}
+        {% if own < out - 15 and value > out %}
           -1
         {% elif (value - out) | abs < 0.5 %}
           -1
@@ -2852,6 +2894,50 @@ actions:
                 then:
                   - wait_template: >
                       {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) + states(active_power_entity) | float(0)) | abs <= tolerance_int }}
+                    timeout:
+                      seconds: "{{ wait_time_int }}"
+                    continue_on_timeout: true
+                else:
+                  - delay:
+                      seconds: "{{ wait_time_int }}"
+
+      # BRANCH C0: Discharge setpoint calculation (Zone 1 / Zone 2, discharge PI off)
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ not (pi_enabled_bool | bool(true)) and
+                 not (ac_charge_mode_active | bool(false)) and
+                 (grid_error_abs > tolerance_int or above_dynamic_max | bool(false)) and
+                 not at_max_limit | bool(false) and
+                 not at_min_limit | bool(false) }}
+        sequence:
+          # Hold integral at 0
+          - if:
+              - condition: template
+                value_template: "{{ states(integral_entity) | float(0) != 0 }}"
+            then:
+              - action: input_number.set_value
+                target:
+                  entity_id: !input integral_helper
+                data:
+                  value: 0
+          - if:
+              - condition: template
+                value_template: "{{ discharge_setpoint | int(-1) >= 0 }}"
+            then:
+              # Output power → setpoint
+              - action: number.set_value
+                target:
+                  entity_id: !input active_power_number
+                data:
+                  value: "{{ discharge_setpoint | int }}"
+              # Wait time — adaptive (if enabled) until actual power ≈ setpoint or timeout, otherwise fixed
+              - if:
+                  - condition: template
+                    value_template: "{{ adaptive_wait_bool }}"
+                then:
+                  - wait_template: >
+                      {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) - states(active_power_entity) | float(0)) | abs <= tolerance_int }}
                     timeout:
                       seconds: "{{ wait_time_int }}"
                     continue_on_timeout: true

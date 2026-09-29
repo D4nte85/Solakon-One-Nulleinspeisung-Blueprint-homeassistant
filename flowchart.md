@@ -182,7 +182,13 @@ flowchart TD
 
         %% ── Normal PI Path ─────────────────────────────────────────
         NORMAL_GATE{{"Error > tolerance?   AND no at_max / at_min limit?   (at_max = false if current > dynamic_max — PI corrects downward)"}}
-        NORMAL_GATE -- Yes --> CALC_NORMAL
+        NORMAL_GATE -- Yes --> PI_SWITCH
+
+        PI_SWITCH{{"Discharge PI on?"}}
+        PI_SWITCH -- Yes --> CALC_NORMAL
+        PI_SWITCH -- No --> CALC_SETPOINT
+
+        CALC_SETPOINT["🎯 Discharge setpoint calculation (no PI)   integral → 0 (if ≠ 0)   setpoint = error_share × (Σ actual power discharging + grid − target_offset)   Σ from total_actual_power_entity, otherwise own actual power   clamp(0, dynamic_max)   write nothing if: ramp running (own actual power > 15 W below output) AND setpoint > output   OR |setpoint − output| < 0.5   otherwise → output → inverter + wait time"]
         NORMAL_GATE -- No --> INTEGRAL_DECAY
 
         CALC_NORMAL["🧠 PI Script (ac_charge_mode=false)   raw_error = (grid − target_offset) × error_share   error_share (Pool 1, Zero-Export): usable_i / Σ(usable_j) — only among instances in mode '1', set by power distribution (default 1.0)   usable_i = (SOC_i−Min-SOC_i)/100 × Cap_i   (Cap_i = Cap sensor kWh or 100 if not set)   dynamic_max:      Zone 1 → Hard Limit (sibling in mode '3' → like Zone 2, direction lock)      Zone 2 → Min(Hard Limit, Max(0, PV − Reserve))   Capacity clamping   correction = P·error + I·integral_candidate   new_power = current + correction   clamp(0, dynamic_max) → Output → inverter   Anti-windup: integral = (final − current − P·error) / I → clamp(±effective_max)   Wait time"]
@@ -200,6 +206,7 @@ flowchart TD
         CALC_TARIFF --> END_OK
         CALC_AC --> END_OK
         CALC_NORMAL --> END_OK
+        CALC_SETPOINT --> END_OK
 
     end
     style SG_PI fill:none,stroke:#004085,stroke-width:5,stroke-dasharray:6,color:#000
@@ -227,7 +234,7 @@ flowchart TD
     class SAFETY_I,SAFETY_I_SESSION,SAFETY_I_Z1,SAFETY_I_Z2 recovery
     class TARIFF_START,TARIFF_END,TARIFF_END_Z1,TARIFF_END_Z2,TARIFF_GATE,CALC_TARIFF tariff
     class TARIFF_MID tarifflock
-    class CALC_NORMAL,DISCHARGE_SET,INTEGRAL_DECAY,NORMAL_GATE,STALL_GATE pi
+    class CALC_NORMAL,CALC_SETPOINT,DISCHARGE_SET,INTEGRAL_DECAY,NORMAL_GATE,PI_SWITCH,STALL_GATE pi
     class STALL_RECOVER recovery
     class END_STOP,END_SKIP,END_OK end_node
 ````
