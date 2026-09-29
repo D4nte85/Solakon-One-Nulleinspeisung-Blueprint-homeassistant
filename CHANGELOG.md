@@ -9,6 +9,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Discharge PI** switch (default on). Off: zones 1 and 2 are controlled by the setpoint calculation on actual basis instead of the PI — `error_share` × (Σ actual power discharging + grid − offset), clamped to 0 … `dynamic_max`, only lowering while the ramp is running, integral held at 0. Guard, wait time and stall detection stay. Ported from integration v3.3.0
 
 ### Changed
+- Removed the outdated note on separate P/I factors for AC charging from description and README; AC charging runs on the setpoint calculation.
 - README: remote control note rewritten as section "Prerequisite: app settings", as in the integration. New: surplus charging, "no other schedules or energy plans" and the link to Zone 3; without these settings the device feeds in during Zone 3 or does not charge. Zone table links to it
 - The price lock of Case TM is called "Tariff Lock" instead of "discharge lock" in descriptions, comments and the notification.
 
