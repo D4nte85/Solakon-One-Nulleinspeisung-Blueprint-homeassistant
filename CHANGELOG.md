@@ -5,6 +5,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [V315] – 2026-10-01
+
+### Fixed
+- **Case G and surplus entry after a load drop (integration issue #50):** Both combined the fresh grid value with the last polled actual power. After a load drop it still showed the value before ramping up; the apparent surplus started AC charging or Zone 0 without real surplus. The own output now counts the larger of actual power and output setpoint, the setpoint only in mode `'1'`. Surplus exit and Case H keep using the actual power.
+- **Power distribution:** New optional input "Output Power Controller" per instance. If set, the instance counts in the Σ helper `total_actual_power` with the larger of actual power and output setpoint; without it, with the actual power as before.
+- README: Case G entry formula `min(ac_charge_offset, 0) − hysteresis` instead of `−ac_charge_hysteresis`, Case H exit `actual_power == 0` instead of `|actual_power| ≤ tolerance`, as in the blueprint.
+
 ## [V314] – 2026-09-29
 
 ### Added

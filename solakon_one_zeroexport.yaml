@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Zero Export (EN) - Dynamic & SOC-Controlled (V314)
+  name: Solakon ONE Zero Export (EN) - Dynamic & SOC-Controlled (V315)
   description: |
     Dynamic zero export for the Solakon ONE inverter with PI controller, SOC zone logic,
     optional surplus export (incl. surplus forecast entry), optional AC charging from external
@@ -50,7 +50,7 @@ blueprint:
 
     | Zone | Condition | Mode | Discharge Current | Notes |
     |:-----|:----------|:-----|:-----------------|:------|
-    | **0 — Surplus** | SOC ≥ export threshold AND PV > Output + Grid + PV-Hysteresis | `'1'` | 2 A | Optional. Integral frozen. |
+    | **0 — Surplus** | SOC ≥ export threshold AND PV > Output_discharging + Grid + PV-Hysteresis | `'1'` | 2 A | Optional. Integral frozen. |
     | **1 — Aggressive** | SOC > Zone 1 threshold | `'1'` | Max (e.g. 40 A) | Runs until SOC ≤ Zone 3 threshold. Active at night too. |
     | **2 — Conserving** | Zone 3 < SOC ≤ Zone 1, Cycle = off | `'1'` | 0 A | Dynamic limit: `Min(Hard Limit, Max(0, PV − Reserve))`. Optional: Night Shutdown. |
     | **3 — Safety Stop** | SOC ≤ Zone 3 threshold | `'0'` | 0 A | Output = 0 W. Full battery protection. Always takes priority. |
@@ -92,7 +92,7 @@ blueprint:
 
     Enables active export of PV surplus when the battery is full.
 
-    - **Entry (standard):** SOC ≥ export threshold AND (PV > (Output + Grid + PV-Hysteresis) OR PV = 0)
+    - **Entry (standard):** SOC ≥ export threshold AND (PV > (Output_discharging + Grid + PV-Hysteresis) OR PV = 0) — `Output_discharging` is the larger of actual power and output setpoint, the setpoint only in mode `'1'`; after a load drop the actual power alone can still show the value before ramping up
     - **Entry (forecast):** Surplus forecast sensor ≥ threshold AND PV > Hard Limit AND SOC > zone-3 limit → forced entry **without export threshold**
     - **Exit:** NOT forecast-forced AND ((PV ≤ (Output + Grid − PV-Hysteresis) AND NOT exit lock) OR SOC < (export threshold − SOC-Hysteresis)) — forecast forcing blocks **both** exit terms, but only while PV > Hard Limit (real clipping risk) AND SOC > zone-3 limit; once either drops away, immediate release
     - **Exit lock (optional):** While the power forecast is ≥ lock factor × Hard Limit AND SOC > zone-3 limit, only the PV exit is blocked — short PV dips (clouds) are ridden out. The SOC exit always stays active
@@ -109,7 +109,7 @@ blueprint:
 
     Charges the battery when external grid feed-in is detected.
     Detection: `(Grid + ΣOutput_discharging) < min(Offset, 0) − Hysteresis` — i.e. after subtracting the Solakon's contribution, surplus remains.
-    ΣOutput_discharging: single-instance = own output power, multi-instance = sum of all instances in discharge mode.
+    ΣOutput_discharging: per instance the larger of actual power and output setpoint, the setpoint only in mode `'1'`; single-instance = own instance, multi-instance = sum of all instances in discharge mode.
     Typical use case: external PV system feeds surplus into the grid.
 
     - **Entry (Case G):** AC Charging enabled AND SOC < charge target AND Mode ≠ `'3'` AND (Grid + ΣOutput_discharging) < min(Offset, 0) − Hysteresis AND no Tariff charging AND no surplus
@@ -628,12 +628,14 @@ blueprint:
             name: 🔀 Σ Output Discharging — Dynamic (Multi-Instancing)
             description: |
               ⚠️ ONLY required for multi-instancing — leave empty in single-instance operation.
-              Optional input_number entity holding the sum of actual output power across
-              all instances currently in discharge mode (mode '1').
+              Optional input_number entity holding the sum of the output of all instances
+              currently in discharge mode (mode '1'), per instance the larger of actual
+              power and output setpoint if the output power controller is set in the
+              power distribution.
               Calculated and written by the power distribution automation.
               Prevents Case G (AC-charge entry) from reading a sibling instance's
               discharge as external grid surplus.
-              ⚠️ If left empty, Case G uses only this instance's own output value
+              ⚠️ If left empty, Case G uses only this instance's own output
               (single-instance behavior).
             default: {}
             selector:
@@ -1237,14 +1239,19 @@ variables:
       1.0
     {% endif %}
 
-  # Σ output of all discharging instances (Case G) — single-instance: own value
+  # Own output: the larger of actual power and output setpoint, the setpoint only in mode '1'
+  discharge_output_float: >
+    {{ [actual_power_float,
+        (states(active_power_entity) | float(0) if states(solakon_mode) == '1' else 0)] | max }}
+
+  # Σ output of all discharging instances (Case G) — single-instance: own output
   total_actual_power_entity_id: !input total_actual_power_entity
   total_actual_power_float: >
     {% if total_actual_power_entity_id is string and total_actual_power_entity_id | length > 0
          and states(total_actual_power_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
-      {{ states(total_actual_power_entity_id) | float(actual_power_float) }}
+      {{ states(total_actual_power_entity_id) | float(discharge_output_float) }}
     {% else %}
-      {{ actual_power_float }}
+      {{ discharge_output_float }}
     {% endif %}
 
   # Tariff Arbitrage
@@ -1487,7 +1494,7 @@ actions:
           - condition: template
             value_template: >
               {{ ((states(soc) | float(0) >= soc_export_limit_int) and
-                  (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int) or
+                  (solar_power_float > (discharge_output_float + grid_power_float + surplus_pv_hysteresis_int) or
                    (solar_power_float == 0 and surplus_zero_entry_armed))) or
                  surplus_forecast_forced | bool(false) }}
         sequence:
@@ -2110,7 +2117,7 @@ actions:
       # Guard: Mode ≠ '3' — prevents re-entry when AC Charging already active
       # Guard: NOT Tariff-Charge-Bool = on — Tariff charging has priority
       # Guard: NOT Surplus-Bool = on — Zone 0 blocks charging
-      # total_actual_power_float sums across all discharging instances (single-instance: own value)
+      # total_actual_power_float sums the output of all discharging instances (single-instance: own output)
       - conditions:
           - condition: template
             value_template: "{{ ac_charge_enabled_bool }}"

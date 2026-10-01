@@ -1,4 +1,4 @@
-# ⚡ Solakon ONE Zero Export Blueprint (EN) - V314
+# ⚡ Solakon ONE Zero Export Blueprint (EN) - V315
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/d4nte85)
@@ -185,7 +185,7 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
 
 | Zone | SOC Range / Condition | Mode | Max. Discharge Current | Control Target | Notes |
 |:-----|:----------------------|:-----|:----------------------|:--------------|:------|
-| **0. Surplus Export** | SOC ≥ export threshold AND PV > Output + Grid + PV-Hysteresis | `'1'` | 2 A (stability buffer) | Hard Limit (max W) | **Optional.** Integral frozen. Persistent `input_boolean`. Exit with SOC-Hysteresis + PV-Hysteresis. |
+| **0. Surplus Export** | SOC ≥ export threshold AND PV > Output_discharging + Grid + PV-Hysteresis | `'1'` | 2 A (stability buffer) | Hard Limit (max W) | **Optional.** Integral frozen. Persistent `input_boolean`. Exit with SOC-Hysteresis + PV-Hysteresis. |
 | **1. Aggressive Discharge** | SOC > Zone 1 threshold | `'1'` | Configured max value (default: 40 A) | 0W + Offset 1 | Runs **until SOC ≤ Zone 3 threshold** (no yo-yo effect). Active at night too. |
 | **2. Battery Conserving** | Zone 3 threshold < SOC ≤ Zone 1 threshold | `'1'` | **0 A** | 0W + Offset 2 | Dynamic limit: `Min(Hard Limit, Max(0, PV − Reserve))`. Optional: Night Shutdown. |
 | **3. Safety Stop** | SOC ≤ Zone 3 threshold | `'0'` (Disabled) | Max value (idle) | — | Output = 0 W. Full battery protection. Device behavior see [app settings](#prerequisite-app-settings). |
@@ -194,7 +194,7 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
 
 | Case | Condition | Action |
 |:-----|:----------|:-------|
-| **0A** | Surplus-Bool = `off` AND ((SOC ≥ export threshold AND (PV > Output + Grid + PV-Hysteresis OR (PV = 0 AND PV=0 latch armed))) OR Surplus-Forecast-Forced) | Zone 0 Start: Surplus-Bool → `on` |
+| **0A** | Surplus-Bool = `off` AND ((SOC ≥ export threshold AND (PV > Output_discharging + Grid + PV-Hysteresis OR (PV = 0 AND PV=0 latch armed))) OR Surplus-Forecast-Forced) | Zone 0 Start: Surplus-Bool → `on` |
 | **0B** | Surplus-Bool = `on` AND NOT Surplus-Forecast-Forced AND ((PV ≤ Output + Grid − PV-Hysteresis AND **NOT exit lock**) OR SOC < export threshold − SOC-Hysteresis) | Zone 0 End: Surplus-Bool → `off`, Integral = 0 |
 | **A** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND NOT Tariff Lock AND SOC > Zone 1 threshold AND Cycle = `off` | Zone 1 Start: Cycle = `on`, Integral = 0, reset Surplus/AC-Bool, Timer-Toggle, Mode → `'1'` |
 | **B** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND SOC ≤ Zone 3 threshold AND Cycle = `on` | Zone 3 Stop: Cycle = `off`, Integral = 0, reset Surplus/AC-Bool, Output → 0W (confirmed via actual power, 1× retry), Timer-Toggle, Mode → `'0'` |
@@ -228,9 +228,9 @@ Catches the condition where the inverter is in Mode `'3'` but no active charging
 
 Enables active export of PV surplus when the battery is full. SOC and PV hysteresis prevent unstable toggling.
 
-* **Standard Entry:** SOC ≥ export threshold AND (PV > (Output + Grid + PV-Hysteresis) OR (PV = 0 AND PV=0 entry latch armed, see section 12))
+* **Standard Entry:** SOC ≥ export threshold AND (PV > (Output_discharging + Grid + PV-Hysteresis) OR (PV = 0 AND PV=0 entry latch armed, see section 12)). `Output_discharging` is the larger of actual power and output setpoint, the setpoint only in mode `'1'`: after a load drop the actual power can still show the value before ramping up, and Zone 0 would enter without real surplus.
 * **Forecast Entry (optional):** Surplus forecast sensor ≥ threshold AND PV > Hard Limit AND SOC > zone-3 limit → Zone 0 entry **without export threshold**
-* **Exit:** (PV ≤ (Output + Grid − PV-Hysteresis) AND NOT exit lock) OR SOC < (export threshold − SOC-Hysteresis) — both terms are blocked while surplus forecast is forced (see section 7); the optional exit lock (see section 11) blocks only the PV term
+* **Exit:** (PV ≤ (Output + Grid − PV-Hysteresis) AND NOT exit lock, `Output` = actual power, because the setpoint in Zone 0 is fixed at Hard Limit) OR SOC < (export threshold − SOC-Hysteresis) — both terms are blocked while surplus forecast is forced (see section 7); the optional exit lock (see section 11) blocks only the PV term
 * **Persistence:** State stored in `input_boolean` — survives multiple automation runs
 * **Behavior:** Output to Hard Limit, discharge current 2 A (stability buffer), integral frozen (no decay, no PI call)
 * **Disabled:** Classic zero export — no active export
@@ -243,7 +243,7 @@ Enables active export of PV surplus when the battery is full. SOC and PV hystere
 
 ### 4. ⚡ AC Charging (Optional)
 
-Charges the battery when external grid feed-in is detected. Detection is based on `(Grid + ΣOutput_discharging) < min(Offset, 0) − Hysteresis` — i.e. after subtracting the Solakon's contribution, surplus still remains — single-instance: own output power, multi-instance: sum across all instances in discharge mode (prevents a sibling instance's discharge from being read as external grid surplus — see `total_actual_power_entity` in the Multi-Instancing section). Typical use case: external PV system feeds surplus into the grid.
+Charges the battery when external grid feed-in is detected. Detection is based on `(Grid + ΣOutput_discharging) < min(Offset, 0) − Hysteresis` — i.e. after subtracting the Solakon's contribution, surplus still remains — per instance the larger of actual power and output setpoint (setpoint only in mode `'1'`), single-instance: own instance, multi-instance: sum across all instances in discharge mode (prevents a sibling instance's discharge from being read as external grid surplus — see `total_actual_power_entity` in the Multi-Instancing section). Typical use case: external PV system feeds surplus into the grid.
 
 * **Entry condition (Case G):**
   - AC Charging enabled AND SOC < charge target
@@ -680,7 +680,7 @@ Condition: ac_charge_enabled
        AND Mode ≠ '3' ← Guard: prevents re-entry when AC Charging already active
        AND NOT tariff_charge_mode_active
        AND NOT surplus_active
-       AND (grid + total_actual_power) < -ac_charge_hysteresis ← Σ across all instances in discharge mode (single-instance: own output)
+       AND (grid + total_actual_power) < min(ac_charge_offset, 0) - hysteresis ← Σ across all instances in discharge mode, per instance max(actual power, output setpoint) (single-instance: own instance)
 ```
 
 ### Case H — Exit Condition
@@ -689,7 +689,7 @@ Condition: ac_charge_state_helper = on   ← raw helper, not the option
        AND Mode = '3' AND NOT tariff_charge_session
        AND (NOT ac_charge_enabled
             OR soc >= soc_ac_charge_limit
-            OR (grid >= ac_charge_offset + hysteresis AND |actual_power| <= tolerance))
+            OR (grid >= ac_charge_offset + hysteresis AND actual_power == 0))
 
   → ac_charge_state_helper = off, integral = 0
   → Zone 1: Timer-Toggle + Mode '1'
@@ -807,7 +807,7 @@ equal-split mode, since no SOC sensors feed into the weighting there.
 | `...instance_N_share` | `input_number` | min:0, max:1, step:0.001 | Zero-Export error share from distribution → PI controller (Pool 1) |
 | Capacity sensor (optional) | `sensor` | kWh — from Solakon integration | Accurate kWh weighting for different battery capacities |
 | `...instance_N_ac_share` (AC charging only) | `input_number` | min:0, max:1, step:0.001 | AC-charging error share from distribution → PI controller (Pool 2) |
-| `total_actual_power` (optional, one shared helper, not per instance) | `input_number` | min:0, max:≥Global-Max, step:1 | Sum of actual output power across all instances in discharge mode, from distribution → each instance's `total_actual_power_entity` (Case G entry) |
+| `total_actual_power` (optional, one shared helper, not per instance) | `input_number` | min:0, max:≥Global-Max, step:1 | Sum of the output of all instances in discharge mode (per instance actual power, with output power controller set the larger of actual power and output setpoint), from distribution → each instance's `total_actual_power_entity` (Case G entry) |
 
 For Pool 2, the same AC charge state helper (`input_boolean`, see helper list item 5) is also
 entered in the power distribution automation — it identifies which instances are currently
@@ -824,7 +824,7 @@ charging at the same time.
    - Optional: enter the capacity sensor from the Solakon ONE integration per instance — recommended for different battery capacities
    - For AC charging: additionally assign the AC charge state helper and `ac_share` helper per charging instance,
      plus enter the SOC charge target per instance — identical to the "SOC Charge Target" value of the respective instance
-   - Recommended (prevents battery-to-battery pumping in Case G): enter the actual-power sensor per instance, plus create a shared `total_actual_power` helper and enter it in each instance automation as "Σ Output Discharging — Dynamic" (`total_actual_power_entity`)
+   - Recommended (prevents battery-to-battery pumping in Case G): enter the actual-power sensor and the output power controller per instance, plus create a shared `total_actual_power` helper and enter it in each instance automation as "Σ Output Discharging — Dynamic" (`total_actual_power_entity`)
 5. Direction lock: in each instance automation, enter the operating mode selects of all **other** instances under "Operating Mode of Sibling Instances" (`sister_mode_selects`). While one of them is charging (mode `'3'`), Zone 1 uses the Zone 2 limit — without it, the group can pump energy from battery to battery after entering AC charging
 
 ---
