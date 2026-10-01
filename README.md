@@ -1,4 +1,4 @@
-# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V314
+# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V315
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/d4nte85)
@@ -194,7 +194,7 @@ Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Reche
 
 | Zone | SOC-Bereich / Bedingung | Modus | Max. Entladestrom | Regelziel | Besonderheiten |
 |:-----|:------------------------|:------|:-----------------|:---------|:--------------|
-| **0 — Surplus** | SOC ≥ Export-Schwelle UND PV > Output + Grid + PV-Hysterese | `'1'` | 2 A | Hard Limit | **Optional.** Integral eingefroren. Blockiert GT und G. |
+| **0 — Surplus** | SOC ≥ Export-Schwelle UND PV > Output_entladend + Grid + PV-Hysterese | `'1'` | 2 A | Hard Limit | **Optional.** Integral eingefroren. Blockiert GT und G. |
 | **1 — Aggressive Entladung** | SOC > Zone-1-Schwelle | `'1'` | Konfigurierter Max-Wert | 0W + Offset 1 | Läuft **bis SOC ≤ Zone-3-Schwelle**. Auch nachts aktiv. |
 | **2 — Batterieschonend** | Zone-3-Schwelle < SOC ≤ Zone-1-Schwelle | `'1'` | **0 A** | 0W + Offset 2 | Dynamisches Limit: `Min(Hard Limit, Max(0, PV − Reserve))`. Optional: Nachtabschaltung. |
 | **3 — Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` | Max-Wert (Ruhe) | — | Ausgangsleistung 0 W. Vollständiger Batterieschutz. Absoluter Vorrang. Verhalten des Geräts siehe [App-Einstellungen](#voraussetzung-app-einstellungen). |
@@ -227,7 +227,7 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 
 | Fall | Bedingung | Aktion |
 |:-----|:----------|:-------|
-| **0A** | Surplus-Bool = `off` UND (SOC ≥ Export-Schwelle UND (PV > Output + Grid + PV-Hysterese ODER (PV = 0 UND PV=0-Latch scharf)) **ODER** Surplus-Forecast-Forced) | Zone 0 Start: Surplus-Bool → `on` |
+| **0A** | Surplus-Bool = `off` UND (SOC ≥ Export-Schwelle UND (PV > Output_entladend + Grid + PV-Hysterese ODER (PV = 0 UND PV=0-Latch scharf)) **ODER** Surplus-Forecast-Forced) | Zone 0 Start: Surplus-Bool → `on` |
 | **0B** | Surplus-Bool = `on` UND **NICHT Surplus-Forecast-Forced** UND (SOC < Export-Schwelle − SOC-Hysterese ODER (PV ≤ Output + Grid − PV-Hysterese UND **NICHT Austritts-Sperre**)) | Zone 0 Ende: Surplus-Bool → `off`, Integral = 0 |
 | **A** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Tarifsperre (Preis < teuer) UND SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'` |
 | **B** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC ≤ Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Ausgangsleistung → 0 W (bestätigt über Ist-Leistung, 1× Retry), Timer-Toggle, Modus → `'0'` |
@@ -250,8 +250,8 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 Ermöglicht aktives Einspeisen von PV-Überschuss wenn der Akku voll ist. SOC- und PV-Hysterese verhindern instabiles Hin- und Herschalten.
 
 * **Aktivierung:** Über den Parameter "Surplus aktivieren"
-* **Eintritts-Bedingung:** SOC ≥ Export-Schwelle UND (PV > (Output + Grid + PV-Hysterese) ODER (PV = 0 UND PV=0-Latch scharf, siehe Abschnitt 13))
-* **Austritts-Bedingung:** (PV ≤ (Output + Grid − PV-Hysterese) UND NICHT Austritts-Sperre) ODER SOC < (Export-Schwelle − SOC-Hysterese) — beide Terme werden blockiert solange Surplus-Forecast forciert (siehe Abschnitt 11); die optionale Austritts-Sperre (siehe Abschnitt 12) blockiert nur den PV-Term
+* **Eintritts-Bedingung:** SOC ≥ Export-Schwelle UND (PV > (Output_entladend + Grid + PV-Hysterese) ODER (PV = 0 UND PV=0-Latch scharf, siehe Abschnitt 13)). `Output_entladend` ist das Größere aus Ist-Leistung und Ausgangsleistung, die Ausgangsleistung nur in Modus `'1'`: Nach einem Lastabwurf kann die Ist-Leistung noch den Stand vor dem Hochregeln zeigen, und Zone 0 träte ohne echten Überschuss ein.
+* **Austritts-Bedingung:** (PV ≤ (Output + Grid − PV-Hysterese) UND NICHT Austritts-Sperre, `Output` = Ist-Leistung, weil der Sollwert in Zone 0 fest auf Hard Limit steht) ODER SOC < (Export-Schwelle − SOC-Hysterese) — beide Terme werden blockiert solange Surplus-Forecast forciert (siehe Abschnitt 11); die optionale Austritts-Sperre (siehe Abschnitt 12) blockiert nur den PV-Term
 * **Blockiert:** Tarif-Laden (Fall GT) und AC-Laden (Fall G) können nicht starten solange Zone 0 aktiv ist.
 * **Verhalten:** Ausgangsleistung auf Hard Limit, Entladestrom 2 A (Stabilitätspuffer), Integral eingefroren.
 * **Deaktiviert:** Klassische Nulleinspeisung — kein aktives Einspeisen.
@@ -264,7 +264,7 @@ Ermöglicht aktives Einspeisen von PV-Überschuss wenn der Akku voll ist. SOC- u
 
 ### 6. ⚡ AC Laden (Optional)
 
-Laden der Batterie wenn eine externe Einspeisung ins Netz erkannt wird. Eintritts-Erkennung: `(Grid + ΣOutput_entladend) < min(Offset, 0) − Hysterese` — im Einzelbetrieb die eigene Ausgangsleistung, im Multi-Instancing-Betrieb die Summe aller Instanzen im Entlademodus (verhindert, dass die Entladung einer Schwester-Instanz als externer Netzüberschuss gewertet wird — siehe `total_actual_power_entity` im Multi-Instancing-Abschnitt).
+Laden der Batterie wenn eine externe Einspeisung ins Netz erkannt wird. Eintritts-Erkennung: `(Grid + ΣOutput_entladend) < min(Offset, 0) − Hysterese` — je Instanz das Größere aus Ist-Leistung und Ausgangsleistung (Ausgangsleistung nur in Modus `'1'`), im Einzelbetrieb die eigene Instanz, im Multi-Instancing-Betrieb die Summe aller Instanzen im Entlademodus (verhindert, dass die Entladung einer Schwester-Instanz als externer Netzüberschuss gewertet wird — siehe `total_actual_power_entity` im Multi-Instancing-Abschnitt).
 
 * **Blockiert durch:** Zone 0 (Überschuss-Bool = `on`) und Tarif-Laden (Tarif-Bool = `on`).
 * **Eintritts-Bedingung (Fall G):** AC Laden aktiviert UND SOC < Ladeziel UND Modus ≠ `'3'` UND NICHT Tarif-Lade-Bool = `on` UND **NICHT Surplus-Bool = `on`** UND (Grid + ΣOutput_entladend) < min(Offset, 0) − Hysterese.
@@ -646,7 +646,7 @@ Eintritts-Bedingung (Fall G):
   UND Modus ≠ '3' ← Guard: verhindert Re-Eintritt
   UND NICHT tariff_charge_active ← Guard: Tarif-Laden hat Vorrang
   UND NICHT surplus_active ← Guard: Zone 0 hat Vorrang
-  UND (grid + total_actual_power) < min(ac_charge_offset, 0) - hysteresis ← Σ über alle Instanzen im Entlademodus (Einzelbetrieb: eigener Output)
+  UND (grid + total_actual_power) < min(ac_charge_offset, 0) - hysteresis ← Σ über alle Instanzen im Entlademodus, je Instanz max(Ist-Leistung, Ausgangsleistung) (Einzelbetrieb: eigene Instanz)
   → ac_charge_state_helper = on
   → Modus = '3', Output = 0W, Timer-Toggle
 
@@ -655,7 +655,7 @@ Abbruch-Bedingung (Fall H):
   UND Modus = '3' UND NICHT tariff_charge_session
   UND (NICHT ac_charge_enabled
        ODER soc >= soc_ac_charge_limit
-       ODER (grid >= offset + hysteresis UND |eigener Output| <= tolerance))
+       ODER (grid >= offset + hysteresis UND eigener Output == 0))
   → ac_charge_state_helper = off, integral = 0
   → Zone 1: Timer-Toggle + Modus '1'
   → Zone 2: Modus '0' + Output 0W
@@ -751,7 +751,7 @@ einfließen.
 | `...instanz_N_share` | `input_number` | min:0, max:1, step:0.001 | Fehler-Anteil Nulleinspeisung von Leistungsverteilung → PI-Regler (Pool 1) |
 | Kapazitätssensor (optional) | `sensor` | kWh — von Solakon-Integration bereitgestellt | kWh-genaue Gewichtung bei unterschiedlichen Batteriekapazitäten |
 | `...instanz_N_ac_share` (nur bei AC-Laden) | `input_number` | min:0, max:1, step:0.001 | Fehler-Anteil AC-Laden von Leistungsverteilung → PI-Regler (Pool 2) |
-| `total_actual_power` (optional, ein gemeinsamer Helfer, nicht pro Instanz) | `input_number` | min:0, max:≥Global-Max, step:1 | Summe der Ist-Leistung aller Instanzen im Entlademodus, von Leistungsverteilung → `total_actual_power_entity` jeder Instanz (Fall-G-Eintritt) |
+| `total_actual_power` (optional, ein gemeinsamer Helfer, nicht pro Instanz) | `input_number` | min:0, max:≥Global-Max, step:1 | Summe der Abgabe aller Instanzen im Entlademodus (je Instanz Ist-Leistung, mit eingetragenem Ausgangsleistungsregler das Größere aus Ist-Leistung und Ausgangsleistung), von Leistungsverteilung → `total_actual_power_entity` jeder Instanz (Fall-G-Eintritt) |
 
 Für Pool 2 wird zusätzlich derselbe AC-Lade-Zustand-Helfer (`input_boolean`, siehe Punkt 5 der
 Helper-Liste) in der Leistungsverteilung eingetragen — er zeigt an, welche Instanzen gerade
@@ -768,7 +768,7 @@ gleichzeitig laden.
    - Optional: Kapazitätssensor der Solakon-ONE-Integration pro Instanz eintragen — empfohlen bei unterschiedlichen Batteriekapazitäten
    - Bei AC-Laden zusätzlich: AC-Lade-Zustand-Helfer und `ac_share`-Helfer pro ladender Instanz zuordnen,
      dazu das SOC-Ladeziel pro Instanz eintragen — identisch mit dem Wert „SOC-Ladeziel" der jeweiligen Instanz
-   - Empfohlen (verhindert Batterie-zu-Batterie-Umpumpen bei Fall G): pro Instanz den Ist-Leistungssensor eintragen, dazu einen gemeinsamen `total_actual_power`-Helfer anlegen und in jeder Instanz-Automation als „Σ-Ausgangsleistung entladend — Dynamisch" (`total_actual_power_entity`) eintragen
+   - Empfohlen (verhindert Batterie-zu-Batterie-Umpumpen bei Fall G): pro Instanz den Ist-Leistungssensor und den Ausgangsleistungsregler eintragen, dazu einen gemeinsamen `total_actual_power`-Helfer anlegen und in jeder Instanz-Automation als „Σ-Ausgangsleistung entladend — Dynamisch" (`total_actual_power_entity`) eintragen
 5. Richtungssperre: In jeder Instanz-Automation unter „Betriebsmodus der Schwester-Instanzen" (`sister_mode_selects`) die Betriebsmodus-Selects aller **anderen** Instanzen eintragen. Solange eine davon lädt (Modus `'3'`), gilt in Zone 1 das Limit von Zone 2 — ohne Eintrag kann die Gruppe nach dem Eintritt ins AC-Laden Energie von Batterie zu Batterie pumpen
 
 ---

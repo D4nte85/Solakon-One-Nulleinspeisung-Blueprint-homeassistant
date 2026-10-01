@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V314)
+  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V315)
   description: |
     Dynamische Nulleinspeisung für den Solakon ONE Wechselrichter mit PI-Regler, SOC-Zonenlogik,
     optionalem Surplus (inkl. Surplus-Forecast-Eintritt), optionalem AC Laden,
@@ -50,7 +50,7 @@ blueprint:
 
     | Zone | Bedingung | Modus | Entladestrom | Besonderheit |
     |:-----|:----------|:------|:------------|:-------------|
-    | **0 — Überschuss** | SOC ≥ Export-Schwelle UND PV > Output + Grid + PV-Hysterese | `'1'` | 2 A | Optional. Integral eingefroren. |
+    | **0 — Überschuss** | SOC ≥ Export-Schwelle UND PV > Output_entladend + Grid + PV-Hysterese | `'1'` | 2 A | Optional. Integral eingefroren. |
     | **1 — Aggressiv** | SOC > Zone-1-Schwelle | `'1'` | Max (z.B. 40 A) | Läuft bis SOC ≤ Zone-3-Schwelle. Auch nachts aktiv. |
     | **2 — Batterieschonend** | Zone-3 < SOC ≤ Zone-1, Zyklus = off | `'1'` | 0 A | Dynamisches Limit: `Min(Hard Limit, Max(0, PV − Reserve))`. Optional: Nachtabschaltung. |
     | **3 — Sicherheitsstopp** | SOC ≤ Zone-3-Schwelle | `'0'` | 0 A | Ausgangsleistung 0 W. Vollständiger Batterieschutz. Hat immer Vorrang. |
@@ -92,7 +92,7 @@ blueprint:
 
     Ermöglicht aktives Einspeisen von PV-Überschuss wenn der Akku voll ist.
 
-    - **Eintritt (Standard):** SOC ≥ Export-Schwelle UND (PV > (Output + Grid + PV-Hysterese) ODER PV = 0)
+    - **Eintritt (Standard):** SOC ≥ Export-Schwelle UND (PV > (Output_entladend + Grid + PV-Hysterese) ODER PV = 0) — `Output_entladend` ist das Größere aus Ist-Leistung und Ausgangsleistung, die Ausgangsleistung nur in Modus `'1'`; die Ist-Leistung allein kann nach einem Lastabwurf noch den Stand vor dem Hochregeln zeigen
     - **Eintritt (Forecast):** Surplus-Forecast-Sensor ≥ Schwelle UND PV > Hard Limit UND SOC > Zone-3-Schwelle → erzwungener Eintritt **ohne Export-Schwelle**
     - **Austritt:** NICHT Forecast-forciert UND ((PV ≤ (Output + Grid − PV-Hysterese) UND NICHT Austritts-Sperre) ODER SOC < (Export-Schwelle − SOC-Hysterese)) — Forecast-Forcierung blockiert **beide** Austrittsbedingungen, aber nur solange PV > Hard Limit (echtes Abregel-Risiko) UND SOC > Zone-3-Schwelle; fällt eine Bedingung weg, sofortige Freigabe
     - **Austritts-Sperre (Optional):** Solange Leistungs-Vorhersage ≥ Sperr-Faktor × Hard Limit UND SOC > Zone-3-Schwelle ist nur der PV-Austritt gesperrt — kurze PV-Einbrüche (Wolken) werden durchgeritten. Der SOC-Austritt bleibt immer aktiv
@@ -109,7 +109,7 @@ blueprint:
 
     Lädt die Batterie wenn eine externe Einspeisung ins Netz erkannt wird.
     Erkennung: `(Grid + ΣOutput_entladend) < min(Offset, 0) − Hysterese` — d.h. nach Abzug des Solakon-Beitrags liegt noch Überschuss an.
-    ΣOutput_entladend: Einzelbetrieb = eigene Ausgangsleistung, Multi-Instancing = Summe aller Instanzen im Entlademodus.
+    ΣOutput_entladend: je Instanz das Größere aus Ist-Leistung und Ausgangsleistung, die Ausgangsleistung nur in Modus `'1'`; Einzelbetrieb = eigene Instanz, Multi-Instancing = Summe aller Instanzen im Entlademodus.
     Typischer Anwendungsfall: externe PV-Anlage speist Überschuss ins Netz.
 
     - **Eintritt (Fall G):** AC Laden aktiviert UND SOC < Ladeziel UND Modus ≠ `'3'` UND (Grid + ΣOutput_entladend) < min(Offset, 0) − Hysterese UND kein Tarif-Laden UND kein Überschuss
@@ -627,13 +627,15 @@ blueprint:
             name: 🔀 Σ-Ausgangsleistung entladend — Dynamisch (Multi-Instancing)
             description: |
               ⚠️ NUR für Multi-Instancing erforderlich — im Einzelbetrieb leer lassen.
-              Optionale input_number-Entität mit der Summe der Ist-Leistung
-              aller Instanzen, die gerade im Entlademodus stehen (Modus '1').
+              Optionale input_number-Entität mit der Summe der Abgabe aller
+              Instanzen, die gerade im Entlademodus stehen (Modus '1'), je Instanz
+              das Größere aus Ist-Leistung und Ausgangsleistung, sofern in der
+              Leistungsverteilung der Ausgangsleistungsregler eingetragen ist.
               Wird von der Leistungsverteilungs-Automation berechnet und geschrieben.
               Verhindert bei Fall G (AC-Laden-Eintritt), dass die Entladung einer
               Schwester-Instanz als externer Netzüberschuss gewertet wird.
-              ⚠️ Wenn leer gelassen, verwendet Fall G nur den eigenen Ausgangswert
-              dieser Instanz (Einzelbetrieb-Verhalten).
+              ⚠️ Wenn leer gelassen, verwendet Fall G nur die eigene Abgabe dieser
+              Instanz (Einzelbetrieb-Verhalten).
             default: {}
             selector:
               entity:
@@ -1324,14 +1326,19 @@ variables:
       {{ max_active_power_limit_int }}
     {% endif %}
 
-  # Σ-Ausgangsleistung aller entladenden Instanzen (Fall G) — Einzelbetrieb: eigener Wert
+  # Eigene Abgabe: das Größere aus Ist-Leistung und Ausgangsleistung, die Ausgangsleistung nur in Modus '1'
+  discharge_output_float: >
+    {{ [actual_power_float,
+        (states(active_power_entity) | float(0) if states(solakon_mode) == '1' else 0)] | max }}
+
+  # Σ-Abgabe aller entladenden Instanzen (Fall G) — Einzelbetrieb: eigene Abgabe
   total_actual_power_entity_id: !input total_actual_power_entity
   total_actual_power_float: >
     {% if total_actual_power_entity_id is string and total_actual_power_entity_id | length > 0
          and states(total_actual_power_entity_id) not in ['unknown', 'unavailable', 'none', ''] %}
-      {{ states(total_actual_power_entity_id) | float(actual_power_float) }}
+      {{ states(total_actual_power_entity_id) | float(discharge_output_float) }}
     {% else %}
-      {{ actual_power_float }}
+      {{ discharge_output_float }}
     {% endif %}
 
   # Surplus-Forecast erzwungener Eintritt
@@ -1486,7 +1493,7 @@ actions:
           - condition: template
             value_template: >
               {{ ((states(soc) | float(0) >= soc_export_limit_int) and
-                  (solar_power_float > (actual_power_float + grid_power_float + surplus_pv_hysteresis_int) or
+                  (solar_power_float > (discharge_output_float + grid_power_float + surplus_pv_hysteresis_int) or
                    (solar_power_float == 0 and surplus_zero_entry_armed))) or
                  surplus_forecast_forced | bool(false) }}
         sequence:
@@ -2110,7 +2117,7 @@ actions:
       # Guard: Modus ≠ '3' — verhindert Re-Eintritt wenn AC Laden bereits aktiv
       # Guard: NICHT Tarif-Lade-Bool = on — Tarif-Laden hat Vorrang
       # Guard: NICHT Surplus-Bool = on — Zone 0 blockiert Laden
-      # total_actual_power_float summiert über alle entladenden Instanzen (Einzelbetrieb: eigener Wert)
+      # total_actual_power_float summiert die Abgabe aller entladenden Instanzen (Einzelbetrieb: eigene Abgabe)
       - conditions:
           - condition: template
             value_template: "{{ ac_charge_enabled_bool }}"

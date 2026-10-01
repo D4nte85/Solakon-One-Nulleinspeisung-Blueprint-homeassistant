@@ -5,6 +5,13 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 ## [Unreleased]
 
+## [V315] – 2026-10-01
+
+### Behoben
+- **Fall G und Surplus-Eintritt nach Lastabwurf (Integration Issue #50):** Beide verrechneten den frischen Netzwert mit der zuletzt gepollten Ist-Leistung. Nach einem Lastabwurf zeigte sie noch den Stand vor dem Hochregeln; der scheinbare Überschuss startete AC-Laden oder Zone 0 ohne echten Überschuss. Die eigene Abgabe zählt jetzt das Größere aus Ist-Leistung und Ausgangsleistung, die Ausgangsleistung nur in Modus `'1'`. Der Surplus-Austritt und Fall H bleiben bei der Ist-Leistung.
+- **Leistungsverteilung:** Neuer optionaler Eingang „Ausgangsleistungsregler“ je Instanz. Ist er gesetzt, zählt die Instanz im Σ-Helfer `total_actual_power` mit dem Größeren aus Ist-Leistung und Ausgangsleistung; ohne ihn wie bisher mit der Ist-Leistung.
+- README: Fall-H-Austritt `eigener Output == 0` statt `|eigener Output| <= tolerance`, wie im Blueprint.
+
 ## [V314] – 2026-09-29
 
 ### Hinzugefügt

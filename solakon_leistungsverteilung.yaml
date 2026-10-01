@@ -75,15 +75,17 @@ blueprint:
         total_actual_power_number:
           name: 🔀 Σ-Ausgangsleistung entladend — Helfer (Optional)
           description: |
-            input_number-Entität in die die Summe der Ist-Ausgangsleistung aller
-            Instanzen im Entlademodus (Modus '1') geschrieben wird.
+            input_number-Entität in die die Summe der Abgabe aller Instanzen im
+            Entlademodus (Modus '1') geschrieben wird — je Instanz die Ist-Leistung,
+            mit eingetragenem Ausgangsleistungsregler das Größere aus Ist-Leistung
+            und Ausgangsleistung.
             ⚠️ Nur wirksam wenn zusätzlich mindestens ein Ist-Leistungssensor
             (Instanz-Einstellungen unten) eingetragen ist.
             In jeder Instanz-Automation als „Σ-Ausgangsleistung entladend — Dynamisch"
             (total_actual_power_entity) eintragen, damit Fall G (AC-Laden-Eintritt)
-            ihn statt des eigenen Ausgangswerts verwendet.
+            ihn statt der eigenen Abgabe verwendet.
             ⚠️ Wenn leer gelassen, wird nichts geschrieben — jede Instanz verwendet
-            dann in Fall G weiterhin nur ihren eigenen Ausgangswert.
+            dann in Fall G weiterhin nur ihre eigene Abgabe.
           default: {}
           selector:
             entity:
@@ -183,6 +185,19 @@ blueprint:
           selector:
             entity:
               domain: sensor
+
+        inst1_active_power_number:
+          name: ⚙️ Instanz 1 — Ausgangsleistungsregler (Optional)
+          description: |
+            Dieselbe Entität, die in der Instanz-Automation als „Ausgangsleistungsregler"
+            eingetragen ist. Ist sie gesetzt, zählt die Instanz im Σ-Helfer mit dem Größeren
+            aus Ist-Leistung und Ausgangsleistung — die Ist-Leistung allein kann nach einem
+            Lastabwurf noch den Stand vor dem Hochregeln zeigen.
+            Leer: die Instanz zählt nur mit der Ist-Leistung.
+          default: {}
+          selector:
+            entity:
+              domain: number
 
         inst1_limit_number:
           name: ⚙️ Instanz 1 — Max. Leistung (input_number)
@@ -290,6 +305,14 @@ blueprint:
             entity:
               domain: sensor
 
+        inst2_active_power_number:
+          name: ⚙️ Instanz 2 — Ausgangsleistungsregler (Optional)
+          description: Siehe Instanz 1 — Ausgangsleistungsregler.
+          default: {}
+          selector:
+            entity:
+              domain: number
+
         inst2_limit_number:
           name: ⚙️ Instanz 2 — Max. Leistung (input_number)
           selector:
@@ -379,6 +402,14 @@ blueprint:
           selector:
             entity:
               domain: sensor
+
+        inst3_active_power_number:
+          name: ⚙️ Instanz 3 — Ausgangsleistungsregler (Optional)
+          description: Siehe Instanz 1 — Ausgangsleistungsregler.
+          default: {}
+          selector:
+            entity:
+              domain: number
 
         inst3_limit_number:
           name: ⚙️ Instanz 3 — Max. Leistung (input_number)
@@ -472,6 +503,14 @@ blueprint:
             entity:
               domain: sensor
 
+        inst4_active_power_number:
+          name: ⚙️ Instanz 4 — Ausgangsleistungsregler (Optional)
+          description: Siehe Instanz 1 — Ausgangsleistungsregler.
+          default: {}
+          selector:
+            entity:
+              domain: number
+
         inst4_limit_number:
           name: ⚙️ Instanz 4 — Max. Leistung (input_number)
           default: {}
@@ -523,6 +562,7 @@ variables:
   i1_ac_target:  !input inst1_ac_target_soc
   i1_cap:        !input inst1_capacity_sensor
   i1_actual:     !input inst1_actual_power_sensor
+  i1_output:     !input inst1_active_power_number
   i1_ac_helper:  !input inst1_ac_charge_helper
   i1_ac_share:   !input inst1_ac_share_number
   i2_mode:       !input inst2_mode_select
@@ -533,6 +573,7 @@ variables:
   i2_ac_target:  !input inst2_ac_target_soc
   i2_cap:        !input inst2_capacity_sensor
   i2_actual:     !input inst2_actual_power_sensor
+  i2_output:     !input inst2_active_power_number
   i2_ac_helper:  !input inst2_ac_charge_helper
   i2_ac_share:   !input inst2_ac_share_number
   i3_mode:       !input inst3_mode_select
@@ -543,6 +584,7 @@ variables:
   i3_ac_target:  !input inst3_ac_target_soc
   i3_cap:        !input inst3_capacity_sensor
   i3_actual:     !input inst3_actual_power_sensor
+  i3_output:     !input inst3_active_power_number
   i3_ac_helper:  !input inst3_ac_charge_helper
   i3_ac_share:   !input inst3_ac_share_number
   i4_mode:       !input inst4_mode_select
@@ -553,6 +595,7 @@ variables:
   i4_ac_target:  !input inst4_ac_target_soc
   i4_cap:        !input inst4_capacity_sensor
   i4_actual:     !input inst4_actual_power_sensor
+  i4_output:     !input inst4_active_power_number
   i4_ac_helper:  !input inst4_ac_charge_helper
   i4_ac_share:   !input inst4_ac_share_number
 
@@ -594,31 +637,48 @@ actions:
       # Σ-Ausgangsleistung aller Instanzen im Entlademodus (kW→W normalisiert).
       # Nur Instanzen mit konfiguriertem Ist-Leistungssensor tragen bei — fehlender
       # Sensor zählt als 0, kein Fehler (Sensor ist überall optional).
+      # Mit Ausgangsleistungsregler zählt das Größere aus Ist-Leistung und Ausgangsleistung.
       actual1: >
         {% if i1_active and i1_actual is string and i1_actual | length > 0 %}
           {% set v = states(i1_actual) | float(0) %}
-          {{ v * 1000 if state_attr(i1_actual, 'unit_of_measurement') == 'kW' else v }}
+          {% set v = v * 1000 if state_attr(i1_actual, 'unit_of_measurement') == 'kW' else v %}
+          {% if i1_output is string and i1_output | length > 0 %}
+            {% set v = [v, states(i1_output) | float(0)] | max %}
+          {% endif %}
+          {{ v }}
         {% else %}
           {{ 0 }}
         {% endif %}
       actual2: >
         {% if i2_active and i2_actual is string and i2_actual | length > 0 %}
           {% set v = states(i2_actual) | float(0) %}
-          {{ v * 1000 if state_attr(i2_actual, 'unit_of_measurement') == 'kW' else v }}
+          {% set v = v * 1000 if state_attr(i2_actual, 'unit_of_measurement') == 'kW' else v %}
+          {% if i2_output is string and i2_output | length > 0 %}
+            {% set v = [v, states(i2_output) | float(0)] | max %}
+          {% endif %}
+          {{ v }}
         {% else %}
           {{ 0 }}
         {% endif %}
       actual3: >
         {% if i3_active and i3_actual is string and i3_actual | length > 0 %}
           {% set v = states(i3_actual) | float(0) %}
-          {{ v * 1000 if state_attr(i3_actual, 'unit_of_measurement') == 'kW' else v }}
+          {% set v = v * 1000 if state_attr(i3_actual, 'unit_of_measurement') == 'kW' else v %}
+          {% if i3_output is string and i3_output | length > 0 %}
+            {% set v = [v, states(i3_output) | float(0)] | max %}
+          {% endif %}
+          {{ v }}
         {% else %}
           {{ 0 }}
         {% endif %}
       actual4: >
         {% if i4_active and i4_actual is string and i4_actual | length > 0 %}
           {% set v = states(i4_actual) | float(0) %}
-          {{ v * 1000 if state_attr(i4_actual, 'unit_of_measurement') == 'kW' else v }}
+          {% set v = v * 1000 if state_attr(i4_actual, 'unit_of_measurement') == 'kW' else v %}
+          {% if i4_output is string and i4_output | length > 0 %}
+            {% set v = [v, states(i4_output) | float(0)] | max %}
+          {% endif %}
+          {{ v }}
         {% else %}
           {{ 0 }}
         {% endif %}
