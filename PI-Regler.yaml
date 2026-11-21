@@ -90,11 +90,12 @@ variables:
 
   # Anti-Windup via Back-Calculation: Integral auf den Wert korrigieren,
   # der genau final_power produziert. Bei ungeklemmtem Ausgang = integral_candidate.
+  # I-Faktor 0: Integral 0.
   integral_new: >
     {% if i_val != 0 %}
       {{ ((final_power - current_float - error_float * p_val) / i_val) | clamp(-effective_max, effective_max) | round(2) }}
     {% else %}
-      {{ integral_candidate | clamp(-effective_max, effective_max) | round(2) }}
+      0
     {% endif %}
 
 sequence:

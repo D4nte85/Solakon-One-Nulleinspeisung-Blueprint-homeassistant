@@ -1,4 +1,4 @@
-# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V315
+# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V316
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/d4nte85)
@@ -179,12 +179,13 @@ Alternativ manuell:
 Der Blueprint nutzt einen **PI-Regler** für präzise Nulleinspeisung. Die Rechenlogik ist in ein separates **Script-Blueprint** (`PI-Regler`) ausgelagert, das aus der Hauptautomatisierung heraus aufgerufen wird.
 
 * **P-Anteil:** Reagiert sofort auf aktuelle Abweichungen. Konfigurierbare Aggressivität über den P-Faktor.
-* **I-Anteil:** Summiert Abweichungen über die Zeit auf, eliminiert bleibende Regelabweichungen. Anti-Windup via Back-Calculation: Integral wird nach jedem Eingriff auf den Wert korrigiert, der den tatsächlichen (ggf. geklemmten) Ausgang produziert — Clamp auf ±effective_max, gerundet auf 2 Nachkommastellen. Automatischer Reset bei Zonenwechsel. Integral-Decay 5%/Zyklus wenn Fehler ≤ Totband und |Integral| > 10. Zone-0-Einfrieren bei aktivem Überschuss.
+* **I-Anteil:** Summiert Abweichungen über die Zeit auf, eliminiert bleibende Regelabweichungen. Anti-Windup via Back-Calculation: Integral wird nach jedem Eingriff auf den Wert korrigiert, der den tatsächlichen (ggf. geklemmten) Ausgang produziert — Clamp auf ±effective_max, gerundet auf 2 Nachkommastellen; bei I-Faktor 0 bleibt das Integral 0. Automatischer Reset bei Zonenwechsel. Integral-Decay 5%/Zyklus wenn Fehler ≤ Totband und |Integral| > 10. Zone-0-Einfrieren bei aktivem Überschuss.
 * **Fehlerberechnung:** `raw_error = (grid − target_offset) × error_share`. `error_share` skaliert den Fehler auf den Anteil dieser Instanz (Standard 1.0 = voller Fehler). Zwei unabhängige Pools im Multi-Instancing-Betrieb: Nulleinspeisung (`error_share_entity`) und AC-Laden (`ac_error_share_entity`) — siehe Multi-Instancing-Abschnitt.
 * **Dynamisches Power-Limit:** Zone 1 → Hard Limit; lädt eine Schwester-Instanz (Richtungssperre, Multi-Instancing) → wie Zone 2. Zone 2 → `Min(Hard Limit, Max(0, PV − Reserve))`. AC Laden → konfigurierbares Lade-Limit. Tarif-Laden → kein PI (direkter Wert).
 * **AC Laden — Stellwertrechnung statt PI:** Ladesollwert = Ist-Ladeleistung + `error_share` × (AC-Offset − Grid), geklemmt auf 0 … Lade-Limit, in einem Schritt. Geschrieben wird bei `|AC-Offset − Grid| > Totband` oder Ausgangsleistung über dem Lade-Limit. Unter der Mindestladeleistung (Standard 50 W) wird 0 W geschrieben. Solange die Rampe läuft (Ist-Ladeleistung mehr als 15 W unter der Ausgangsleistung), wird nur gesenkt: Die Ladeleistung steigt nur mit etwa 34 W/s, der Netzsensor zeigt währenddessen einen älteren Stand. Das Integral bleibt im AC-Laden unverändert.
 * **Entlade-PI aus — Stellwertrechnung statt PI:** Ist der Schalter **Entlade-PI** aus, rechnen Zone 1 und 2 den Sollwert wie das AC-Laden in einem Schritt: Ist-Entladeleistung + `error_share` × (Grid − Offset), geklemmt auf 0 … `dynamic_max`. Solange die Rampe läuft (eigene Ist-Leistung mehr als 15 W unter der Ausgangsleistung), wird nur gesenkt. Keine Mindestleistung, kein Script-Aufruf, das Integral wird auf 0 gehalten. Guard, Wartezeit und Stillstandserkennung sind dieselben wie beim PI.
 * **Zweitlesung:** Netz und PV werden vor der PI-Phase erneut gelesen. Liefert einer der beiden keine Zahl, endet der Lauf mit einem Logeintrag ohne Schreibbefehl — sonst rechnete die PI-Phase mit 0 W, in Zone 2 fiele das Limit auf 0 und die Ausgangsleistung würde genullt.
+* **Nullbestätigung (Fall B und C):** Nach dem Schreiben von 0 W wartet der Blueprint, bis die Ist-Leistung im Totband liegt. Erst ab der Reaktionszeit (5 s) gilt als Beleg gegen die Nullung eine Ausgangsleistung ≠ 0 oder eine Meldung des Ist-Sensors außerhalb des Totbands (`last_reported`, ab HA 2024.3); eine frühere Meldung, etwa direkt nach dem Schreiben, zeigt noch den alten Wert. Nur mit Beleg schreibt er erneut 0 W, höchstens zweimal, danach Logbuch „Nullung nicht bestätigt“. Ohne Beleg endet die Prüfung nach Reaktionszeit + 30 s ohne Eintrag. Während der Prüfung verfallen neue Trigger (Modus `single`).
 * **PI-Aufruf-Guard:** Zone 0 aktiv → PI nicht aufgerufen, Integral eingefroren. Tarif-Laden aktiv → direkt setzen. AC Laden aktiv → Stellwertrechnung, kein PI. Normal → PI (bei ausgeschaltetem Entlade-PI die Stellwertrechnung) nur wenn (`|Fehler| > Totband` ODER `current > dynamic_max`) UND kein At-Limit. `at_max_limit` = false wenn `current > dynamic_max` (PV-Einbruch) → PI korrigiert nach unten, auch bei Netzfehler innerhalb der Totband.
 * **Ausgangs-Stillstandserkennung:** Steht der Sollwert am oberen Limit und besteht der Netzfehler in dieselbe Richtung fort (`at_max_limit`), schreibt der PI nicht mehr — er kann nicht weiter hochregeln. Bleibt der Wechselrichter in genau diesem Zustand stehen, ohne den Modus zu wechseln, erreicht ihn kein Befehl mehr; auch Fall D greift nicht, da der Modus weiterhin `'1'` ist. Erkannt wird das über die **Abweichung der Ist-Leistung vom Limit**: mehr als 5 % Abweichung bei einem Ist-Sensor, dessen `last_updated` seit über 300 s stillsteht. Der Zeitstempel rückt nur bei einer Wertänderung vor und steht damit für „Wert seit dann unverändert" — ein Ist-Sensor, der um den abweichenden Wert rauscht, löst entsprechend nicht aus. Aktion: Integral = 0, Ausgangsleistung → 0 W, Timer-Toggle, Modus → `'0'`; im nächsten Lauf holt **Fall D** das Gerät regulär zurück (Timer-Toggle + Modus `'1'`), der PI rampt wieder hoch. Wiederholt sich frühestens alle 300 s, gemessen an `last_changed` des Modus-Entity. Gilt nur im normalen Entlade-Modus — Zone 0, Tarif-Laden und AC Laden halten den Ausgang bewusst unterhalb ihres jeweiligen Limits.
 
@@ -230,8 +231,8 @@ Die Reihenfolge ist entscheidend — der erste zutreffende Fall wird ausgeführt
 | **0A** | Surplus-Bool = `off` UND (SOC ≥ Export-Schwelle UND (PV > Output_entladend + Grid + PV-Hysterese ODER (PV = 0 UND PV=0-Latch scharf)) **ODER** Surplus-Forecast-Forced) | Zone 0 Start: Surplus-Bool → `on` |
 | **0B** | Surplus-Bool = `on` UND **NICHT Surplus-Forecast-Forced** UND (SOC < Export-Schwelle − SOC-Hysterese ODER (PV ≤ Output + Grid − PV-Hysterese UND **NICHT Austritts-Sperre**)) | Zone 0 Ende: Surplus-Bool → `off`, Integral = 0 |
 | **A** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND NICHT Tarifsperre (Preis < teuer) UND SOC > Zone-1-Schwelle UND Zyklus = `off` | Zone 1 Start: Zyklus = `on`, Integral = 0, Surplus/AC-Bool zurücksetzen, Timer-Toggle, Modus → `'1'` |
-| **B** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC ≤ Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Ausgangsleistung → 0 W (bestätigt über Ist-Leistung, 1× Retry), Timer-Toggle, Modus → `'0'` |
-| **C** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC ≤ Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Ausgangsleistung → 0 W (bestätigt über Ist-Leistung, 1× Retry), Timer-Toggle, Modus → `'0'` |
+| **B** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC ≤ Zone-3-Schwelle UND Zyklus = `on` | Zone 3 Stop: Zyklus = `off`, Integral = 0, Surplus/AC-Bool zurücksetzen, Ausgangsleistung → 0 W (Nullbestätigung: bis zu 2 Nachschreibversuche, nur mit Beleg ab 5 s Reaktionszeit), Timer-Toggle, Modus → `'0'` |
+| **C** | NICHT AC-Lade-Bool = `on` UND NICHT Tarif-Lade-Bool = `on` UND SOC ≤ Zone-3-Schwelle UND Zyklus = `off` UND Modus ≠ `'0'` | Zone 3 Absicherung: Surplus/AC-Bool zurücksetzen, Ausgangsleistung → 0 W (Nullbestätigung: bis zu 2 Nachschreibversuche, nur mit Beleg ab 5 s Reaktionszeit), Timer-Toggle, Modus → `'0'` |
 | **D** | (Zyklus = `on` ODER **Ladegrund gilt**) UND Modus ∉ `{'1','3'}` UND (**Ladegrund gilt** ODER SOC > Zone-3-Schwelle) UND (**keine Tarifsperre** ODER Lade-Bool = `on`) | Recovery: Timer-Toggle, Modus → `'3'` wenn der Ladegrund gilt, sonst `'1'` |
 | **GT** | Tarif-Arbitrage aktiv UND Preis < Günstig-Schwelle UND SOC < Tarif-Ladeziel − SOC-Hysterese UND **Modus ≠ `'3'`** UND **NICHT AC-Lade-Bool = `on`** UND **NICHT Surplus-Bool = `on`** UND **NICHT PV-Forecast-Suppressed** | Tarif-Laden Start: Tarif-Bool = `on`, Timer-Toggle, Ausgangsleistung → Ladeleistung (direkt), Modus → `'3'` |
 | **HT** | Tarif-Bool = `on` UND (**keine Günstig-Aussage** ODER SOC ≥ Tarif-Ladeziel) | Tarif-Laden Ende: Tarif-Bool = `off`, Integral = 0, Zone 1 → `'1'` (Timer-Toggle) / Zone 2 → `'0'` (Timer-Toggle) |
@@ -376,13 +377,14 @@ Hält Zone 0 bei kurzen PV-Einbrüchen (Wolken), statt auszutreten.
 
 ### 13. 🌙 Surplus PV=0-Eintritt Latch (Optional)
 
-Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher, wenn PV dauerhaft 0 misst.
+Verhindert Oszillation zwischen Fall 0A/0B bei vollem Speicher, wenn PV 0 misst — nachts und in der Tarifsperre.
 
 * **Voraussetzung:** Surplus muss ebenfalls aktiviert sein.
 * **Helper:** input_boolean, Standard-Initialwert `on` (scharf).
-* **Scharfschalten:** Sobald PV > 0 gemessen wird → Helper → `on`.
-* **Entschärfen (Fall 0B):** Beim Austritt während PV = 0 → Helper → `off`.
-* **Wirkung (Fall 0A):** Der PV=0-Eintrittszweig greift nur solange der Helper `on` ist. Nach einem nächtlichen Austritt bleibt er gesperrt, bis wieder echtes PV > 0 gemessen wurde — ohne den Latch würde ein erneuter PV=0-Messwert sofort wieder in Zone 0 eintreten, obwohl gerade erst ausgetreten wurde (Oszillation im Sekunden-/Minutenbereich).
+* **Scharfschalten:** PV > 0, während die Instanz nichts abgibt (Ist-Leistung 0) und Zone 0 nicht aktiv ist → Helper → `on`. Praktisch: PV lädt den Akku. PV, die die Instanz beim eigenen Entladen oder in Modus `'0'` bei vollem Akku durchreicht, schaltet nicht scharf.
+* **Entschärfen (Fall 0B):** Bei jedem Austritt über den Verbrauch (PV-Term) und bei jedem Austritt mit PV = 0 → Helper → `off`.
+* **Wirkung (Fall 0A):** Der PV=0-Eintrittszweig greift nur solange der Helper `on` ist. Nach einem Austritt bleibt er gesperrt, bis die PV wieder den Akku lädt — ohne den Latch würde ein erneuter PV=0-Messwert sofort wieder in Zone 0 eintreten, obwohl gerade erst ausgetreten wurde (Oszillation im Sekunden-/Minutenbereich, in der Tarifsperre über 0A → 0B → TM).
+* **Export-Schwelle:** Liegt sie auf der App-Ladeobergrenze, drosselt der Wechselrichter die PV in Modus `'0'` auf 0 W. Nach einem Austritt über den Verbrauch wird der Latch dann nicht wieder scharf, und überschüssige PV bleibt ungenutzt, bis Zone 1 läuft. Deshalb die Export-Schwelle ~5 % unter die App-Ladeobergrenze legen (siehe oben).
 * **Fallback:** Helper nicht angelegt/unavailable → Latch inaktiv, PV=0-Eintritt verhält sich wie bisher ungeschützt.
 
 ---
@@ -419,7 +421,7 @@ Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher, wenn PV d
 |:----------|:---------|:----|:----|:-------------|
 | **Entlade-PI** | An | – | – | An: Zone 1 und 2 regeln über den PI-Regler. Aus: Stellwertrechnung auf Ist-Basis, P- und I-Faktor wirken dann nicht. |
 | **P-Faktor** | 1.3 | 0.1 | 5.0 | Proportional-Verstärkung. Höher = aggressiver. |
-| **I-Faktor** | 0.05 | 0.01 | 0.2 | Integral-Verstärkung. Höher = schnellere Fehlerkorrektur, aber instabiler. |
+| **I-Faktor** | 0.05 | 0 | 0.2 | Integral-Verstärkung. Höher = schnellere Fehlerkorrektur, aber instabiler. Bei 0 bleibt das Integral auf 0. |
 | **Totband** | 25 W | 0 | 200 W | Totband um Regelziel. Keine PI-Korrektur innerhalb (stattdessen Integral-Decay). |
 | **Wartezeit** | 3 s | 0 | 30 s | Wartezeit nach Leistungsänderung. Ist "Adaptive Wartezeit" aktiviert, gilt der Wert nur als Timeout. |
 | **Adaptive Wartezeit** | Aus | – | – | Bricht die Wartezeit früh ab wenn Ist-Leistung ≈ Sollwert ± Totband (beim Laden: −Ist-Leistung, weil die Ist-Leistung dann negativ ist). Vorsicht bei langsamen externen Netzmesswerten (z.B. IR-Lesekopf) — kann zu verfrühtem Reglereingriff führen. |
@@ -460,7 +462,7 @@ Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher, wenn PV d
 | **SOC-Schwelle Überschuss** | 90 % | 50 % | 99 % | Ab diesem SOC bei PV-Überschuss → Zone 0. Empfehlung: ~5 % unter der App-Ladeobergrenze (Begründung siehe Abschnitt 5). |
 | **Hysterese Überschuss-Austritt (SOC)** | 5 % | 1 % | 20 % | SOC muss um diesen Wert unter die Eintritts-Schwelle fallen bevor Zone 0 verlassen wird. |
 | **Hysterese PV-Überschuss** | 50 W | 10 W | 200 W | Totband um Hausverbrauch für Ein- und Austritt. |
-| **PV=0-Eintritt Latch Helfer** | *(leer)* | — | — | Optionaler `input_boolean`. Sperrt den PV=0-Eintrittszweig nach nächtlichem Austritt bis wieder PV > 0 gemessen wird (siehe Abschnitt 13). Nicht angelegt → PV=0-Eintritt bleibt ungeschützt. |
+| **PV=0-Eintritt Latch Helfer** | *(leer)* | — | — | Optionaler `input_boolean`. Sperrt den PV=0-Eintrittszweig nach einem Austritt, bis die PV wieder den Akku lädt (siehe Abschnitt 13). Nicht angelegt → PV=0-Eintritt bleibt ungeschützt. |
 
 ---
 

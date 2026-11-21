@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V315)
+  name: Solakon ONE Nulleinspeisung (DE) - Dynamisch & SOC-Gesteuert (V316)
   description: |
     Dynamische Nulleinspeisung für den Solakon ONE Wechselrichter mit PI-Regler, SOC-Zonenlogik,
     optionalem Surplus (inkl. Surplus-Forecast-Eintritt), optionalem AC Laden,
@@ -15,7 +15,7 @@ blueprint:
     - **Stellgröße:** AC-Ausgangsleistung des Wechselrichters.
     - **P-Anteil:** Reagiert sofort auf die aktuelle Abweichung vom Sollwert.
     - **I-Anteil:** Summiert Abweichungen über die Zeit auf — eliminiert bleibende Regelabweichungen.
-    - **Anti-Windup:** Back-Calculation im Script — Integral wird nach jedem Stelleingriff auf den Wert zurückgesetzt, der den tatsächlichen (ggf. geklemmten) Ausgang produziert. Clamp auf ±effective_max, gerundet auf 2 Nachkommastellen.
+    - **Anti-Windup:** Back-Calculation im Script — Integral wird nach jedem Stelleingriff auf den Wert zurückgesetzt, der den tatsächlichen (ggf. geklemmten) Ausgang produziert. Clamp auf ±effective_max, gerundet auf 2 Nachkommastellen. Bei I-Faktor 0 bleibt das Integral 0.
     - **Integral-Reset:** Bei jedem Zonenwechsel auf 0.
     - **Integral-Decay:** 5 % Abbau pro Zyklus solange Fehler ≤ Totband und |Integral| > 10 (in Hauptautomatisierung).
     - **Integral-Einfrieren:** In Zone 0 (Überschuss) kein Decay, kein PI-Aufruf.
@@ -216,8 +216,9 @@ blueprint:
     Verhindert Oszillation zwischen Fall 0A/0B nachts bei vollem Speicher (PV = 0 dauerhaft).
 
     - **Helper:** input_boolean, Default "scharf" (`on`)
-    - **Scharfschalten:** Sobald PV > 0 gemessen wird → Helper → `on`
-    - **Entschärfen (Fall 0B):** Beim Austritt während PV = 0 → Helper → `off`
+    - **Scharfschalten:** PV > 0, während die Instanz nichts abgibt (Ist-Leistung 0) und Zone 0 nicht aktiv ist → Helper → `on`. Praktisch: PV lädt den Akku
+    - **Entschärfen (Fall 0B):** Bei jedem Austritt über den Verbrauch und bei jedem Austritt mit PV = 0 → Helper → `off`
+    - **Export-Schwelle:** unter der App-Ladeobergrenze einstellen (~5 %). An der Ladeobergrenze drosselt der Wechselrichter die PV in Modus `'0'` auf 0 W, der Latch würde dann nach einem Austritt über den Verbrauch nicht wieder scharf
     - **Wirkung (Fall 0A):** Der PV=0-Eintrittszweig greift nur solange der Helper `on` ist. Nach einem nächtlichen Austritt bleibt er gesperrt, bis wieder echtes PV > 0 gemessen wurde — der reine SOC-/PV-Vergleichszweig bleibt unverändert
     - **Nur wirksam wenn:** Surplus ebenfalls aktiviert ist
     - **Fallback:** Helper nicht angelegt → Latch inaktiv, PV=0-Eintritt verhält sich wie bisher ungeschützt
@@ -726,8 +727,8 @@ blueprint:
             name: ☀️ Surplus PV=0-Eintritt Latch (input_boolean - nur für Zone 0)
             description: |
               input_boolean Helper zum persistenten Sperren des PV=0-Eintrittszweigs nach einem
-              nächtlichen Austritt, bis wieder echtes PV > 0 gemessen wurde. Verhindert Oszillation
-              zwischen Fall 0A/0B bei vollem Speicher in der Nacht.
+              Austritt mit PV = 0 oder über den Verbrauch, bis wieder PV > 0 gemessen wurde, während
+              die Instanz nichts abgibt. Verhindert Oszillation zwischen Fall 0A/0B bei vollem Speicher.
               ⚠️ Nur erforderlich wenn Surplus aktiviert ist. Fehlt der Helper
               (nicht angelegt), verhält sich der Eintritt wie bisher ungeschützt.
             default: input_boolean.solakon_surplus_zero_entry_armed
@@ -1148,8 +1149,9 @@ variables:
   # Totband (wird in Fall G benötigt)
   tolerance_int: !input tolerance
 
-  # Wartezeit (Bestätigung der Nullung in Fall B und C)
-  zero_confirm_wait_int: !input wait_time
+  # Nullbestätigung in Fall B und C: Reaktionszeit und Höchstwert des Meldeintervalls (s)
+  zero_reaction_int: 5
+  zero_report_max_int: 30
 
   # Helper-Entitäten
   integral_entity: !input integral_helper
@@ -1469,11 +1471,13 @@ actions:
           - stop: "Kritischer Fehler oder ungültige Konfiguration."
 
   # -------------------------------------------------------------------------------------------------
-  # 0-PRE. LATCH SCHARF SCHALTEN sobald wieder echtes PV > 0 gemessen wird
+  # 0-PRE. LATCH SCHARF SCHALTEN bei PV > 0, solange die Instanz nichts abgibt und Zone 0 nicht aktiv ist
   # -------------------------------------------------------------------------------------------------
   - if:
       - condition: template
-        value_template: "{{ surplus_zero_entry_armed_valid and solar_power_float > 0 }}"
+        value_template: >
+          {{ surplus_zero_entry_armed_valid and solar_power_float > 0 and actual_power_float == 0 and
+             not is_state(surplus_state_entity, 'on') }}
     then:
       - action: input_boolean.turn_on
         target:
@@ -1539,10 +1543,14 @@ actions:
               entity_id: !input integral_helper
             data:
               value: 0
-          # 4. Latch deaktivieren wenn bei PV=0 ausgetreten wird
+          # 4. Latch entschärfen bei Austritt mit PV = 0 oder über den Verbrauch
           - if:
               - condition: template
-                value_template: "{{ surplus_zero_entry_armed_valid and solar_power_float == 0 }}"
+                value_template: >
+                  {{ surplus_zero_entry_armed_valid and
+                     (solar_power_float == 0 or
+                      ((solar_power_float <= (actual_power_float + grid_power_float - surplus_pv_hysteresis_int)) and
+                       not (surplus_exit_locked | bool(false)))) }}
             then:
               - action: input_boolean.turn_off
                 target:
@@ -1673,33 +1681,81 @@ actions:
               entity_id: !input active_power_number
             data:
               value: 0
-          # Nullung bestätigen: warten bis |Ist| ≤ Totband, sonst einmal erneut schreiben
-          - wait_template: "{{ (states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int }}"
-            timeout:
-              seconds: "{{ zero_confirm_wait_int }}"
-            continue_on_timeout: true
+          # Nullbestätigung: Beleg erst ab der Reaktionszeit (Ausgangsleistung ≠ 0 oder Meldung
+          # des Ist-Sensors außerhalb des Totbands), Frist Reaktionszeit + Meldeintervall;
+          # bis zu zwei Nachschreibversuche, nur mit Beleg
+          - variables:
+              zc_settled: "{{ as_timestamp(now()) + zero_reaction_int }}"
+              zc_deadline: "{{ as_timestamp(now()) + zero_reaction_int + zero_report_max_int }}"
+          - repeat:
+              sequence:
+                - delay:
+                    seconds: 1
+              until:
+                - condition: template
+                  value_template: >
+                    {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) or
+                       (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) or
+                       as_timestamp(now()) >= zc_deadline }}
           - if:
               - condition: template
-                value_template: "{{ not wait.completed }}"
+                value_template: >
+                  {{ not ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) and
+                     (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) }}
             then:
               - action: number.set_value
                 target:
                   entity_id: !input active_power_number
                 data:
                   value: 0
-              - wait_template: "{{ (states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int }}"
-                timeout:
-                  seconds: "{{ zero_confirm_wait_int }}"
-                continue_on_timeout: true
+              - variables:
+                  zc_settled: "{{ as_timestamp(now()) + zero_reaction_int }}"
+                  zc_deadline: "{{ as_timestamp(now()) + zero_reaction_int + zero_report_max_int }}"
+              - repeat:
+                  sequence:
+                    - delay:
+                        seconds: 1
+                  until:
+                    - condition: template
+                      value_template: >
+                        {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) or
+                           (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) or
+                           as_timestamp(now()) >= zc_deadline }}
               - if:
                   - condition: template
-                    value_template: "{{ not wait.completed }}"
+                    value_template: >
+                      {{ not ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) and
+                         (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) }}
                 then:
-                  - action: logbook.log
-                    data:
-                      name: Solakon Sicherheitsstopp
-                      message: "⚠️ Nullung nicht bestätigt — Ist-Leistung {{ states(actual_power_sensor) }} W nach erneutem Schreiben"
+                  - action: number.set_value
+                    target:
                       entity_id: !input active_power_number
+                    data:
+                      value: 0
+                  - variables:
+                      zc_settled: "{{ as_timestamp(now()) + zero_reaction_int }}"
+                      zc_deadline: "{{ as_timestamp(now()) + zero_reaction_int + zero_report_max_int }}"
+                  - repeat:
+                      sequence:
+                        - delay:
+                            seconds: 1
+                      until:
+                        - condition: template
+                          value_template: >
+                            {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) or
+                               (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) or
+                               as_timestamp(now()) >= zc_deadline }}
+                  - if:
+                      - condition: template
+                        value_template: >
+                          {{ not ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) and
+                             (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) }}
+                    then:
+                      - action: logbook.log
+                        data:
+                          name: Solakon Sicherheitsstopp
+                          message: "⚠️ Nullung nicht bestätigt — Ist-Leistung {{ states(actual_power_sensor) }} W nach zwei erneuten Schreibversuchen"
+                          entity_id: !input active_power_number
           # 7. Timer-Toggle (3598↔3599)
           - choose:
               - conditions:
@@ -1759,33 +1815,81 @@ actions:
               entity_id: !input active_power_number
             data:
               value: 0
-          # Nullung bestätigen: warten bis |Ist| ≤ Totband, sonst einmal erneut schreiben
-          - wait_template: "{{ (states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int }}"
-            timeout:
-              seconds: "{{ zero_confirm_wait_int }}"
-            continue_on_timeout: true
+          # Nullbestätigung: Beleg erst ab der Reaktionszeit (Ausgangsleistung ≠ 0 oder Meldung
+          # des Ist-Sensors außerhalb des Totbands), Frist Reaktionszeit + Meldeintervall;
+          # bis zu zwei Nachschreibversuche, nur mit Beleg
+          - variables:
+              zc_settled: "{{ as_timestamp(now()) + zero_reaction_int }}"
+              zc_deadline: "{{ as_timestamp(now()) + zero_reaction_int + zero_report_max_int }}"
+          - repeat:
+              sequence:
+                - delay:
+                    seconds: 1
+              until:
+                - condition: template
+                  value_template: >
+                    {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) or
+                       (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) or
+                       as_timestamp(now()) >= zc_deadline }}
           - if:
               - condition: template
-                value_template: "{{ not wait.completed }}"
+                value_template: >
+                  {{ not ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) and
+                     (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) }}
             then:
               - action: number.set_value
                 target:
                   entity_id: !input active_power_number
                 data:
                   value: 0
-              - wait_template: "{{ (states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int }}"
-                timeout:
-                  seconds: "{{ zero_confirm_wait_int }}"
-                continue_on_timeout: true
+              - variables:
+                  zc_settled: "{{ as_timestamp(now()) + zero_reaction_int }}"
+                  zc_deadline: "{{ as_timestamp(now()) + zero_reaction_int + zero_report_max_int }}"
+              - repeat:
+                  sequence:
+                    - delay:
+                        seconds: 1
+                  until:
+                    - condition: template
+                      value_template: >
+                        {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) or
+                           (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) or
+                           as_timestamp(now()) >= zc_deadline }}
               - if:
                   - condition: template
-                    value_template: "{{ not wait.completed }}"
+                    value_template: >
+                      {{ not ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) and
+                         (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) }}
                 then:
-                  - action: logbook.log
-                    data:
-                      name: Solakon Sicherheitsstopp
-                      message: "⚠️ Nullung nicht bestätigt — Ist-Leistung {{ states(actual_power_sensor) }} W nach erneutem Schreiben"
+                  - action: number.set_value
+                    target:
                       entity_id: !input active_power_number
+                    data:
+                      value: 0
+                  - variables:
+                      zc_settled: "{{ as_timestamp(now()) + zero_reaction_int }}"
+                      zc_deadline: "{{ as_timestamp(now()) + zero_reaction_int + zero_report_max_int }}"
+                  - repeat:
+                      sequence:
+                        - delay:
+                            seconds: 1
+                      until:
+                        - condition: template
+                          value_template: >
+                            {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) or
+                               (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) or
+                               as_timestamp(now()) >= zc_deadline }}
+                  - if:
+                      - condition: template
+                        value_template: >
+                          {{ not ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) and
+                             (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) }}
+                    then:
+                      - action: logbook.log
+                        data:
+                          name: Solakon Sicherheitsstopp
+                          message: "⚠️ Nullung nicht bestätigt — Ist-Leistung {{ states(actual_power_sensor) }} W nach zwei erneuten Schreibversuchen"
+                          entity_id: !input active_power_number
           # 4. Timer-Toggle (3598↔3599)
           - choose:
               - conditions:

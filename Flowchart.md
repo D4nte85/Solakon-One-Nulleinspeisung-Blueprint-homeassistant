@@ -13,10 +13,10 @@ flowchart TD
 
     %% ══════════════════════════════════════════════════════════════════════
     subgraph SG_ZONE0 ["☀️ Zone 0 — Überschuss Status-Update   (Falls 0A / 0B)"]
-        LATCH_ARM{{"🌙 PV=0-Latch scharf schalten   wenn PV > 0"}}
+        LATCH_ARM{{"🌙 PV=0-Latch scharf schalten   wenn PV > 0 UND Ist = 0 UND Surplus-Bool = off"}}
         SURPLUS_UPDATE{{"☀️ Zone 0 Status-Update   (Falls 0A / 0B)"}}
         S0A["☀️ Zone 0 aktivieren   Surplus-Bool → on"]
-        S0B["☁️ Zone 0 deaktivieren   Surplus-Bool → off   Integral = 0   PV=0-Latch → off wenn PV=0"]
+        S0B["☁️ Zone 0 deaktivieren   Surplus-Bool → off   Integral = 0   PV=0-Latch → off wenn PV=0 oder Austritt über Verbrauch"]
     end
     style SG_ZONE0 fill:none,stroke:#f0ad4e,stroke-width:5,stroke-dasharray:6,color:#000
 
@@ -36,10 +36,10 @@ flowchart TD
         Z1_START["🔋 Zone 1 aktivieren   Zyklus = on   Integral = 0   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Timer-Toggle (3598↔3599)   Modus → '1' (INV Discharge PV Priority)"]
 
         %% ── Fall B: Zone 3 (Zyklus on) ──────────────────────────────────
-        Z3_A["🛑 Zone 3 aktivieren   Zyklus = off   Integral = 0   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Ausgangsleistung → 0 W (bestätigt, 1× Retry)   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
+        Z3_A["🛑 Zone 3 aktivieren   Zyklus = off   Integral = 0   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Ausgangsleistung → 0 W (Nullbestätigung, ≤ 2× nachschreiben mit Beleg)   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
         %% ── Fall C: Zone 3 (Absicherung) ────────────────────────────────
-        Z3_B["🛑 Zone 3 Absicherung   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Ausgangsleistung → 0 W (bestätigt, 1× Retry)   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
+        Z3_B["🛑 Zone 3 Absicherung   Surplus-Bool → off (nur wenn aktiv)   AC-Lade-Bool → off (nur wenn aktiv)   Ausgangsleistung → 0 W (Nullbestätigung, ≤ 2× nachschreiben mit Beleg)   Timer-Toggle (3598↔3599)   Modus → '0' (Disabled)"]
 
         %% ── Fall D: Recovery ─────────────────────────────────────────────
         RECOVERY["🔄 Recovery — Modus-Reaktivierung   Timer-Toggle (3598↔3599)   Ladegrund gilt (AC-Option an bzw. Preis günstig) → Modus '3'   sonst → Modus '1'   (kein Integral-Reset, kein Zonenwechsel)"]

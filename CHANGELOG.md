@@ -5,6 +5,13 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 ## [Unreleased]
 
+## [V316] – 2026-11-21
+
+### Behoben
+- **PV-0-Eintritt in der Tarifsperre (Integration Issue #57):** Der Latch wurde bei jeder PV über 0 scharf, auch wenn die Instanz die PV beim eigenen Entladen oder in Modus `'0'` bei vollem Akku durchreichte. In der Tarifsperre pendelte Zone 0 dadurch bei vollem Akku und schwacher PV über 0A → 0B → TM. Scharf wird er jetzt nur bei PV über 0, Ist-Leistung 0 und inaktiver Zone 0; Fall 0B entschärft ihn zusätzlich bei jedem Austritt über den Verbrauch. Export-Schwelle unter der App-Ladeobergrenze halten, sonst wird der Latch nach einem solchen Austritt nicht wieder scharf (`solakon_one_nulleinspeisung.yaml`, README Abschnitt 13).
+- **Integral bei I-Faktor 0:** Das PI-Skript speicherte bei I-Faktor 0 das wachsende Integral ohne Wirkung; beim späteren Erhöhen sprang die Korrektur einmalig um bis zu Grenze × I-Faktor. Bei I-Faktor 0 bleibt das Integral jetzt 0 (`PI-Regler.yaml`). README: Minimum des I-Faktors 0 statt 0.01.
+- **Nullbestätigung in Fall B und C (Integration Issue #60):** Nach dem Schreiben von 0 W wartete der Blueprint nur die Wartezeit (Standard 3 s), schrieb dann ohne Beleg erneut und meldete „Nullung nicht bestätigt“, auch wenn der Ist-Sensor nur noch nicht gemeldet hatte. Als Beleg gilt jetzt erst ab der Reaktionszeit (5 s) eine Ausgangsleistung ≠ 0 oder eine Meldung des Ist-Sensors außerhalb des Totbands; nur dann bis zu zwei Nachschreibversuche, ohne Beleg Ende nach 35 s ohne Eintrag (`solakon_one_nulleinspeisung.yaml`).
+
 ## [V315] – 2026-10-01
 
 ### Behoben
