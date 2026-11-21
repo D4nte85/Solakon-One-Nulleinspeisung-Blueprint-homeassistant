@@ -5,6 +5,11 @@ Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
 ## [Unreleased]
 
+## [V317] – 2026-11-21
+
+### Hinzugefügt
+- **Fernsteuerungs-Timeout einstellbar:** Bisher schrieb der Timer-Toggle fest 3598 ↔ 3599 s. Neuer Input „Fernsteuerungs-Timeout“ (300–3599 s, Standard 3599). Der Timer-Toggle wechselt zwischen T und T − 1, der Timeout-Reset (Schritt 2) greift bei Countdown < 120 s und zusätzlich, wenn im Gerät weder T noch T − 1 steht, damit eine Änderung im nächsten Lauf mit Regelung ankommt. Ohne periodischen Trigger fällt das Gerät bei kurzem T zurück, wenn Netz und PV länger als T − 120 s unverändert bleiben (`solakon_one_nulleinspeisung.yaml`, README Abschnitt 8).
+
 ## [V316] – 2026-11-21
 
 ### Behoben

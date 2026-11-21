@@ -1,4 +1,4 @@
-# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V316
+# ⚡ Solakon ONE Nulleinspeisung Blueprint (DE) - V317
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/d4nte85)
@@ -90,7 +90,7 @@ Persistenter Zustandsspeicher für den Surplus. Verhindert Flackern bei schwanke
 3. Name: z.B. `Solakon Surplus Aktiv`
 4. Speichern (Entity ID: z.B. `input_boolean.solakon_surplus_aktiv`)
 
-### 4b. Input Boolean Helper (PV=0-Eintritt Latch) — NUR wenn Zone 0 aktiv
+### 4b. Input Boolean Helper (PV-0-Eintritt Latch) — NUR wenn Zone 0 aktiv
 
 Verhindert Oszillation zwischen Zone-0-Start/Ende nachts bei vollem Speicher und dauerhaftem PV = 0. Standard-Initialwert: `on` (scharf).
 
@@ -323,9 +323,11 @@ Der Blueprint ist **sensor-agnostisch**. Er führt keine automatische Skalierung
 
 ### 8. ⏱️ Timer-Toggle und Moduswechsel-Sequenz
 
-Statt eines festen Werts wird ein **Toggle zwischen 3598 und 3599** gesendet. Dies erzeugt eine Zustandsänderung, die den Wechselrichter zur sicheren Übernahme des neuen Modus veranlasst. Der Toggle wird bei jedem Moduswechsel (Falls A, D, E, GT, G, HT-Zone1, H-Zone1, I-Zone1) direkt vor dem Setzen des Modus durchgeführt.
+Statt eines festen Werts wird ein **Toggle zwischen dem Fernsteuerungs-Timeout T und T − 1** gesendet (Standard 3599/3598 s, Input „Fernsteuerungs-Timeout“). Dies erzeugt eine Zustandsänderung, die den Wechselrichter zur sicheren Übernahme des neuen Modus veranlasst. Der Toggle wird bei jedem Moduswechsel (Falls A, D, E, GT, G, HT-Zone1, H-Zone1, I-Zone1) direkt vor dem Setzen des Modus durchgeführt.
 
-**Kontinuierlicher Timeout-Reset (Schritt 2):** Countdown < 120s → Timer-Toggle.
+**Kontinuierlicher Timeout-Reset (Schritt 2):** Countdown < 120 s oder im Gerät steht weder T noch T − 1 (etwa nach einer Änderung von T) → Timer-Toggle.
+
+**Fernsteuerungs-Timeout:** Zeit, nach der das Gerät laut Spezifikation ohne neuen Fernsteuerbefehl auf die App-Einstellungen zurückfällt, etwa bei einem Ausfall von Home Assistant; 300–3599 s, Standard 3599. Der Blueprint läuft nur bei Sensoränderungen und hat keinen periodischen Trigger: Bleiben Netz und PV länger als T − 120 s unverändert, kommt der Timeout-Reset zu spät und das Gerät fällt zwischendurch zurück. Bei kurzem T deshalb einen Netzsensor mit häufigen Meldungen verwenden.
 
 ---
 
@@ -375,7 +377,7 @@ Hält Zone 0 bei kurzen PV-Einbrüchen (Wolken), statt auszutreten.
 
 ---
 
-### 13. 🌙 Surplus PV=0-Eintritt Latch (Optional)
+### 13. 🌙 Surplus PV-0-Eintritt Latch (Optional)
 
 Verhindert Oszillation zwischen Fall 0A/0B bei vollem Speicher, wenn PV 0 misst — nachts und in der Tarifsperre.
 
@@ -383,9 +385,9 @@ Verhindert Oszillation zwischen Fall 0A/0B bei vollem Speicher, wenn PV 0 misst 
 * **Helper:** input_boolean, Standard-Initialwert `on` (scharf).
 * **Scharfschalten:** PV > 0, während die Instanz nichts abgibt (Ist-Leistung 0) und Zone 0 nicht aktiv ist → Helper → `on`. Praktisch: PV lädt den Akku. PV, die die Instanz beim eigenen Entladen oder in Modus `'0'` bei vollem Akku durchreicht, schaltet nicht scharf.
 * **Entschärfen (Fall 0B):** Bei jedem Austritt über den Verbrauch (PV-Term) und bei jedem Austritt mit PV = 0 → Helper → `off`.
-* **Wirkung (Fall 0A):** Der PV=0-Eintrittszweig greift nur solange der Helper `on` ist. Nach einem Austritt bleibt er gesperrt, bis die PV wieder den Akku lädt — ohne den Latch würde ein erneuter PV=0-Messwert sofort wieder in Zone 0 eintreten, obwohl gerade erst ausgetreten wurde (Oszillation im Sekunden-/Minutenbereich, in der Tarifsperre über 0A → 0B → TM).
+* **Wirkung (Fall 0A):** Der PV-0-Eintritt greift nur solange der Helper `on` ist. Nach einem Austritt bleibt er gesperrt, bis die PV wieder den Akku lädt — ohne den Latch würde ein erneuter PV=0-Messwert sofort wieder in Zone 0 eintreten, obwohl gerade erst ausgetreten wurde (Oszillation im Sekunden-/Minutenbereich, in der Tarifsperre über 0A → 0B → TM).
 * **Export-Schwelle:** Liegt sie auf der App-Ladeobergrenze, drosselt der Wechselrichter die PV in Modus `'0'` auf 0 W. Nach einem Austritt über den Verbrauch wird der Latch dann nicht wieder scharf, und überschüssige PV bleibt ungenutzt, bis Zone 1 läuft. Deshalb die Export-Schwelle ~5 % unter die App-Ladeobergrenze legen (siehe oben).
-* **Fallback:** Helper nicht angelegt/unavailable → Latch inaktiv, PV=0-Eintritt verhält sich wie bisher ungeschützt.
+* **Fallback:** Helper nicht angelegt/unavailable → Latch inaktiv, PV-0-Eintritt ist dann ungeschützt.
 
 ---
 
@@ -402,7 +404,7 @@ Verhindert Oszillation zwischen Fall 0A/0B bei vollem Speicher, wenn PV 0 misst 
 | **Solakon** | Remote Timeout Countdown | `sensor.solakon_one_fernsteuerung_zeituberschreitung` | Verbleibender Countdown |
 | **Solakon** | Ausgangsleistungsregler | `number.solakon_one_fernsteuerung_leistung` | Setzt Leistungs-Sollwert |
 | **Solakon** | Max. Entladestrom | `number.solakon_one_maximaler_entladestrom` | Setzt Entladestrom-Limit |
-| **Solakon** | Modus-Reset-Timer | `number.solakon_one_fernsteuerung_zeituberschreitung` | Timer-Toggle 3598↔3599 |
+| **Solakon** | Modus-Reset-Timer | `number.solakon_one_fernsteuerung_zeituberschreitung` | Timer-Toggle T ↔ T − 1 |
 | **Solakon** | Betriebsmodus-Auswahl | `select.solakon_one_modus_fernsteuern` | `'0'` = Disabled, `'1'` = INV Discharge PV Priority, `'3'` = INV Charge PV Priority |
 | **Helper** | Zyklus-Speicher | `input_boolean.soc_entladezyklus_status` | Input Boolean: `on`/`off` |
 | **Helper** | Integral-Speicher | `input_number.solakon_integral` | Input Number: −1200 bis 1200 |
@@ -424,6 +426,7 @@ Verhindert Oszillation zwischen Fall 0A/0B bei vollem Speicher, wenn PV 0 misst 
 | **I-Faktor** | 0.05 | 0 | 0.2 | Integral-Verstärkung. Höher = schnellere Fehlerkorrektur, aber instabiler. Bei 0 bleibt das Integral auf 0. |
 | **Totband** | 25 W | 0 | 200 W | Totband um Regelziel. Keine PI-Korrektur innerhalb (stattdessen Integral-Decay). |
 | **Wartezeit** | 3 s | 0 | 30 s | Wartezeit nach Leistungsänderung. Ist "Adaptive Wartezeit" aktiviert, gilt der Wert nur als Timeout. |
+| **Fernsteuerungs-Timeout** | 3599 s | 300 s | 3599 s | Zeit, nach der das Gerät laut Spezifikation ohne neuen Fernsteuerbefehl auf die App-Einstellungen zurückfällt (siehe Abschnitt 8). |
 | **Adaptive Wartezeit** | Aus | – | – | Bricht die Wartezeit früh ab wenn Ist-Leistung ≈ Sollwert ± Totband (beim Laden: −Ist-Leistung, weil die Ist-Leistung dann negativ ist). Vorsicht bei langsamen externen Netzmesswerten (z.B. IR-Lesekopf) — kann zu verfrühtem Reglereingriff führen. |
 
 > **Hinweis:** P- und I-Faktor gelten für Zone 1 und Zone 2 bei eingeschaltetem Entlade-PI. Das AC-Laden läuft ohne PI über die Stellwertrechnung.
@@ -462,7 +465,7 @@ Verhindert Oszillation zwischen Fall 0A/0B bei vollem Speicher, wenn PV 0 misst 
 | **SOC-Schwelle Überschuss** | 90 % | 50 % | 99 % | Ab diesem SOC bei PV-Überschuss → Zone 0. Empfehlung: ~5 % unter der App-Ladeobergrenze (Begründung siehe Abschnitt 5). |
 | **Hysterese Überschuss-Austritt (SOC)** | 5 % | 1 % | 20 % | SOC muss um diesen Wert unter die Eintritts-Schwelle fallen bevor Zone 0 verlassen wird. |
 | **Hysterese PV-Überschuss** | 50 W | 10 W | 200 W | Totband um Hausverbrauch für Ein- und Austritt. |
-| **PV=0-Eintritt Latch Helfer** | *(leer)* | — | — | Optionaler `input_boolean`. Sperrt den PV=0-Eintrittszweig nach einem Austritt, bis die PV wieder den Akku lädt (siehe Abschnitt 13). Nicht angelegt → PV=0-Eintritt bleibt ungeschützt. |
+| **PV-0-Eintritt Latch Helfer** | *(leer)* | — | — | Optionaler `input_boolean`. Sperrt den PV-0-Eintritt nach einem Austritt, bis die PV wieder den Akku lädt (siehe Abschnitt 13). Nicht angelegt → PV-0-Eintritt bleibt ungeschützt. |
 
 ---
 
