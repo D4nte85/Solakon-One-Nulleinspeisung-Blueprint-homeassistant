@@ -13,10 +13,10 @@ flowchart TD
 
     %% ══════════════════════════════════════════════════════════════════════
     subgraph SG_ZONE0 ["☀️ Zone 0 — Surplus Status Update   (Cases 0A / 0B)"]
-        LATCH_ARM{{"🌙 Arm PV=0 latch   when PV > 0"}}
+        LATCH_ARM{{"🌙 Arm PV=0 latch   when PV > 0 AND actual = 0 AND Surplus-Bool = off"}}
         SURPLUS_UPDATE{{"☀️ Zone 0 Status Update   (Cases 0A / 0B)"}}
         S0A["☀️ Zone 0 activate   Surplus-Bool → on"]
-        S0B["☁️ Zone 0 deactivate   Surplus-Bool → off   Integral = 0   PV=0 latch → off if PV=0"]
+        S0B["☁️ Zone 0 deactivate   Surplus-Bool → off   Integral = 0   PV=0 latch → off if PV=0 or exit via consumption"]
     end
     style SG_ZONE0 fill:none,stroke:#f0ad4e,stroke-width:5,stroke-dasharray:6,color:#000
 
@@ -36,10 +36,10 @@ flowchart TD
         Z1_START["🔋 Zone 1 activate   Cycle = on   Integral = 0   Surplus-Bool → off (only if active)   AC-Charge-Bool → off (only if active)   Timer-Toggle (3598↔3599)   Mode → '1' (INV Discharge PV Priority)"]
 
         %% ── Case B: Zone 3 (Cycle on) ──────────────────────────────────
-        Z3_A["🛑 Zone 3 activate   Cycle = off   Integral = 0   Surplus-Bool → off (only if active)   AC-Charge-Bool → off (only if active)   Output → 0 W (confirmed, 1× retry)   Timer-Toggle (3598↔3599)   Mode → '0' (Disabled)"]
+        Z3_A["🛑 Zone 3 activate   Cycle = off   Integral = 0   Surplus-Bool → off (only if active)   AC-Charge-Bool → off (only if active)   Output → 0 W (zero confirmation, ≤ 2× rewrite with evidence)   Timer-Toggle (3598↔3599)   Mode → '0' (Disabled)"]
 
         %% ── Case C: Zone 3 (Guard) ────────────────────────────────────
-        Z3_B["🛑 Zone 3 Guard   Surplus-Bool → off (only if active)   AC-Charge-Bool → off (only if active)   Output → 0 W (confirmed, 1× retry)   Timer-Toggle (3598↔3599)   Mode → '0' (Disabled)"]
+        Z3_B["🛑 Zone 3 Guard   Surplus-Bool → off (only if active)   AC-Charge-Bool → off (only if active)   Output → 0 W (zero confirmation, ≤ 2× rewrite with evidence)   Timer-Toggle (3598↔3599)   Mode → '0' (Disabled)"]
 
         %% ── Case D: Recovery ─────────────────────────────────────────────
         RECOVERY["🔄 Recovery — Mode Reactivation   Timer-Toggle (3598↔3599)   charging reason holds (AC option on resp. price cheap) → Mode '3'   otherwise → Mode '1'   (no integral reset, no zone change)"]

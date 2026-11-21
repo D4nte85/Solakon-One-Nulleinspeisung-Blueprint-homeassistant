@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Zero Export (EN) - Dynamic & SOC-Controlled (V315)
+  name: Solakon ONE Zero Export (EN) - Dynamic & SOC-Controlled (V316)
   description: |
     Dynamic zero export for the Solakon ONE inverter with PI controller, SOC zone logic,
     optional surplus export (incl. surplus forecast entry), optional AC charging from external
@@ -15,7 +15,7 @@ blueprint:
     - **Manipulated Variable:** AC output power of the inverter.
     - **P Component:** Responds immediately to current deviation from setpoint.
     - **I Component:** Accumulates deviations over time — eliminates steady-state errors.
-    - **Anti-Windup:** Back-calculation in script — after each control action, the integral is reset to the value that produces the actual (possibly clamped) output. Clamped to ±effective_max.
+    - **Anti-Windup:** Back-calculation in script — after each control action, the integral is reset to the value that produces the actual (possibly clamped) output. Clamped to ±effective_max. With I factor 0 the integral stays 0.
     - **Integral Reset:** Set to 0 on every zone change.
     - **Integral Decay:** 5% reduction per cycle while error ≤ tolerance and |Integral| > 10 (in main automation).
     - **Integral Freeze:** In Zone 0 (Surplus) no decay, no PI call.
@@ -216,8 +216,9 @@ blueprint:
     Prevents oscillation between Case 0A/0B at night with a full battery (PV = 0 persistently).
 
     - **Helper:** input_boolean, default "armed" (`on`)
-    - **Arming:** As soon as PV > 0 is measured → helper → `on`
-    - **Disarming (Case 0B):** On exit while PV = 0 → helper → `off`
+    - **Arming:** PV > 0 while the instance outputs nothing (actual power 0) and Zone 0 is not active → helper → `on`. In practice: PV charges the battery
+    - **Disarming (Case 0B):** On every exit via consumption and on every exit at PV = 0 → helper → `off`
+    - **Export threshold:** set it below the app charge limit (~5 %). At the charge limit the inverter throttles PV to 0 W in mode `'0'`, and the latch would not re-arm after an exit via consumption
     - **Effect (Case 0A):** The PV=0 entry branch only fires while the helper is `on`. After a nightly exit it stays locked until real PV > 0 is measured again — the plain SOC/PV comparison branch is unaffected
     - **Only active when:** Surplus export is also enabled
     - **Fallback:** Helper not set up → latch inactive, PV=0 entry behaves as before, unprotected
@@ -728,9 +729,9 @@ blueprint:
           surplus_zero_entry_armed_helper:
             name: ☀️ Surplus PV=0 Entry Latch (input_boolean - Zone 0 only)
             description: |
-              input_boolean helper for persistently locking the PV=0 entry branch after a
-              nightly exit, until real PV > 0 is measured again. Prevents oscillation
-              between Case 0A/0B at a full battery overnight.
+              input_boolean helper for persistently locking the PV=0 entry branch after an
+              exit at PV = 0 or via consumption, until PV > 0 is measured again while the
+              instance outputs nothing. Prevents oscillation between Case 0A/0B at a full battery.
               ⚠️ Only required when Surplus Export is enabled. If the helper is missing
               (not set up), entry behaves as before, unprotected.
             default: input_boolean.solakon_surplus_zero_entry_armed
@@ -1150,8 +1151,9 @@ variables:
   # Tolerance (required in Case G)
   tolerance_int: !input tolerance
 
-  # Wait time (zeroing confirmation in Cases B and C)
-  zero_confirm_wait_int: !input wait_time
+  # Zero confirmation in Cases B and C: reaction time and report interval cap (s)
+  zero_reaction_int: 5
+  zero_report_max_int: 30
 
   # Helper entities
   integral_entity: !input integral_helper
@@ -1470,11 +1472,13 @@ actions:
           - stop: "Critical error or invalid configuration."
 
   # -------------------------------------------------------------------------------------------------
-  # 0-PRE. ARM LATCH as soon as real PV > 0 is measured again
+  # 0-PRE. ARM LATCH at PV > 0 while the instance outputs nothing and Zone 0 is not active
   # -------------------------------------------------------------------------------------------------
   - if:
       - condition: template
-        value_template: "{{ surplus_zero_entry_armed_valid and solar_power_float > 0 }}"
+        value_template: >
+          {{ surplus_zero_entry_armed_valid and solar_power_float > 0 and actual_power_float == 0 and
+             not is_state(surplus_state_entity, 'on') }}
     then:
       - action: input_boolean.turn_on
         target:
@@ -1540,10 +1544,14 @@ actions:
               entity_id: !input integral_helper
             data:
               value: 0
-          # 4. Disarm latch if exiting at PV=0
+          # 4. Disarm latch on exit at PV = 0 or via consumption
           - if:
               - condition: template
-                value_template: "{{ surplus_zero_entry_armed_valid and solar_power_float == 0 }}"
+                value_template: >
+                  {{ surplus_zero_entry_armed_valid and
+                     (solar_power_float == 0 or
+                      ((solar_power_float <= (actual_power_float + grid_power_float - surplus_pv_hysteresis_int)) and
+                       not (surplus_exit_locked | bool(false)))) }}
             then:
               - action: input_boolean.turn_off
                 target:
@@ -1674,33 +1682,81 @@ actions:
               entity_id: !input active_power_number
             data:
               value: 0
-          # Confirm zeroing: wait until |actual| ≤ tolerance, otherwise write once more
-          - wait_template: "{{ (states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int }}"
-            timeout:
-              seconds: "{{ zero_confirm_wait_int }}"
-            continue_on_timeout: true
+          # Zero confirmation: evidence only from the reaction time on (output setpoint ≠ 0 or a report
+          # of the actual power sensor outside the tolerance), deadline reaction time + report interval;
+          # up to two rewrite attempts, only with evidence
+          - variables:
+              zc_settled: "{{ as_timestamp(now()) + zero_reaction_int }}"
+              zc_deadline: "{{ as_timestamp(now()) + zero_reaction_int + zero_report_max_int }}"
+          - repeat:
+              sequence:
+                - delay:
+                    seconds: 1
+              until:
+                - condition: template
+                  value_template: >
+                    {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) or
+                       (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) or
+                       as_timestamp(now()) >= zc_deadline }}
           - if:
               - condition: template
-                value_template: "{{ not wait.completed }}"
+                value_template: >
+                  {{ not ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) and
+                     (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) }}
             then:
               - action: number.set_value
                 target:
                   entity_id: !input active_power_number
                 data:
                   value: 0
-              - wait_template: "{{ (states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int }}"
-                timeout:
-                  seconds: "{{ zero_confirm_wait_int }}"
-                continue_on_timeout: true
+              - variables:
+                  zc_settled: "{{ as_timestamp(now()) + zero_reaction_int }}"
+                  zc_deadline: "{{ as_timestamp(now()) + zero_reaction_int + zero_report_max_int }}"
+              - repeat:
+                  sequence:
+                    - delay:
+                        seconds: 1
+                  until:
+                    - condition: template
+                      value_template: >
+                        {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) or
+                           (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) or
+                           as_timestamp(now()) >= zc_deadline }}
               - if:
                   - condition: template
-                    value_template: "{{ not wait.completed }}"
+                    value_template: >
+                      {{ not ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) and
+                         (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) }}
                 then:
-                  - action: logbook.log
-                    data:
-                      name: Solakon Safety Stop
-                      message: "⚠️ Zeroing not confirmed — actual power {{ states(actual_power_sensor) }} W after second write"
+                  - action: number.set_value
+                    target:
                       entity_id: !input active_power_number
+                    data:
+                      value: 0
+                  - variables:
+                      zc_settled: "{{ as_timestamp(now()) + zero_reaction_int }}"
+                      zc_deadline: "{{ as_timestamp(now()) + zero_reaction_int + zero_report_max_int }}"
+                  - repeat:
+                      sequence:
+                        - delay:
+                            seconds: 1
+                      until:
+                        - condition: template
+                          value_template: >
+                            {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) or
+                               (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) or
+                               as_timestamp(now()) >= zc_deadline }}
+                  - if:
+                      - condition: template
+                        value_template: >
+                          {{ not ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) and
+                             (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) }}
+                    then:
+                      - action: logbook.log
+                        data:
+                          name: Solakon Safety Stop
+                          message: "⚠️ Zeroing not confirmed — actual power {{ states(actual_power_sensor) }} W after two rewrite attempts"
+                          entity_id: !input active_power_number
           # 7. Timer-Toggle (3598↔3599)
           - choose:
               - conditions:
@@ -1760,33 +1816,81 @@ actions:
               entity_id: !input active_power_number
             data:
               value: 0
-          # Confirm zeroing: wait until |actual| ≤ tolerance, otherwise write once more
-          - wait_template: "{{ (states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int }}"
-            timeout:
-              seconds: "{{ zero_confirm_wait_int }}"
-            continue_on_timeout: true
+          # Zero confirmation: evidence only from the reaction time on (output setpoint ≠ 0 or a report
+          # of the actual power sensor outside the tolerance), deadline reaction time + report interval;
+          # up to two rewrite attempts, only with evidence
+          - variables:
+              zc_settled: "{{ as_timestamp(now()) + zero_reaction_int }}"
+              zc_deadline: "{{ as_timestamp(now()) + zero_reaction_int + zero_report_max_int }}"
+          - repeat:
+              sequence:
+                - delay:
+                    seconds: 1
+              until:
+                - condition: template
+                  value_template: >
+                    {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) or
+                       (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) or
+                       as_timestamp(now()) >= zc_deadline }}
           - if:
               - condition: template
-                value_template: "{{ not wait.completed }}"
+                value_template: >
+                  {{ not ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) and
+                     (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) }}
             then:
               - action: number.set_value
                 target:
                   entity_id: !input active_power_number
                 data:
                   value: 0
-              - wait_template: "{{ (states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int }}"
-                timeout:
-                  seconds: "{{ zero_confirm_wait_int }}"
-                continue_on_timeout: true
+              - variables:
+                  zc_settled: "{{ as_timestamp(now()) + zero_reaction_int }}"
+                  zc_deadline: "{{ as_timestamp(now()) + zero_reaction_int + zero_report_max_int }}"
+              - repeat:
+                  sequence:
+                    - delay:
+                        seconds: 1
+                  until:
+                    - condition: template
+                      value_template: >
+                        {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) or
+                           (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) or
+                           as_timestamp(now()) >= zc_deadline }}
               - if:
                   - condition: template
-                    value_template: "{{ not wait.completed }}"
+                    value_template: >
+                      {{ not ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) and
+                         (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) }}
                 then:
-                  - action: logbook.log
-                    data:
-                      name: Solakon Safety Stop
-                      message: "⚠️ Zeroing not confirmed — actual power {{ states(actual_power_sensor) }} W after second write"
+                  - action: number.set_value
+                    target:
                       entity_id: !input active_power_number
+                    data:
+                      value: 0
+                  - variables:
+                      zc_settled: "{{ as_timestamp(now()) + zero_reaction_int }}"
+                      zc_deadline: "{{ as_timestamp(now()) + zero_reaction_int + zero_report_max_int }}"
+                  - repeat:
+                      sequence:
+                        - delay:
+                            seconds: 1
+                      until:
+                        - condition: template
+                          value_template: >
+                            {{ ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) or
+                               (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) or
+                               as_timestamp(now()) >= zc_deadline }}
+                  - if:
+                      - condition: template
+                        value_template: >
+                          {{ not ((states(actual_power_sensor) | float(0) * (1000 if state_attr(actual_power_sensor, 'unit_of_measurement') == 'kW' else 1)) | abs <= tolerance_int) and
+                             (as_timestamp(now()) >= zc_settled and (states(active_power_entity) | float(0) != 0 or as_timestamp(states[actual_power_sensor].last_reported | default(0), 0) >= zc_settled)) }}
+                    then:
+                      - action: logbook.log
+                        data:
+                          name: Solakon Safety Stop
+                          message: "⚠️ Zeroing not confirmed — actual power {{ states(actual_power_sensor) }} W after two rewrite attempts"
+                          entity_id: !input active_power_number
           # 4. Timer-Toggle (3598↔3599)
           - choose:
               - conditions:

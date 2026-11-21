@@ -90,11 +90,12 @@ variables:
 
   # Anti-windup via back-calculation: integral corrected to the value that exactly
   # produces final_power. Equals integral_candidate when output is not clamped.
+  # I factor 0: integral 0.
   integral_new: >
     {% if i_val != 0 %}
       {{ ((final_power - current_float - error_float * p_val) / i_val) | clamp(-effective_max, effective_max) | round(2) }}
     {% else %}
-      {{ integral_candidate | clamp(-effective_max, effective_max) | round(2) }}
+      0
     {% endif %}
 
 sequence:

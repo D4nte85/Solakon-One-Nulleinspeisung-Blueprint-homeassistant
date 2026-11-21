@@ -5,6 +5,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [V316] – 2026-11-21
+
+### Fixed
+- **PV=0 entry during the Tariff Lock (integration issue #57):** The latch armed at any PV above 0, even while the instance passed the PV through while discharging itself or in mode `'0'` at a full battery. During the Tariff Lock, Zone 0 therefore oscillated via 0A → 0B → TM at a full battery and weak PV. It now arms only at PV above 0, actual power 0 and Zone 0 inactive; Case 0B additionally disarms it on every exit via consumption. Keep the export threshold below the app charge limit, otherwise the latch does not re-arm after such an exit (`solakon_one_zeroexport.yaml`, README section 12).
+- **Integral at I factor 0:** With I factor 0 the PI script stored a growing integral without effect; raising the I factor later made the correction jump once by up to limit × I factor. With I factor 0 the integral now stays 0 (`PI-Controller.yaml`).
+- **Zero confirmation in Cases B and C (integration issue #60):** After writing 0 W the blueprint only waited the wait time (default 3 s), then wrote again without evidence and logged "Zeroing not confirmed", even if the actual power sensor simply had not reported yet. Evidence now only counts from the reaction time (5 s) on: an output setpoint ≠ 0 or a report of the actual power sensor outside the tolerance; only then up to two rewrite attempts, without evidence the check ends after 35 s without an entry (`solakon_one_zeroexport.yaml`).
+
 ## [V315] – 2026-10-01
 
 ### Fixed

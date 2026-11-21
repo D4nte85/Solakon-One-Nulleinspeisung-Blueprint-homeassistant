@@ -1,4 +1,4 @@
-# ⚡ Solakon ONE Zero Export Blueprint (EN) - V315
+# ⚡ Solakon ONE Zero Export Blueprint (EN) - V316
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/d4nte85)
@@ -177,6 +177,7 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
   - `at_max_limit = false` if `current > dynamic_max` (PV drop) → PI corrects downward, even with the grid error within tolerance
 * **AC Charging — setpoint calculation instead of PI:** charge setpoint = actual charge power + `error_share` × (AC offset − grid), clamped to 0 … charge limit, in one step. Written when `|AC offset − grid| > tolerance` or output above the charge limit. Below the minimum charge power (default 50 W), 0 W is written. While the ramp is running (actual charge power more than 15 W below output), it only decreases: charging power rises by only about 34 W/s, and the grid sensor shows an older state meanwhile. The integral stays unchanged during AC charging.
 * **Second reading:** grid and PV are read again before the PI phase. If either has no numeric value, the run ends with a log entry and without a write command — otherwise the PI phase would compute with 0 W, the Zone 2 limit would drop to 0 and the output would be zeroed.
+* **Zero confirmation (Cases B and C):** After writing 0 W the blueprint waits until the actual power is within the tolerance. Only from the reaction time (5 s) on does an output setpoint ≠ 0 or a report of the actual power sensor outside the tolerance (`last_reported`, from HA 2024.3) count as evidence against the zeroing; an earlier report, e.g. right after the write, still shows the old value. Only with evidence does it write 0 W again, at most twice, then logbook "Zeroing not confirmed". Without evidence the check ends after reaction time + 30 s without an entry. New triggers are dropped during the check (mode `single`).
 * **Output stall detection:** When the setpoint sits at the upper limit and the grid error persists in the same direction (`at_max_limit`), the PI stops writing — it cannot raise the setpoint any further. An inverter stalled in exactly that state never receives another command; case D does not apply either, because the mode is still `'1'`. This is detected via the **deviation of actual power from the limit**: more than 5 % deviation while the actual sensor's `last_updated` has been standing still for over 300 s. That timestamp only advances on a value change and therefore means "unchanged since then" — an actual sensor fluctuating around the deviating value does not trigger it. Action: integral = 0, output → 0 W, timer toggle, mode → `'0'`; on the next run **case D** brings the device back (timer toggle + mode `'1'`) and the PI ramps up again. Repeats at most every 300 s, measured on the mode entity's `last_changed`. Applies to normal discharge mode only — Zone 0, tariff charging and AC charging deliberately hold the output below their respective limit.
 
 ---
@@ -197,8 +198,8 @@ The blueprint uses a **PI controller** for precise zero export. The calculation 
 | **0A** | Surplus-Bool = `off` AND ((SOC ≥ export threshold AND (PV > Output_discharging + Grid + PV-Hysteresis OR (PV = 0 AND PV=0 latch armed))) OR Surplus-Forecast-Forced) | Zone 0 Start: Surplus-Bool → `on` |
 | **0B** | Surplus-Bool = `on` AND NOT Surplus-Forecast-Forced AND ((PV ≤ Output + Grid − PV-Hysteresis AND **NOT exit lock**) OR SOC < export threshold − SOC-Hysteresis) | Zone 0 End: Surplus-Bool → `off`, Integral = 0 |
 | **A** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND NOT Tariff Lock AND SOC > Zone 1 threshold AND Cycle = `off` | Zone 1 Start: Cycle = `on`, Integral = 0, reset Surplus/AC-Bool, Timer-Toggle, Mode → `'1'` |
-| **B** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND SOC ≤ Zone 3 threshold AND Cycle = `on` | Zone 3 Stop: Cycle = `off`, Integral = 0, reset Surplus/AC-Bool, Output → 0W (confirmed via actual power, 1× retry), Timer-Toggle, Mode → `'0'` |
-| **C** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND SOC ≤ Zone 3 threshold AND Cycle = `off` AND Mode ≠ `'0'` | Zone 3 Guard: reset Surplus/AC-Bool, Output → 0W (confirmed via actual power, 1× retry), Timer-Toggle, Mode → `'0'` |
+| **B** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND SOC ≤ Zone 3 threshold AND Cycle = `on` | Zone 3 Stop: Cycle = `off`, Integral = 0, reset Surplus/AC-Bool, Output → 0W (zero confirmation: up to 2 rewrite attempts, only with evidence from the 5 s reaction time on), Timer-Toggle, Mode → `'0'` |
+| **C** | NOT AC-Charge-Bool = `on` AND NOT Tariff-Charge-Bool = `on` AND SOC ≤ Zone 3 threshold AND Cycle = `off` AND Mode ≠ `'0'` | Zone 3 Guard: reset Surplus/AC-Bool, Output → 0W (zero confirmation: up to 2 rewrite attempts, only with evidence from the 5 s reaction time on), Timer-Toggle, Mode → `'0'` |
 | **D** | (Cycle = `on` OR **charging reason holds**) AND Mode ∉ `{'1','3'}` AND (**charging reason holds** OR SOC > Zone 3 threshold) AND (**no Tariff Lock** OR Charge-Bool = `on`) | Recovery: Timer-Toggle, Mode → `'3'` if the charging reason holds, otherwise `'1'` (no integral reset, no zone change) |
 | **GT** | Tariff enabled AND price < cheap threshold AND NOT PV-forecast-suppressed AND SOC < tariff target − SOC hysteresis AND Mode ≠ `'3'` AND **NOT AC-Bool = `on`** AND NOT Surplus-Bool = `on` | Tariff Charging Start: Tariff-Bool = `on`, Timer-Toggle, Output → charge power (direct), Mode → `'3'` |
 | **HT** | Tariff-Bool = `on` AND (**no cheap-price statement** OR SOC ≥ target) | Tariff Charging End: Integral = 0, Tariff-Bool = `off`, Zone 1 → Timer-Toggle + `'1'` / Zone 2 → `'0'` + 0W |
@@ -354,13 +355,14 @@ Keeps Zone 0 alive through short PV dips (clouds) instead of exiting.
 
 ### 12. 🌙 Surplus PV=0 Entry Latch (Optional)
 
-Prevents oscillation between Case 0A/0B at night with a full battery when PV reads 0 persistently.
+Prevents oscillation between Case 0A/0B at a full battery when PV reads 0 — at night and during the Tariff Lock.
 
 * **Prerequisite:** Surplus Export must also be enabled.
 * **Helper:** input_boolean, default initial value `on` (armed).
-* **Arming:** As soon as PV > 0 is measured → helper → `on`.
-* **Disarming (Case 0B):** On exit while PV = 0 → helper → `off`.
-* **Effect (Case 0A):** The PV=0 entry branch only fires while the helper is `on`. After a nightly exit it stays locked until real PV > 0 is measured again — without the latch, a renewed PV=0 reading would immediately re-enter Zone 0 right after exiting (oscillation on a seconds-to-minutes timescale).
+* **Arming:** PV > 0 while the instance outputs nothing (actual power 0) and Zone 0 is not active → helper → `on`. In practice: PV charges the battery. PV that the instance passes through while discharging itself or in mode `'0'` at a full battery does not arm it.
+* **Disarming (Case 0B):** On every exit via consumption (PV term) and on every exit at PV = 0 → helper → `off`.
+* **Effect (Case 0A):** The PV=0 entry branch only fires while the helper is `on`. After an exit it stays locked until PV charges the battery again — without the latch, a renewed PV=0 reading would immediately re-enter Zone 0 right after exiting (oscillation on a seconds-to-minutes timescale, during the Tariff Lock via 0A → 0B → TM).
+* **Export threshold:** If it sits at the app charge limit, the inverter throttles PV to 0 W in mode `'0'`. After an exit via consumption the latch then does not re-arm, and surplus PV stays unused until Zone 1 runs. Therefore set the export threshold ~5 % below the app charge limit (see above).
 * **Fallback:** Helper not set up/unavailable → latch inactive, PV=0 entry behaves as before, unprotected.
 
 ---
@@ -397,7 +399,7 @@ Prevents oscillation between Case 0A/0B at night with a full battery when PV rea
 |:----------|:--------|:----|:----|:------------|
 | **Discharge PI** | On | – | – | On: zones 1 and 2 are controlled by the PI controller. Off: setpoint calculation on actual basis; P and I factor have no effect then. |
 | **P Factor** | 1.3 | 0.1 | 5.0 | Proportional gain. Higher = more aggressive. |
-| **I Factor** | 0.05 | 0 | 0.2 | Integral gain. Higher = faster error correction, but less stable. |
+| **I Factor** | 0.05 | 0 | 0.2 | Integral gain. Higher = faster error correction, but less stable. At 0 the integral stays 0. |
 | **Tolerance Range** | 25 W | 0 | 200 W | Deadband around setpoint. No PI correction within (integral decay instead). |
 | **Wait Time** | 3 s | 0 | 30 s | Wait time after power change. If "Adaptive Wait Time" is enabled, this value only acts as a timeout. |
 | **Adaptive Wait Time** | Off | – | – | Exits the wait time early once actual power ≈ setpoint ± tolerance (when charging: −actual power, since actual power is negative then). Caution with slow external grid measurements (e.g. IR reading head) — can cause premature controller action. |
@@ -450,7 +452,7 @@ Prevents oscillation between Case 0A/0B at night with a full battery when PV rea
 | **SOC Threshold Surplus** | 90 % | 50 % | 99 % | From this SOC with PV surplus → Zone 0. Recommendation: ~5% below the app charge limit (rationale in section 3). |
 | **Hysteresis Surplus Exit (SOC)** | 5 % | 1 % | 20 % | SOC must fall by this amount below entry threshold before Zone 0 is exited. |
 | **PV Surplus Hysteresis** | 50 W | 10 W | 200 W | Deadband around house consumption for entry and exit. |
-| **PV=0 Entry Latch Helper** | *(empty)* | — | — | Optional `input_boolean`. Locks the PV=0 entry branch after a nightly exit until PV > 0 is measured again (see section 12). Not set up → PV=0 entry stays unprotected. |
+| **PV=0 Entry Latch Helper** | *(empty)* | — | — | Optional `input_boolean`. Locks the PV=0 entry branch after an exit until PV charges the battery again (see section 12). Not set up → PV=0 entry stays unprotected. |
 | **Enable Surplus Forecast Entry** | false | — | — | Forces Zone 0 entry on high forecast without export threshold (SOC must stay above zone 3). |
 | **Surplus Forecast Sensor** | *(empty)* | — | — | PV surplus forecast in W (e.g. Solcast; kW is normalized ×1000 automatically). |
 | **Surplus Forecast Threshold** | 5000 W | 0 | 20000 W | Minimum forecast value for forced Zone 0 entry. |
@@ -627,7 +629,7 @@ final_power        = Clamp(new_power, 0, effective_max)
   integral_new = Clamp((final_power - current_power - error × P_Factor) / I_Factor,
                        -effective_max, effective_max)
 # When I_Factor = 0:
-  integral_new = Clamp(integral_candidate, -effective_max, effective_max)
+  integral_new = 0
 ```
 
 ### Integral Management (in Main Automation)
