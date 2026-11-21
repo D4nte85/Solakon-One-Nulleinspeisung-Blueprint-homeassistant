@@ -33,22 +33,22 @@ flowchart TD
     subgraph SG_SOC ["🔋 SOC Zone Control   (Cases A, B, C, D, E, F)"]
 
         %% ── Case A: Zone 1 ───────────────────────────────────────────────
-        Z1_START["🔋 Zone 1 activate   Cycle = on   Integral = 0   Surplus-Bool → off (only if active)   AC-Charge-Bool → off (only if active)   Timer-Toggle (3598↔3599)   Mode → '1' (INV Discharge PV Priority)"]
+        Z1_START["🔋 Zone 1 activate   Cycle = on   Integral = 0   Surplus-Bool → off (only if active)   AC-Charge-Bool → off (only if active)   Timer-Toggle (T ↔ T − 1)   Mode → '1' (INV Discharge PV Priority)"]
 
         %% ── Case B: Zone 3 (Cycle on) ──────────────────────────────────
-        Z3_A["🛑 Zone 3 activate   Cycle = off   Integral = 0   Surplus-Bool → off (only if active)   AC-Charge-Bool → off (only if active)   Output → 0 W (zero confirmation, ≤ 2× rewrite with evidence)   Timer-Toggle (3598↔3599)   Mode → '0' (Disabled)"]
+        Z3_A["🛑 Zone 3 activate   Cycle = off   Integral = 0   Surplus-Bool → off (only if active)   AC-Charge-Bool → off (only if active)   Output → 0 W (zero confirmation, ≤ 2× rewrite with evidence)   Timer-Toggle (T ↔ T − 1)   Mode → '0' (Disabled)"]
 
         %% ── Case C: Zone 3 (Guard) ────────────────────────────────────
-        Z3_B["🛑 Zone 3 Guard   Surplus-Bool → off (only if active)   AC-Charge-Bool → off (only if active)   Output → 0 W (zero confirmation, ≤ 2× rewrite with evidence)   Timer-Toggle (3598↔3599)   Mode → '0' (Disabled)"]
+        Z3_B["🛑 Zone 3 Guard   Surplus-Bool → off (only if active)   AC-Charge-Bool → off (only if active)   Output → 0 W (zero confirmation, ≤ 2× rewrite with evidence)   Timer-Toggle (T ↔ T − 1)   Mode → '0' (Disabled)"]
 
         %% ── Case D: Recovery ─────────────────────────────────────────────
-        RECOVERY["🔄 Recovery — Mode Reactivation   Timer-Toggle (3598↔3599)   charging reason holds (AC option on resp. price cheap) → Mode '3'   otherwise → Mode '1'   (no integral reset, no zone change)"]
+        RECOVERY["🔄 Recovery — Mode Reactivation   Timer-Toggle (T ↔ T − 1)   charging reason holds (AC option on resp. price cheap) → Mode '3'   otherwise → Mode '1'   (no integral reset, no zone change)"]
 
         %% ── Case E: Zone 2 ───────────────────────────────────────────────
-        Z2_START["🔋 Zone 2 activate   Integral = 0   Output → 0 W   Timer-Toggle (3598↔3599)   Mode → '1' (INV Discharge PV Priority)"]
+        Z2_START["🔋 Zone 2 activate   Integral = 0   Output → 0 W   Timer-Toggle (T ↔ T − 1)   Mode → '1' (INV Discharge PV Priority)"]
 
         %% ── Case F: Night Shutdown ─────────────────────────────────────
-        NIGHT["🌙 Night Shutdown   Integral = 0   Output → 0 W   Timer-Toggle (3598↔3599)   Mode → '0' (Disabled)"]
+        NIGHT["🌙 Night Shutdown   Integral = 0   Output → 0 W   Timer-Toggle (T ↔ T − 1)   Mode → '0' (Disabled)"]
 
     end
     style SG_SOC fill:none,stroke:#28a745,stroke-width:5,stroke-dasharray:6,color:#000
@@ -57,15 +57,15 @@ flowchart TD
     subgraph SG_TARIFF ["💹 Tariff Arbitrage   (Cases GT, HT, TM)"]
 
         %% ── Case GT: Tariff Charging Entry ────────────────────────────────
-        TARIFF_START["💹 Tariff Charging activate   Tariff-Charge-Bool → on   Timer-Toggle (3598↔3599)   Output → Charge Power (direct, no PI)   Mode → '3' (INV Charge PV Priority)"]
+        TARIFF_START["💹 Tariff Charging activate   Tariff-Charge-Bool → on   Timer-Toggle (T ↔ T − 1)   Output → Charge Power (direct, no PI)   Mode → '3' (INV Charge PV Priority)"]
 
         %% ── Case HT: Tariff Charging End ─────────────────────────────────
         TARIFF_END{{"Integral = 0   Tariff-Charge-Bool → off   Current Zone?"}}
-        TARIFF_END_Z1["💹 Tariff Charging end (Zone 1)   Output → 0 W   Timer-Toggle (3598↔3599)   Mode → '1' (INV Discharge PV Priority)"]
-        TARIFF_END_Z2["💹 Tariff Charging end (Zone 2)   Output → 0 W   Timer-Toggle (3598↔3599)   Mode → '0' (Disabled)"]
+        TARIFF_END_Z1["💹 Tariff Charging end (Zone 1)   Output → 0 W   Timer-Toggle (T ↔ T − 1)   Mode → '1' (INV Discharge PV Priority)"]
+        TARIFF_END_Z2["💹 Tariff Charging end (Zone 2)   Output → 0 W   Timer-Toggle (T ↔ T − 1)   Mode → '0' (Disabled)"]
 
         %% ── Case TM: Tariff Lock ──────────────────────────────────────
-        TARIFF_MID["🔒 Tariff Lock   Integral = 0   Cycle = off (only if Zone 1)   Surplus-Bool → off (only if active)   Output → 0 W   Timer-Toggle (3598↔3599)   Mode → '0' (Disabled)"]
+        TARIFF_MID["🔒 Tariff Lock   Integral = 0   Cycle = off (only if Zone 1)   Surplus-Bool → off (only if active)   Output → 0 W   Timer-Toggle (T ↔ T − 1)   Mode → '0' (Disabled)"]
 
     end
     style SG_TARIFF fill:none,stroke:#1a7f1a,stroke-width:5,stroke-dasharray:6,color:#000
@@ -74,20 +74,20 @@ flowchart TD
     subgraph SG_AC ["⚡ AC Charging & Safety   (Cases G, H, I)"]
 
         %% ── Case G: AC Charging Entry ────────────────────────────────────
-        AC_START["⚡ AC Charging activate   AC-Charge-Bool → on   Timer-Toggle (3598↔3599)   Output → 0 W (PI starts clean)   Mode → '3' (INV Charge PV Priority)"]
+        AC_START["⚡ AC Charging activate   AC-Charge-Bool → on   Timer-Toggle (T ↔ T − 1)   Output → 0 W (PI starts clean)   Mode → '3' (INV Charge PV Priority)"]
 
         %% ── Case H: AC Charging End ─────────────────────────────────────
         AC_END{{"Integral = 0   AC-Charge-Bool → off   Current Zone?"}}
-        AC_END_Z1["⚡ AC Charging end (Zone 1)   Output → 0 W   Timer-Toggle (3598↔3599)   Mode → '1' (INV Discharge PV Priority)"]
-        AC_END_Z2["⚡ AC Charging end (Zone 2)   Output → 0 W   Timer-Toggle (3598↔3599)   Mode → '0' (Disabled)"]
+        AC_END_Z1["⚡ AC Charging end (Zone 1)   Output → 0 W   Timer-Toggle (T ↔ T − 1)   Mode → '1' (INV Discharge PV Priority)"]
+        AC_END_Z2["⚡ AC Charging end (Zone 2)   Output → 0 W   Timer-Toggle (T ↔ T − 1)   Mode → '0' (Disabled)"]
 
         %% ── Case I: Safety — charging session without Mode '3' ──────────
         SAFETY_I_SESSION["⚠️ Safety — charging session cleared   Integral = 0   affected Charge-Bools → off   mode and output unchanged"]
 
         %% ── Case I: Safety — Mode '3' without active charge session ─────
         SAFETY_I{{"Integral = 0   Current Zone?"}}
-        SAFETY_I_Z1["⚠️ Safety (Zone 1)   Output → 0 W   Timer-Toggle (3598↔3599)   Mode → '1' (INV Discharge PV Priority)"]
-        SAFETY_I_Z2["⚠️ Safety (Zone 2)   Output → 0 W   Timer-Toggle (3598↔3599)   Mode → '0' (Disabled)"]
+        SAFETY_I_Z1["⚠️ Safety (Zone 1)   Output → 0 W   Timer-Toggle (T ↔ T − 1)   Mode → '1' (INV Discharge PV Priority)"]
+        SAFETY_I_Z2["⚠️ Safety (Zone 2)   Output → 0 W   Timer-Toggle (T ↔ T − 1)   Mode → '0' (Disabled)"]
 
     end
     style SG_AC fill:none,stroke:#0066cc,stroke-width:5,stroke-dasharray:6,color:#000
@@ -153,8 +153,8 @@ flowchart TD
         DISCHARGE_SET -- "Cycle = off OR Mode = '3' AND Surplus NOT active → 0 A   (only if different)" --> TIMEOUT_CHECK
 
         %% ── Step 2: Timeout Reset ─────────────────────────────────────
-        TIMEOUT_CHECK{{"Countdown < 120s?"}}
-        TIMEOUT_CHECK -- Yes --> TIMEOUT_RESET["⏱️ Timer-Toggle (3598↔3599)"]
+        TIMEOUT_CHECK{{"Countdown < 120s OR timer ∉ {T, T − 1}?"}}
+        TIMEOUT_CHECK -- Yes --> TIMEOUT_RESET["⏱️ Timer-Toggle (T ↔ T − 1)"]
         TIMEOUT_CHECK -- No --> PI_DECISION
         TIMEOUT_RESET --> PI_DECISION
 
@@ -199,7 +199,7 @@ flowchart TD
         STALL_GATE{{"Output stalled?   At-max-limit AND no AC charging   AND |actual − dynamic_max| > 5 % · dynamic_max   AND actual sensor unchanged for > 300 s (last_updated)   AND mode unchanged for > 300 s (last_changed)"}}
         STALL_GATE -- No --> END_OK
         STALL_GATE -- Yes --> STALL_RECOVER
-        STALL_RECOVER["⚠️ Stall — recovery   Integral = 0   Output → 0 W   Timer toggle (3598↔3599)   Mode → '0'   → next run: case D (timer toggle + mode '1'), PI ramps up"]
+        STALL_RECOVER["⚠️ Stall — recovery   Integral = 0   Output → 0 W   Timer toggle (T ↔ T − 1)   Mode → '0'   → next run: case D (timer toggle + mode '1'), PI ramps up"]
         STALL_RECOVER --> END_OK
 
         CALC_SURPLUS --> END_OK([End])

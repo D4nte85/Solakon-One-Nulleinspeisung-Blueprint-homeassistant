@@ -1,4 +1,4 @@
-# ⚡ Solakon ONE Zero Export Blueprint (EN) - V316
+# ⚡ Solakon ONE Zero Export Blueprint (EN) - V317
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-ff5e5b?logo=ko-fi&logoColor=white)](https://ko-fi.com/d4nte85)
@@ -319,14 +319,16 @@ For operation of multiple Solakon ONE inverters in one household.
 
 ### 9. ⏱️ Timer-Toggle and Mode Change Sequence
 
-To ensure stable adoption of mode changes by the Solakon ONE, a **toggle between 3598 and 3599** is used instead of a fixed value:
+To ensure stable adoption of mode changes by the Solakon ONE, a **toggle between the remote control timeout T and T − 1** is used instead of a fixed value (default 3599/3598 s, input "Remote control timeout"):
 
-- If current timer value = 3599 → write 3598
-- Otherwise → write 3599
+- If current timer value = T → write T − 1
+- Otherwise → write T
 
 This creates a state change that causes the inverter to reliably adopt the new mode. No delay required. The toggle is performed at every mode change (Cases A, D, E, G, GT, H-Zone1, HT-Zone1, I-Zone1) directly before setting the mode.
 
-**Continuous Timeout Reset (Step 2):** Countdown < 120s → Timer-Toggle.
+**Continuous Timeout Reset (Step 2):** Countdown < 120 s or the device holds neither T nor T − 1 (e.g. after changing T) → Timer-Toggle.
+
+**Remote control timeout:** Time after which, according to the specification, the device falls back to the app settings without a new remote control command, e.g. when Home Assistant fails; 300–3599 s, default 3599. The blueprint only runs on sensor changes and has no periodic trigger: if grid and PV stay unchanged for longer than T − 120 s, the timeout reset comes too late and the device falls back in between. With a short T, use a grid sensor that reports frequently.
 
 ---
 
@@ -361,9 +363,9 @@ Prevents oscillation between Case 0A/0B at a full battery when PV reads 0 — at
 * **Helper:** input_boolean, default initial value `on` (armed).
 * **Arming:** PV > 0 while the instance outputs nothing (actual power 0) and Zone 0 is not active → helper → `on`. In practice: PV charges the battery. PV that the instance passes through while discharging itself or in mode `'0'` at a full battery does not arm it.
 * **Disarming (Case 0B):** On every exit via consumption (PV term) and on every exit at PV = 0 → helper → `off`.
-* **Effect (Case 0A):** The PV=0 entry branch only fires while the helper is `on`. After an exit it stays locked until PV charges the battery again — without the latch, a renewed PV=0 reading would immediately re-enter Zone 0 right after exiting (oscillation on a seconds-to-minutes timescale, during the Tariff Lock via 0A → 0B → TM).
+* **Effect (Case 0A):** The PV=0 entry only fires while the helper is `on`. After an exit it stays locked until PV charges the battery again — without the latch, a renewed PV=0 reading would immediately re-enter Zone 0 right after exiting (oscillation on a seconds-to-minutes timescale, during the Tariff Lock via 0A → 0B → TM).
 * **Export threshold:** If it sits at the app charge limit, the inverter throttles PV to 0 W in mode `'0'`. After an exit via consumption the latch then does not re-arm, and surplus PV stays unused until Zone 1 runs. Therefore set the export threshold ~5 % below the app charge limit (see above).
-* **Fallback:** Helper not set up/unavailable → latch inactive, PV=0 entry behaves as before, unprotected.
+* **Fallback:** Helper not set up/unavailable → latch inactive, PV=0 entry is then unprotected.
 
 ---
 
@@ -380,7 +382,7 @@ Prevents oscillation between Case 0A/0B at a full battery when PV reads 0 — at
 | **Solakon** | Remote Timeout Countdown | `sensor.solakon_one_remote_timeout_countdown` | Remaining countdown |
 | **Solakon** | Output Power Controller | `number.solakon_one_remote_control_power` | Sets power setpoint |
 | **Solakon** | Max. Discharge Current | `number.solakon_one_maximum_discharge_current` | Sets discharge current limit |
-| **Solakon** | Mode Reset Timer | `number.solakon_one_remote_control_timeout` | Timer-Toggle 3598↔3599 |
+| **Solakon** | Mode Reset Timer | `number.solakon_one_remote_control_timeout` | Timer-Toggle T ↔ T − 1 |
 | **Solakon** | Operating Mode Selection | `select.solakon_one_remote_control_mode` | `'0'` = Disabled, `'1'` = INV Discharge PV Priority, `'3'` = INV Charge PV Priority |
 | **Helper** | Discharge Cycle Storage | `input_boolean.solakon_soc_discharge_cycle_status` | Input Boolean: `on`/`off` |
 | **Helper** | Integral Storage | `input_number.solakon_integral` | Input Number: −1200 to 1200, Step 1 |
@@ -402,6 +404,7 @@ Prevents oscillation between Case 0A/0B at a full battery when PV reads 0 — at
 | **I Factor** | 0.05 | 0 | 0.2 | Integral gain. Higher = faster error correction, but less stable. At 0 the integral stays 0. |
 | **Tolerance Range** | 25 W | 0 | 200 W | Deadband around setpoint. No PI correction within (integral decay instead). |
 | **Wait Time** | 3 s | 0 | 30 s | Wait time after power change. If "Adaptive Wait Time" is enabled, this value only acts as a timeout. |
+| **Remote control timeout** | 3599 s | 300 s | 3599 s | Time after which, according to the specification, the device falls back to the app settings without a new remote control command (see section 9). |
 | **Adaptive Wait Time** | Off | – | – | Exits the wait time early once actual power ≈ setpoint ± tolerance (when charging: −actual power, since actual power is negative then). Caution with slow external grid measurements (e.g. IR reading head) — can cause premature controller action. |
 
 > **Note:** P and I factors apply to Zone 1 and Zone 2 with the discharge PI switched on. AC Charging mode (Mode `'3'`) runs without a PI on the setpoint calculation — see [AC Charging Parameters](#-ac-charging-optional-1).
@@ -452,7 +455,7 @@ Prevents oscillation between Case 0A/0B at a full battery when PV reads 0 — at
 | **SOC Threshold Surplus** | 90 % | 50 % | 99 % | From this SOC with PV surplus → Zone 0. Recommendation: ~5% below the app charge limit (rationale in section 3). |
 | **Hysteresis Surplus Exit (SOC)** | 5 % | 1 % | 20 % | SOC must fall by this amount below entry threshold before Zone 0 is exited. |
 | **PV Surplus Hysteresis** | 50 W | 10 W | 200 W | Deadband around house consumption for entry and exit. |
-| **PV=0 Entry Latch Helper** | *(empty)* | — | — | Optional `input_boolean`. Locks the PV=0 entry branch after an exit until PV charges the battery again (see section 12). Not set up → PV=0 entry stays unprotected. |
+| **PV=0 Entry Latch Helper** | *(empty)* | — | — | Optional `input_boolean`. Locks the PV=0 entry after an exit until PV charges the battery again (see section 12). Not set up → PV=0 entry stays unprotected. |
 | **Enable Surplus Forecast Entry** | false | — | — | Forces Zone 0 entry on high forecast without export threshold (SOC must stay above zone 3). |
 | **Surplus Forecast Sensor** | *(empty)* | — | — | PV surplus forecast in W (e.g. Solcast; kW is normalized ×1000 automatically). |
 | **Surplus Forecast Threshold** | 5000 W | 0 | 20000 W | Minimum forecast value for forced Zone 0 entry. |
@@ -657,8 +660,9 @@ The `inverter_entity_max` reads the `max` attribute of the output power entity, 
 
 ### Timer-Toggle Mechanism
 ```
-If timer_value == 3599 → write 3598
-Otherwise              → write 3599
+T = remote control timeout (default 3599)
+If timer_value == T → write T − 1
+Otherwise           → write T
 → Then: set mode
 ```
 

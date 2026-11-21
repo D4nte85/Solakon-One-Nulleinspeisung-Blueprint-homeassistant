@@ -5,6 +5,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [V317] – 2026-11-21
+
+### Added
+- **Remote control timeout adjustable:** Previously the timer toggle wrote a fixed 3598 ↔ 3599 s. New input "Remote control timeout" (300–3599 s, default 3599). The timer toggle alternates between T and T − 1, the timeout reset (step 2) fires at countdown < 120 s and additionally when the device holds neither T nor T − 1, so a change arrives in the next run with regulation. Without a periodic trigger, a short T lets the device fall back if grid and PV stay unchanged for longer than T − 120 s (`solakon_one_zeroexport.yaml`, README section 9).
+
 ## [V316] – 2026-11-21
 
 ### Fixed

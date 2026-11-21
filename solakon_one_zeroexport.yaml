@@ -1,5 +1,5 @@
 blueprint:
-  name: Solakon ONE Zero Export (EN) - Dynamic & SOC-Controlled (V316)
+  name: Solakon ONE Zero Export (EN) - Dynamic & SOC-Controlled (V317)
   description: |
     Dynamic zero export for the Solakon ONE inverter with PI controller, SOC zone logic,
     optional surplus export (incl. surplus forecast entry), optional AC charging from external
@@ -71,7 +71,7 @@ blueprint:
     - **E** — Zone 2 Start: Zone 3 < SOC ≤ Zone 1 AND Cycle = `off` AND Mode = `'0'` AND NOT night AND no Tariff Lock → Integral = 0, Timer-Toggle, Mode → `'1'`
     - **F** — Night Shutdown: Night AND PV < PV charge reserve AND Cycle = `off` AND Mode active AND no AC/Tariff charging AND no surplus → Integral = 0, Output → 0W, Timer-Toggle, Mode → `'0'`
 
-    **Timer-Toggle:** Instead of a fixed value, toggles between 3598 and 3599 — creates a state change so the Solakon reliably adopts the new mode. Performed at every mode change directly before setting the mode.
+    **Timer-Toggle:** Instead of a fixed value, toggles between the remote control timeout T and T − 1 (default 3599/3598 s) — creates a state change so the Solakon reliably adopts the new mode. Performed at every mode change directly before setting the mode. The timeout reset toggles at countdown < 120 s and when the device holds neither T nor T − 1.
 
     **Priority & Order in choose block:**
 
@@ -219,9 +219,9 @@ blueprint:
     - **Arming:** PV > 0 while the instance outputs nothing (actual power 0) and Zone 0 is not active → helper → `on`. In practice: PV charges the battery
     - **Disarming (Case 0B):** On every exit via consumption and on every exit at PV = 0 → helper → `off`
     - **Export threshold:** set it below the app charge limit (~5 %). At the charge limit the inverter throttles PV to 0 W in mode `'0'`, and the latch would not re-arm after an exit via consumption
-    - **Effect (Case 0A):** The PV=0 entry branch only fires while the helper is `on`. After a nightly exit it stays locked until real PV > 0 is measured again — the plain SOC/PV comparison branch is unaffected
+    - **Effect (Case 0A):** The PV=0 entry only fires while the helper is `on`. After a nightly exit it stays locked until real PV > 0 is measured again — the plain SOC/PV comparison branch is unaffected
     - **Only active when:** Surplus export is also enabled
-    - **Fallback:** Helper not set up → latch inactive, PV=0 entry behaves as before, unprotected
+    - **Fallback:** Helper not set up → latch inactive, PV=0 entry is then unprotected
 
     </details>
 
@@ -314,6 +314,24 @@ blueprint:
             selector:
               entity:
                 domain: number
+
+          remote_timeout_seconds:
+            name: ⏲️ Remote control timeout (s)
+            description: |
+              Time after which, according to the specification, the device falls back to the app settings
+              without a new remote control command, e.g. when Home Assistant fails. The timer toggle alternately writes this value and
+              one below it; the timeout reset renews it at countdown < 120 s. A change takes effect in the
+              next run with regulation. Default 3599 s. Minimum 300 s.
+              ⚠️ The blueprint only runs on sensor changes: if grid and PV stay unchanged for longer than
+              timeout − 120 s, the device falls back in between.
+            default: 3599
+            selector:
+              number:
+                min: 300
+                max: 3599
+                step: 1
+                unit_of_measurement: s
+                mode: box
 
           mode_select:
             name: 🔄 Solakon ONE - Operating Mode Selection
@@ -729,11 +747,11 @@ blueprint:
           surplus_zero_entry_armed_helper:
             name: ☀️ Surplus PV=0 Entry Latch (input_boolean - Zone 0 only)
             description: |
-              input_boolean helper for persistently locking the PV=0 entry branch after an
+              input_boolean helper for persistently locking the PV=0 entry after an
               exit at PV = 0 or via consumption, until PV > 0 is measured again while the
               instance outputs nothing. Prevents oscillation between Case 0A/0B at a full battery.
               ⚠️ Only required when Surplus Export is enabled. If the helper is missing
-              (not set up), entry behaves as before, unprotected.
+              (not set up), the PV=0 entry is unprotected.
             default: input_boolean.solakon_surplus_zero_entry_armed
             selector:
               entity:
@@ -1167,6 +1185,8 @@ variables:
     {{ ns.f }}
   discharge_current_entity: !input max_discharge_current_number
   remote_timeout_set_number: !input remote_timeout_set_number
+  # Remote control timeout T; timer toggle between T and T − 1
+  timeout_high_int: !input remote_timeout_seconds
 
   # Parameters
   discharge_current_max: !input default_discharge_current
@@ -1607,26 +1627,26 @@ actions:
                   - action: input_boolean.turn_off
                     target:
                       entity_id: !input ac_charge_state_helper
-          # 6. Mode → '1' (Timer-Toggle 3598↔3599)
+          # 6. Mode → '1' (Timer-Toggle T ↔ T − 1)
           - choose:
               - conditions: "{{ states(solakon_mode) != '1' }}"
                 sequence:
                   - choose:
                       - conditions:
                           - condition: template
-                            value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                            value_template: "{{ states(remote_timeout_set_number) | int == timeout_high_int | int }}"
                         sequence:
                           - action: number.set_value
                             target:
                               entity_id: !input remote_timeout_set_number
                             data:
-                              value: 3598
+                              value: "{{ timeout_high_int | int - 1 }}"
                     default:
                       - action: number.set_value
                         target:
                           entity_id: !input remote_timeout_set_number
                         data:
-                          value: 3599
+                          value: "{{ timeout_high_int | int }}"
                   - action: select.select_option
                     target:
                       entity_id: !input mode_select
@@ -1757,23 +1777,23 @@ actions:
                           name: Solakon Safety Stop
                           message: "⚠️ Zeroing not confirmed — actual power {{ states(actual_power_sensor) }} W after two rewrite attempts"
                           entity_id: !input active_power_number
-          # 7. Timer-Toggle (3598↔3599)
+          # 7. Timer-Toggle (T ↔ T − 1)
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                    value_template: "{{ states(remote_timeout_set_number) | int == timeout_high_int | int }}"
                 sequence:
                   - action: number.set_value
                     target:
                       entity_id: !input remote_timeout_set_number
                     data:
-                      value: 3598
+                      value: "{{ timeout_high_int | int - 1 }}"
             default:
               - action: number.set_value
                 target:
                   entity_id: !input remote_timeout_set_number
                 data:
-                  value: 3599
+                  value: "{{ timeout_high_int | int }}"
           # 8. Mode → '0'
           - action: select.select_option
             target:
@@ -1891,23 +1911,23 @@ actions:
                           name: Solakon Safety Stop
                           message: "⚠️ Zeroing not confirmed — actual power {{ states(actual_power_sensor) }} W after two rewrite attempts"
                           entity_id: !input active_power_number
-          # 4. Timer-Toggle (3598↔3599)
+          # 4. Timer-Toggle (T ↔ T − 1)
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                    value_template: "{{ states(remote_timeout_set_number) | int == timeout_high_int | int }}"
                 sequence:
                   - action: number.set_value
                     target:
                       entity_id: !input remote_timeout_set_number
                     data:
-                      value: 3598
+                      value: "{{ timeout_high_int | int - 1 }}"
             default:
               - action: number.set_value
                 target:
                   entity_id: !input remote_timeout_set_number
                 data:
-                  value: 3599
+                  value: "{{ timeout_high_int | int }}"
           # 5. Mode → '0'
           - action: select.select_option
             target:
@@ -1946,23 +1966,23 @@ actions:
               name: Solakon Recovery
               message: "🔄 Recovery — Mode reactivation. SOC: {{ states(soc) }}%, Mode was: {{ states(solakon_mode) }}"
               entity_id: !input mode_select
-          # 2. Timer-Toggle (3598↔3599)
+          # 2. Timer-Toggle (T ↔ T − 1)
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                    value_template: "{{ states(remote_timeout_set_number) | int == timeout_high_int | int }}"
                 sequence:
                   - action: number.set_value
                     target:
                       entity_id: !input remote_timeout_set_number
                     data:
-                      value: 3598
+                      value: "{{ timeout_high_int | int - 1 }}"
             default:
               - action: number.set_value
                 target:
                   entity_id: !input remote_timeout_set_number
                 data:
-                  value: 3599
+                  value: "{{ timeout_high_int | int }}"
           # 3. Restore mode: '3' if the charging reason still holds, otherwise '1'
           - choose:
               - conditions:
@@ -2015,23 +2035,23 @@ actions:
           - action: input_boolean.turn_on
             target:
               entity_id: !input tariff_charge_state_helper
-          # 3. Timer-Toggle (3598↔3599)
+          # 3. Timer-Toggle (T ↔ T − 1)
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                    value_template: "{{ states(remote_timeout_set_number) | int == timeout_high_int | int }}"
                 sequence:
                   - action: number.set_value
                     target:
                       entity_id: !input remote_timeout_set_number
                     data:
-                      value: 3598
+                      value: "{{ timeout_high_int | int - 1 }}"
             default:
               - action: number.set_value
                 target:
                   entity_id: !input remote_timeout_set_number
                 data:
-                  value: 3599
+                  value: "{{ timeout_high_int | int }}"
           # 4. Output → charge power (direct, no PI)
           - action: number.set_value
             target:
@@ -2088,23 +2108,23 @@ actions:
                       entity_id: !input active_power_number
                     data:
                       value: 0
-                  # 4b. Timer-Toggle (3598↔3599)
+                  # 4b. Timer-Toggle (T ↔ T − 1)
                   - choose:
                       - conditions:
                           - condition: template
-                            value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                            value_template: "{{ states(remote_timeout_set_number) | int == timeout_high_int | int }}"
                         sequence:
                           - action: number.set_value
                             target:
                               entity_id: !input remote_timeout_set_number
                             data:
-                              value: 3598
+                              value: "{{ timeout_high_int | int - 1 }}"
                     default:
                       - action: number.set_value
                         target:
                           entity_id: !input remote_timeout_set_number
                         data:
-                          value: 3599
+                          value: "{{ timeout_high_int | int }}"
                   # 4c. Mode → '1'
                   - action: select.select_option
                     target:
@@ -2119,23 +2139,23 @@ actions:
                   entity_id: !input active_power_number
                 data:
                   value: 0
-              # 4b. Timer-Toggle (3598↔3599)
+              # 4b. Timer-Toggle (T ↔ T − 1)
               - choose:
                   - conditions:
                       - condition: template
-                        value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                        value_template: "{{ states(remote_timeout_set_number) | int == timeout_high_int | int }}"
                     sequence:
                       - action: number.set_value
                         target:
                           entity_id: !input remote_timeout_set_number
                         data:
-                          value: 3598
+                          value: "{{ timeout_high_int | int - 1 }}"
                 default:
                   - action: number.set_value
                     target:
                       entity_id: !input remote_timeout_set_number
                     data:
-                      value: 3599
+                      value: "{{ timeout_high_int | int }}"
               # 4c. Mode → '0'
               - action: select.select_option
                 target:
@@ -2193,23 +2213,23 @@ actions:
               entity_id: !input active_power_number
             data:
               value: 0
-          # 5. Timer-Toggle (3598↔3599)
+          # 5. Timer-Toggle (T ↔ T − 1)
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                    value_template: "{{ states(remote_timeout_set_number) | int == timeout_high_int | int }}"
                 sequence:
                   - action: number.set_value
                     target:
                       entity_id: !input remote_timeout_set_number
                     data:
-                      value: 3598
+                      value: "{{ timeout_high_int | int - 1 }}"
             default:
               - action: number.set_value
                 target:
                   entity_id: !input remote_timeout_set_number
                 data:
-                  value: 3599
+                  value: "{{ timeout_high_int | int }}"
           # 6. Mode → '0'
           - action: select.select_option
             target:
@@ -2251,23 +2271,23 @@ actions:
           - action: input_boolean.turn_on
             target:
               entity_id: !input ac_charge_state_helper
-          # 3. Timer-Toggle (3598↔3599)
+          # 3. Timer-Toggle (T ↔ T − 1)
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                    value_template: "{{ states(remote_timeout_set_number) | int == timeout_high_int | int }}"
                 sequence:
                   - action: number.set_value
                     target:
                       entity_id: !input remote_timeout_set_number
                     data:
-                      value: 3598
+                      value: "{{ timeout_high_int | int - 1 }}"
             default:
               - action: number.set_value
                 target:
                   entity_id: !input remote_timeout_set_number
                 data:
-                  value: 3599
+                  value: "{{ timeout_high_int | int }}"
           # 4. Output → 0 W (PI starts clean)
           - action: number.set_value
             target:
@@ -2327,23 +2347,23 @@ actions:
                       entity_id: !input active_power_number
                     data:
                       value: 0
-                  # 4b. Timer-Toggle (3598↔3599)
+                  # 4b. Timer-Toggle (T ↔ T − 1)
                   - choose:
                       - conditions:
                           - condition: template
-                            value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                            value_template: "{{ states(remote_timeout_set_number) | int == timeout_high_int | int }}"
                         sequence:
                           - action: number.set_value
                             target:
                               entity_id: !input remote_timeout_set_number
                             data:
-                              value: 3598
+                              value: "{{ timeout_high_int | int - 1 }}"
                     default:
                       - action: number.set_value
                         target:
                           entity_id: !input remote_timeout_set_number
                         data:
-                          value: 3599
+                          value: "{{ timeout_high_int | int }}"
                   # 4c. Mode → '1'
                   - action: select.select_option
                     target:
@@ -2358,23 +2378,23 @@ actions:
                   entity_id: !input active_power_number
                 data:
                   value: 0
-              # 4b. Timer-Toggle (3598↔3599)
+              # 4b. Timer-Toggle (T ↔ T − 1)
               - choose:
                   - conditions:
                       - condition: template
-                        value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                        value_template: "{{ states(remote_timeout_set_number) | int == timeout_high_int | int }}"
                     sequence:
                       - action: number.set_value
                         target:
                           entity_id: !input remote_timeout_set_number
                         data:
-                          value: 3598
+                          value: "{{ timeout_high_int | int - 1 }}"
                 default:
                   - action: number.set_value
                     target:
                       entity_id: !input remote_timeout_set_number
                     data:
-                      value: 3599
+                      value: "{{ timeout_high_int | int }}"
               # 4c. Mode → '0'
               - action: select.select_option
                 target:
@@ -2479,23 +2499,23 @@ actions:
                       entity_id: !input active_power_number
                     data:
                       value: 0
-                  # 3b. Timer-Toggle (3598↔3599)
+                  # 3b. Timer-Toggle (T ↔ T − 1)
                   - choose:
                       - conditions:
                           - condition: template
-                            value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                            value_template: "{{ states(remote_timeout_set_number) | int == timeout_high_int | int }}"
                         sequence:
                           - action: number.set_value
                             target:
                               entity_id: !input remote_timeout_set_number
                             data:
-                              value: 3598
+                              value: "{{ timeout_high_int | int - 1 }}"
                     default:
                       - action: number.set_value
                         target:
                           entity_id: !input remote_timeout_set_number
                         data:
-                          value: 3599
+                          value: "{{ timeout_high_int | int }}"
                   # 3c. Mode → '1'
                   - action: select.select_option
                     target:
@@ -2510,23 +2530,23 @@ actions:
                   entity_id: !input active_power_number
                 data:
                   value: 0
-              # 3b. Timer-Toggle (3598↔3599)
+              # 3b. Timer-Toggle (T ↔ T − 1)
               - choose:
                   - conditions:
                       - condition: template
-                        value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                        value_template: "{{ states(remote_timeout_set_number) | int == timeout_high_int | int }}"
                     sequence:
                       - action: number.set_value
                         target:
                           entity_id: !input remote_timeout_set_number
                         data:
-                          value: 3598
+                          value: "{{ timeout_high_int | int - 1 }}"
                 default:
                   - action: number.set_value
                     target:
                       entity_id: !input remote_timeout_set_number
                     data:
-                      value: 3599
+                      value: "{{ timeout_high_int | int }}"
               # 3c. Mode → '0'
               - action: select.select_option
                 target:
@@ -2573,26 +2593,26 @@ actions:
               entity_id: !input active_power_number
             data:
               value: 0
-          # 4. Mode → '1' (Timer-Toggle 3598↔3599)
+          # 4. Mode → '1' (Timer-Toggle T ↔ T − 1)
           - choose:
               - conditions: "{{ states(solakon_mode) != '1' }}"
                 sequence:
                   - choose:
                       - conditions:
                           - condition: template
-                            value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                            value_template: "{{ states(remote_timeout_set_number) | int == timeout_high_int | int }}"
                         sequence:
                           - action: number.set_value
                             target:
                               entity_id: !input remote_timeout_set_number
                             data:
-                              value: 3598
+                              value: "{{ timeout_high_int | int - 1 }}"
                     default:
                       - action: number.set_value
                         target:
                           entity_id: !input remote_timeout_set_number
                         data:
-                          value: 3599
+                          value: "{{ timeout_high_int | int }}"
                   - action: select.select_option
                     target:
                       entity_id: !input mode_select
@@ -2644,23 +2664,23 @@ actions:
               entity_id: !input active_power_number
             data:
               value: 0
-          # 4. Timer-Toggle (3598↔3599)
+          # 4. Timer-Toggle (T ↔ T − 1)
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                    value_template: "{{ states(remote_timeout_set_number) | int == timeout_high_int | int }}"
                 sequence:
                   - action: number.set_value
                     target:
                       entity_id: !input remote_timeout_set_number
                     data:
-                      value: 3598
+                      value: "{{ timeout_high_int | int - 1 }}"
             default:
               - action: number.set_value
                 target:
                   entity_id: !input remote_timeout_set_number
                 data:
-                  value: 3599
+                  value: "{{ timeout_high_int | int }}"
           # 5. Mode → '0'
           - action: select.select_option
             target:
@@ -2892,28 +2912,31 @@ actions:
             data:
               value: 0
 
-  # STEP 2: Timeout Reset (Timer-Toggle 3598↔3599)
+  # STEP 2: Timeout Reset (Timer-Toggle T ↔ T − 1)
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ states(timeout_countdown) | int(9999) < 120 }}"
+            value_template: >
+              {{ states(timeout_countdown) | int(9999) < 120 or
+                 (states(remote_timeout_set_number) | is_number and
+                  states(remote_timeout_set_number) | int not in [timeout_high_int | int, timeout_high_int | int - 1]) }}
         sequence:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                    value_template: "{{ states(remote_timeout_set_number) | int == timeout_high_int | int }}"
                 sequence:
                   - action: number.set_value
                     target:
                       entity_id: !input remote_timeout_set_number
                     data:
-                      value: 3598
+                      value: "{{ timeout_high_int | int - 1 }}"
             default:
               - action: number.set_value
                 target:
                   entity_id: !input remote_timeout_set_number
                 data:
-                  value: 3599
+                  value: "{{ timeout_high_int | int }}"
 
   # STEP 3: Set output power + manage integral
   - choose:
@@ -3147,23 +3170,23 @@ actions:
                   entity_id: !input active_power_number
                 data:
                   value: 0
-              # 4. Timer toggle (3598↔3599)
+              # 4. Timer toggle (T ↔ T − 1)
               - choose:
                   - conditions:
                       - condition: template
-                        value_template: "{{ states(remote_timeout_set_number) | int == 3599 }}"
+                        value_template: "{{ states(remote_timeout_set_number) | int == timeout_high_int | int }}"
                     sequence:
                       - action: number.set_value
                         target:
                           entity_id: !input remote_timeout_set_number
                         data:
-                          value: 3598
+                          value: "{{ timeout_high_int | int - 1 }}"
                 default:
                   - action: number.set_value
                     target:
                       entity_id: !input remote_timeout_set_number
                     data:
-                      value: 3599
+                      value: "{{ timeout_high_int | int }}"
               # 5. Mode → '0' — case D takes over on the next run
               - action: select.select_option
                 target:
